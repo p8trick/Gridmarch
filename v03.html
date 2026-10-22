@@ -1,0 +1,115 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>步兵建模 V0.3 · Three.js</title><style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#cddbd6;color:#20352f}#stage{position:fixed;inset:0;touch-action:none}header{position:fixed;left:15px;right:15px;top:calc(12px + env(safe-area-inset-top));pointer-events:none}h1{font-size:19px;margin:0 0 5px;font-weight:800;letter-spacing:.2px}header p{margin:0;font-size:12px;color:#4b635d;line-height:1.5}.pill{display:inline-block;background:#ffffffad;border:1px solid #fff8;border-radius:7px;padding:3px 7px;margin-top:8px;font-size:11px}#panel{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));border-radius:18px;background:#f5f9f2ee;box-shadow:0 7px 35px #2740352c;padding:10px;backdrop-filter:blur(12px)}.line{display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap}.line+.line{margin-top:8px}button{font:600 12px -apple-system,BlinkMacSystemFont,sans-serif;color:#315046;background:#e2ebe4;border:1px solid #d0ded4;border-radius:10px;padding:10px 12px;cursor:pointer}button.on{background:#315c49;color:white;border-color:#315c49}#hint{font-size:11px;text-align:center;color:#62796d;margin:8px 0 0}#error{display:none;position:fixed;inset:30% 8% auto;padding:20px;border-radius:16px;background:white;color:#8c3636;line-height:1.6;font-size:14px}
+</style></head><body><div id="stage"></div><header><h1>步兵建模 V0.3 <span style="font-weight:500;font-size:12px">· 程序化低多边形</span></h1><p>细化护甲与装备 / 全套阵营换色 / 手机棋盘比例 / 待机动画</p><span class="pill">纯 Three.js 几何体 · 无 GLB · 无图片贴图</span></header><div id="panel"><div class="line"><button data-army="green" class="on">绿军</button><button data-army="blue">蓝军</button><button data-army="red">红军</button><button id="idle" class="on">待机动画 ✓</button></div><div class="line"><button id="turn">自动旋转</button><button id="view" class="on">近看模型</button><button id="gear">隐藏装备</button><button id="reset">复位镜头</button></div><div id="hint">默认 9×9 战棋棋盘 · 单指旋转 · 双指缩放 · 点「近看模型」查看细节</div></div><div id="error">Three.js 加载失败。请在联网环境中使用 Safari 打开本 HTML。</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color('#cddbd6');scene.fog=new THREE.Fog('#cddbd6',100,220);
+const camera=new THREE.PerspectiveCamera(33,innerWidth/innerHeight,.1,260);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.42;document.getElementById('stage').appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xe9f6ff,0x83947b,2.1));const sun=new THREE.DirectionalLight(0xffedcf,2.7);sun.position.set(-4,8,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-5;sun.shadow.camera.right=5;sun.shadow.camera.top=6;sun.shadow.camera.bottom=-5;sun.shadow.normalBias=.035;scene.add(sun);
+const material=(color,metalness=0,roughness=.87)=>new THREE.MeshStandardMaterial({color,metalness,roughness,flatShading:true});
+const M={uniform:material('#687f60'),uniformLight:material('#849879'),uniformDark:material('#465d4d'),vest:material('#4b6152'),plate:material('#728778'),strap:material('#b3a17c'),pouch:material('#7a8264'),helmet:material('#536b53'),helmetRim:material('#334d42'),skin:material('#bc9779'),skinShadow:material('#997458'),boots:material('#343d39'),sole:material('#252d2b'),weapon:material('#303b3b',.32,.57),weaponMid:material('#596664',.2,.6),steel:material('#86928a',.38,.48),glass:material('#1d3435',.15,.23),detail:material('#293d36'),ground:material('#a4bc9b'),tileSide:material('#6b8a78'),grass:material('#7eaa7d'),badge:material('#65a781')};
+const soldier=new THREE.Group();scene.add(soldier);const figure=new THREE.Group();soldier.add(figure);const extra=new THREE.Group();figure.add(extra);
+function add(g,m,p=[0,0,0],parent=figure){const x=new THREE.Mesh(g,m);x.position.set(...p);x.castShadow=true;x.receiveShadow=true;parent.add(x);return x}
+function box(w,h,d,m,p,parent=figure,bevel=0){if(!bevel)return add(new THREE.BoxGeometry(w,h,d),m,p,parent);const shape=new THREE.Shape();const x=-w/2,y=-h/2,r=Math.min(bevel,w/2-.001,h/2-.001);shape.moveTo(x+r,y);shape.lineTo(x+w-r,y);shape.quadraticCurveTo(x+w,y,x+w,y+r);shape.lineTo(x+w,y+h-r);shape.quadraticCurveTo(x+w,y+h,x+w-r,y+h);shape.lineTo(x+r,y+h);shape.quadraticCurveTo(x,y+h,x,y+h-r);shape.lineTo(x,y+r);shape.quadraticCurveTo(x,y,x+r,y);const geo=new THREE.ExtrudeGeometry(shape,{depth:d-2*bevel,steps:1,bevelEnabled:true,bevelSegments:2,bevelSize:bevel,bevelThickness:bevel,curveSegments:3});geo.translate(0,0,-(d-2*bevel)/2);return add(geo,m,p,parent)}
+function sph(sx,sy,sz,m,p,parent=figure,seg=12){const o=add(new THREE.SphereGeometry(1,seg,8),m,p,parent);o.scale.set(sx,sy,sz);return o}
+function cyl(rt,rb,h,m,p,parent=figure,n=10){return add(new THREE.CylinderGeometry(rt,rb,h,n),m,p,parent)}
+function connect(a,b,r1,r2,m,parent=figure,n=9){const v1=new THREE.Vector3(...a),v2=new THREE.Vector3(...b),delta=v2.clone().sub(v1);const o=cyl(r1,r2,delta.length(),m,v1.clone().add(v2).multiplyScalar(.5).toArray(),parent,n);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return o}
+function polyRing(y,rx,rz,m,parent=figure){const pts=[];for(let i=0;i<9;i++){const a=i*Math.PI/4;pts.push(new THREE.Vector3(Math.sin(a)*rx,y,Math.cos(a)*rz))}for(let i=0;i<8;i++)connect(pts[i].toArray(),pts[i+1].toArray(),.018,.018,m,parent,5)}
+// A real 3D miniature, not a big round head on a stand. 3.7 head heights, boots grounded.
+// Legs with shaped armor and separated knees
+const legs=[];for(const s of [-1,1]){const leg=new THREE.Group();figure.add(leg);legs.push(leg);const hip=[s*.205,1.18,-.015],knee=[s*.22,.72,.095],ankle=[s*.235,.24,.01];connect(hip,knee,.178,.155,M.uniform,leg);sph(.16,.17,.16,M.uniformLight,knee,leg);box(.30,.29,.105,M.uniformDark,[s*.22,.72,.205],leg,.055);connect(knee,ankle,.143,.117,M.uniform,leg);box(.29,.30,.09,M.uniformLight,[s*.235,.44,.13],leg,.04);box(.33,.12,.35,M.boots,[s*.235,.23,.09],leg,.06);const boot=sph(.205,.135,.32,M.boots,[s*.235,.13,.185],leg);boot.rotation.y=s*.045;box(.43,.07,.55,M.sole,[s*.235,.062,.17],leg,.04);box(.29,.065,.08,M.strap,[s*.235,.27,.22],leg,.015)}
+// Angular tapered pelvis, armor and tunic (distinct silhouette)
+const pelvis=cyl(.36,.32,.25,M.uniformDark,[0,1.16,0],figure,6);pelvis.rotation.y=Math.PI/6;
+const body=new THREE.Group();body.position.y=1.3;figure.add(body);
+const torso=add(new THREE.CylinderGeometry(.38,.305,.74,6,1),M.uniform,[0,.31,0],body);torso.rotation.y=Math.PI/6;
+box(.77,.12,.42,M.uniformDark,[0,-.02,.0],body,.045);
+// Front/back chest plates are bevelled extrusion instead of flat boxes
+box(.66,.53,.16,M.vest,[0,.36,.235],body,.10);box(.55,.31,.11,M.plate,[0,.45,.33],body,.075);
+box(.56,.46,.13,M.vest,[0,.35,-.255],body,.09);
+for(const s of [-1,1]){const strap=box(.11,.61,.095,M.strap,[s*.265,.46,.275],body,.035);strap.rotation.z=s*.10;box(.23,.21,.15,M.pouch,[s*.24,.06,.32],body,.035);box(.13,.16,.14,M.pouch,[s*.38,.26,.24],body,.03);box(.20,.095,.13,M.uniformDark,[s*.22,.46,.405],body,.018)}
+for(let i=-1;i<=1;i++)box(.17,.18,.13,M.uniformLight,[i*.175,.19,.435],body,.027);
+box(.74,.08,.08,M.strap,[0,.015,.245],body,.02);box(.16,.11,.08,M.steel,[0,.01,.31],body,.012);
+// Backpack, bedroll, clasp and a radio antenna
+const backpack=new THREE.Group();backpack.position.set(0,.40,-.39);body.add(backpack);box(.60,.64,.30,M.vest,[0,0,-.04],backpack,.09);box(.50,.20,.09,M.uniformLight,[0,.13,-.235],backpack,.04);box(.54,.17,.21,M.strap,[0,.39,-.13],backpack,.07);for(const s of [-1,1])box(.075,.47,.05,M.strap,[s*.23,-.06,-.245],backpack,.015);box(.22,.26,.16,M.pouch,[.38,-.14,-.05],backpack,.045);const radio=box(.15,.19,.13,M.weapon,[-.36,.10,-.10],backpack,.025);const antenna=new THREE.Group();antenna.position.set(-.36,.22,-.13);backpack.add(antenna);connect([0,0,0],[.06,.65,-.035],.014,.008,M.weapon,antenna,6);
+// Neck + deliberately compact face: no giant cartoon eyes, no smile
+cyl(.145,.17,.19,M.skin,[0,.85,.025],body,10);const head=new THREE.Group();head.position.set(0,.98,.035);body.add(head);
+sph(.275,.33,.265,M.skin,[0,.06,.035],head,14);sph(.265,.20,.235,M.skinShadow,[0,-.095,.015],head,12);sph(.08,.10,.055,M.skin,[0,.01,.288],head,9);
+for(const s of [-1,1]){sph(.047,.085,.043,M.skinShadow,[s*.274,.035,.025],head,8);box(.072,.022,.022,M.detail,[s*.105,.115,.273],head,.005)}
+// Helmet crown: custom lathe silhouette, no spherical cap
+const helmetProfile=[[0,.43],[.11,.428],[.22,.40],[.31,.34],[.34,.255],[.342,.18],[.34,.145],[.30,.12]].map(([r,y])=>new THREE.Vector2(r,y));
+const crown=add(new THREE.LatheGeometry(helmetProfile,12),M.helmet,[0,0,0],head);crown.scale.z=.91;
+const brim=cyl(.37,.365,.075,M.helmetRim,[0,.13,.045],head,14);brim.scale.z=1.04;
+const frontBrim=box(.49,.055,.18,M.helmet,[0,.14,.292],head,.045);frontBrim.rotation.x=-.10;
+for(const s of [-1,1]){const guard=box(.14,.21,.13,M.helmet,[s*.315,.035,.002],head,.035);guard.rotation.z=s*.12;box(.11,.13,.035,M.helmetRim,[s*.322,.025,.096],head,.018)}
+box(.32,.085,.06,M.badge,[0,.275,.297],head,.025);box(.105,.115,.06,M.weaponMid,[0,.277,.342],head,.016);
+// Arms: articulated parent pivots, elbow joints, gloves physically overlap rifle
+const arms=[];for(const s of [-1,1]){const arm=new THREE.Group();arm.position.set(s*.41,.58,0);body.add(arm);arms.push(arm);sph(.175,.19,.205,M.uniformLight,[0,0,0],arm,12);connect([0,-.02,.015],[s*.07,-.30,.145],.16,.13,M.uniform,arm);sph(.135,.14,.135,M.uniformDark,[s*.07,-.30,.145],arm);connect([s*.07,-.30,.145],[s*.02,-.43,.33],.125,.095,M.uniformLight,arm);sph(.115,.11,.12,M.boots,[s*.02,-.44,.35],arm);box(.16,.085,.16,M.uniformDark,[s*.02,-.39,.32],arm,.025)}
+// Detailed rifle with stock, receiver, handguard, barrel, magazine, sights
+const rifle=new THREE.Group();rifle.position.set(.06,.20,.55);rifle.rotation.y=-.18;body.add(rifle);
+box(.16,.19,.43,M.weapon,[0,0,-.06],rifle,.027);box(.19,.13,.30,M.weaponMid,[0,.035,.31],rifle,.025);box(.13,.105,.40,M.weapon,[0,.015,.59],rifle,.02);
+const barrel=connect([0,.02,.74],[0,.02,1.04],.034,.034,M.steel,rifle,10);box(.095,.075,.12,M.weapon,[0,.02,1.02],rifle,.015);
+box(.21,.115,.30,M.weaponMid,[0,-.02,-.43],rifle,.045);box(.13,.14,.24,M.weapon,[0,-.065,-.59],rifle,.035);
+const mag=box(.115,.29,.13,M.weapon,[0,-.22,.04],rifle,.028);mag.rotation.x=-.18;
+box(.06,.09,.24,M.weapon,[0,.155,-.02],rifle,.015);box(.08,.07,.07,M.steel,[0,.19,.48],rifle,.015);box(.11,.09,.13,M.weapon,[0,-.15,-.22],rifle,.02);
+for(let i=0;i<4;i++)box(.18,.012,.018,M.weaponMid,[0,.07,.20+i*.095],rifle);
+// V0.3: tactical helmet rail, side headset, goggles, fabric seam and extra pouches.
+for(const side of [-1,1]){
+ const rail=box(.065,.09,.27,M.helmetRim,[side*.33,.205,.035],head,.02);rail.rotation.z=side*.14;
+ box(.115,.15,.055,M.weaponMid,[side*.346,.045,.10],head,.018);
+ box(.11,.13,.12,M.pouch,[side*.30,.09,.33],body,.02);
+ box(.08,.10,.12,M.strap,[side*.27,-.005,.33],body,.018);
+}
+box(.37,.075,.09,M.helmetRim,[0,.19,.332],head,.025);
+box(.27,.05,.04,M.weaponMid,[0,.22,.367],head,.015);
+for(const side of [-1,1]){
+ box(.08,.19,.06,M.strap,[side*.30,.48,.35],body,.018);
+ box(.055,.28,.035,M.uniformDark,[side*.12,.42,.395],body,.01);
+}
+box(.18,.15,.07,M.weaponMid,[0,.63,.39],body,.02);
+box(.20,.10,.12,M.pouch,[0,-.04,.33],body,.02);
+
+// Scenery tile: restrained low-poly ground, not a giant toy pedestal
+const tile=new THREE.Group();scene.add(tile);const tileTop=add(new THREE.CylinderGeometry(1.36,1.38,.105,8),M.ground,[0,-.04,0],tile);tileTop.rotation.y=Math.PI/8;const tileSide=add(new THREE.CylinderGeometry(1.37,1.43,.20,8),M.tileSide,[0,-.17,0],tile);tileSide.rotation.y=Math.PI/8;
+for(let i=0;i<25;i++){const a=i*2.399963,r=.35+1.00*Math.sqrt((i+.2)/26);const x=Math.cos(a)*r,z=Math.sin(a)*r;if(Math.abs(x)<.43&&Math.abs(z)<.48)continue;const blade=add(new THREE.ConeGeometry(.023,.075+(i%4)*.012,3),M.grass,[x,.065,z],tile);blade.rotation.z=(i%5-2)*.11}
+const floor=add(new THREE.PlaneGeometry(200,200),material('#b9cec5'),[0,-.275,0],scene);floor.rotation.x=-Math.PI/2;floor.castShadow=false;
+
+// Nine-by-nine tactical board. Each square is 2.75 world units, matching the miniature base footprint.
+const board=new THREE.Group();scene.add(board);const boardMat=[material('#a6bb94'),material('#a0b48f'),material('#b0c19d'),material('#97ad88')];
+const boardSize=9,spacing=2.75,half=(boardSize-1)/2;
+for(let z=0;z<boardSize;z++)for(let x=0;x<boardSize;x++){
+ const t=new THREE.Mesh(new THREE.BoxGeometry(spacing-.035,.16,spacing-.035),boardMat[(x*3+z*7+(x*z)%3)%4]);t.position.set((x-half)*spacing,-.17,(z-half)*spacing);t.receiveShadow=true;board.add(t);
+}
+const boardUnits=[];
+for(const [x,z,army] of [[1,1,'green'],[3,2,'green'],[2,5,'green'],[5,1,'blue'],[7,3,'blue'],[6,6,'blue'],[4,7,'red'],[7,7,'red']]){
+ const u=figure.clone(true);u.traverse(o=>{if(o.isMesh){o.material=o.material.clone()}});recolor(u,army);u.position.set((x-half)*spacing,0,(z-half)*spacing);board.add(u);boardUnits.push({unit:u,phase:(x*11+z*7)*.37});
+}
+board.visible=true;tile.visible=false;soldier.visible=false;floor.visible=false;
+
+// UI controls
+const palettes={
+ green:{uniform:'#687f60',uniformLight:'#849879',uniformDark:'#465d4d',vest:'#4b6152',plate:'#728778',strap:'#b3a17c',pouch:'#7a8264',helmet:'#536b53',helmetRim:'#334d42',badge:'#65a781'},
+ blue:{uniform:'#477caa',uniformLight:'#739fc4',uniformDark:'#2b4e79',vest:'#315d86',plate:'#6b96bd',strap:'#7899ad',pouch:'#476d91',helmet:'#326c9c',helmetRim:'#254867',badge:'#91c5ec'},
+ red:{uniform:'#a95b4c',uniformLight:'#c57c66',uniformDark:'#743e3c',vest:'#86443c',plate:'#bb7261',strap:'#ba967c',pouch:'#8f594e',helmet:'#9c4a42',helmetRim:'#642e31',badge:'#e7a17c'}
+};
+function recolor(group,army){const pal=palettes[army];group.traverse(o=>{if(!o.isMesh||!o.userData.matKey)return;const key=o.userData.matKey;if(pal[key])o.material.color.set(pal[key])})}
+const materialKeys=['uniform','uniformLight','uniformDark','vest','plate','strap','pouch','helmet','helmetRim','badge'];
+figure.traverse(o=>{if(o.isMesh){const key=materialKeys.find(k=>o.material===M[k]);if(key)o.userData.matKey=key}});
+function armySet(army){const pal=palettes[army];for(const [key,hex] of Object.entries(pal))M[key].color.set(hex);document.querySelectorAll('[data-army]').forEach(x=>x.classList.toggle('on',x.dataset.army===army))}
+document.querySelectorAll('[data-army]').forEach(b=>b.onclick=()=>armySet(b.dataset.army));
+let idle=true,auto=false,tactical=true,hidden=false,yaw=.55,pitch=1.02,dist=96;
+document.getElementById('idle').onclick=e=>{idle=!idle;e.target.classList.toggle('on',idle);e.target.textContent=idle?'待机动画 ✓':'待机动画 ×'};
+document.getElementById('turn').onclick=e=>{auto=!auto;e.target.classList.toggle('on',auto)};
+document.getElementById('gear').onclick=e=>{hidden=!hidden;backpack.visible=!hidden;rifle.visible=!hidden;boardUnits.forEach(({unit})=>{const a=unit.children.find(o=>o.position.y===1.3);if(a){const g=a.children.find(o=>o.position.z===-.39);if(g)g.visible=!hidden}});e.target.classList.toggle('on',hidden);e.target.textContent=hidden?'显示装备':'隐藏装备'};
+function setView(t){tactical=t;board.visible=t;tile.visible=!t;soldier.visible=!t;floor.visible=!t;yaw=.55;pitch=t?1.02:.23;dist=t?96:6.9;document.getElementById('view').textContent=t?'近看模型':'返回棋盘';document.getElementById('view').classList.toggle('on',t);cameraUpdate()}
+document.getElementById('view').onclick=()=>setView(!tactical);
+document.getElementById('reset').onclick=()=>setView(true);
+function cameraUpdate(){const target=tactical?0:1.35;camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dist,target+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist);camera.lookAt(0,target,0)}cameraUpdate();
+const canvas=renderer.domElement;const pointers=new Map();let pinchDist=0;
+canvas.addEventListener('pointerdown',e=>{pointers.set(e.pointerId,[e.clientX,e.clientY]);canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;const old=pointers.get(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);if(pointers.size===1){yaw-=(e.clientX-old[0])*.008;pitch=Math.max(-.12,Math.min(1.24,pitch+(e.clientY-old[1])*.006));cameraUpdate()}else if(pointers.size===2){const p=[...pointers.values()],d=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);if(pinchDist)dist=Math.max(4.1,Math.min(180,dist*pinchDist/d));pinchDist=d;cameraUpdate()}});
+function release(e){pointers.delete(e.pointerId);pinchDist=0}canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);
+canvas.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(4.1,Math.min(180,dist+e.deltaY*.065));cameraUpdate()},{passive:false});
+const clock=new THREE.Clock();function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();if(auto){yaw+=.003;cameraUpdate()}const k=idle?1:0;body.position.y=1.3+Math.sin(t*2.0)*.010*k;body.rotation.z=Math.sin(t*1.45)*.006*k;head.rotation.y=Math.sin(t*.68)*.045*k;arms[0].rotation.x=Math.sin(t*2+.6)*.013*k;arms[1].rotation.x=Math.sin(t*2)*.012*k;antenna.rotation.z=Math.sin(t*1.9)*.045*k;for(const {unit,phase} of boardUnits){unit.position.y=(idle?Math.sin(t*2+phase)*.008:0)}renderer.render(scene,camera)}animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>
