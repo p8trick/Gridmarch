@@ -12,3 +12,10 @@ export function bake(root){
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));
   if(e.useCol){const C=new Float32Array(n);o=0;e.col.forEach(a=>{C.set(a,o);o+=a.length});g.setAttribute('color',new THREE.BufferAttribute(C,3))}
   g.computeVertexNormals();g.computeBoundingSphere();return{material:e.material,geometry:g}})}
+// Vertex-clustering decimation: snaps vertices to a grid of `cell` units, averages position/color per cell,
+// drops triangles that collapse. Tiny parts vanish, silhouettes and main colors stay.
+export function simplify(parts,cell){return parts.map(p=>{const g=p.geometry,P=g.attributes.position.array,C=g.attributes.color&&g.attributes.color.array,n=P.length/3,id=new Int32Array(n),cl=new Map(),acc=[];
+ for(let i=0;i<n;i++){const k=Math.round(P[i*3]/cell)+','+Math.round(P[i*3+1]/cell)+','+Math.round(P[i*3+2]/cell);let c=cl.get(k);if(c===undefined){c=acc.length;cl.set(k,c);acc.push([0,0,0,0,0,0,0])}id[i]=c;const a=acc[c];a[0]+=P[i*3];a[1]+=P[i*3+1];a[2]+=P[i*3+2];if(C){a[3]+=C[i*3];a[4]+=C[i*3+1];a[5]+=C[i*3+2]}a[6]++}
+ const op=[],oc=[];for(let t=0;t<n;t+=3){const a=id[t],b=id[t+1],c=id[t+2];if(a===b||b===c||a===c)continue;[a,b,c].forEach(j=>{const q=acc[j],m=q[6];op.push(q[0]/m,q[1]/m,q[2]/m);if(C)oc.push(q[3]/m,q[4]/m,q[5]/m)})}
+ if(!op.length)return null;const ng=new THREE.BufferGeometry();ng.setAttribute('position',new THREE.Float32BufferAttribute(op,3));if(C)ng.setAttribute('color',new THREE.Float32BufferAttribute(oc,3));ng.computeVertexNormals();ng.computeBoundingSphere();return{material:p.material,geometry:ng}}).filter(Boolean)}
+export const triCount=ps=>ps.reduce((s,p)=>s+p.geometry.attributes.position.count/3,0);
