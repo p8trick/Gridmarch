@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 // Bake a soldier into one geometry per material (flat world transforms), keeping triangles intact.
-export function bake(root){
+export function bake(root,opts={}){
  root.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),map=new Map(),M=new THREE.Matrix4();
  const KEEP=/eye|nose|face|mouth|brow|night_vision/i;
- root.traverse(o=>{if(!o.isMesh)return;const keep=KEEP.test(o.name||''),key=o.material.uuid+'|'+keep;let e=map.get(key);if(!e)map.set(key,e={material:o.material,keep,pos:[],col:[],useCol:o.material.vertexColors});
+ root.traverse(o=>{if(!o.isMesh)return;const keep=KEEP.test(o.name||'');if(opts.minSize&&!keep&&new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).length()<opts.minSize)return;const key=o.material.uuid+'|'+keep;let e=map.get(key);if(!e)map.set(key,e={material:o.material,keep,pos:[],col:[],useCol:o.material.vertexColors});
   const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();M.multiplyMatrices(inv,o.matrixWorld);g.applyMatrix4(M);
   const p=g.attributes.position.array.slice();
   if(M.determinant()<0)for(let i=0;i<p.length;i+=9)for(let k=0;k<3;k++){const t=p[i+3+k];p[i+3+k]=p[i+6+k];p[i+6+k]=t}
@@ -20,3 +20,7 @@ export function simplify(parts,cell){return parts.map(p=>{if(p.keep)return p;con
  const op=[],oc=[];for(let t=0;t<n;t+=3){const a=id[t],b=id[t+1],c=id[t+2];if(a===b||b===c||a===c)continue;[a,b,c].forEach(j=>{const q=acc[j],m=q[6];op.push(q[0]/m,q[1]/m,q[2]/m);if(C)oc.push(q[3]/m,q[4]/m,q[5]/m)})}
  if(!op.length)return null;const ng=new THREE.BufferGeometry();ng.setAttribute('position',new THREE.Float32BufferAttribute(op,3));if(C)ng.setAttribute('color',new THREE.Float32BufferAttribute(oc,3));ng.computeVertexNormals();ng.computeBoundingSphere();return{material:p.material,geometry:ng}}).filter(Boolean)}
 export const triCount=ps=>ps.reduce((s,p)=>s+p.geometry.attributes.position.count/3,0);
+
+// Silhouette-preserving LOD: parts smaller than minSize (model units, soldier ~4.2 tall) are dropped,
+// kept parts stay untouched; only the over-tessellated camo cloth is clustered with clothCell.
+export function makeLOD(root,minSize,clothCell){return bake(root,{minSize}).map(p=>p.material.vertexColors&&!p.keep?simplify([p],clothCell)[0]:p).filter(Boolean)}
