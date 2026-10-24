@@ -37,7 +37,7 @@ function rebuild(){if(cur)scene.remove(cur);cur=new THREE.Group();const C=cells(
  document.querySelectorAll('[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));document.querySelectorAll('[data-n]').forEach(b=>b.classList.toggle('on',+b.dataset.n===N));$('#sh').classList.toggle('on',shadow)}
 document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;rebuild()});
 document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{N=+b.dataset.n;rebuild()});
-$('#sh').onclick=()=>{shadow=!shadow;rebuild()};rebuild();window.__cam={set:(x,z,d)=>{tgt.set(x,0,z);dist=d;yaw=0;place()}};$('#rs').onclick=reset;$('#lod').onclick=()=>{lodMode={auto:'low',low:'high',high:'auto'}[lodMode];$('#lod').textContent='LOD:'+{auto:'自动',low:'战场档',high:'近景档'}[lodMode]};
+$('#sh').onclick=()=>{shadow=!shadow;rebuild()};rebuild();window.__cam={set:(x,z,d)=>{tgt.set(x,0,z);dist=d;yaw=0;place()}};let pri=2;const PR=[1,1.5,2,3];$('#pr').onclick=()=>{pri=(pri+1)%4;R.setPixelRatio(Math.min(devicePixelRatio,PR[pri]));R.setSize(innerWidth,innerHeight);$('#pr').textContent='清晰度×'+PR[pri]};$('#rs').onclick=reset;$('#lod').onclick=()=>{lodMode={auto:'low',low:'high',high:'auto'}[lodMode];$('#lod').textContent='LOD:'+{auto:'自动',low:'战场档',high:'近景档'}[lodMode]};
 let t0=performance.now(),fr=0,fps=0;
 const nearD=()=>base*1.28*.6;
 (function loop(){requestAnimationFrame(loop);if(hi){const near=lodMode==='high'||(lodMode==='auto'&&dist<nearD());hi.visible=near;lo.visible=!near}R.render(scene,cam);fr++;const n=performance.now();
