@@ -23,6 +23,7 @@ function rebuild(){if(cur)scene.remove(cur);cur=new THREE.Group();const C=cells(
 document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;rebuild()});
 document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{N=+b.dataset.n;rebuild()});
 $('#sh').onclick=()=>{shadow=!shadow;rebuild()};rebuild();
-let last=performance.now(),fps=60,t=0;
-(function loop(){requestAnimationFrame(loop);const n=performance.now();fps+=(1000/(n-last)-fps)*.1;last=n;R.render(scene,cam);
- if(++t%15==0){const i=R.info.render;window.__stats={mode,N,calls:i.calls,tris:i.triangles,fps:Math.round(fps)};$('#hud').textContent=`${mode} ×${Math.min(N,144)}  FPS ${Math.round(fps)}  绘制调用 ${i.calls}  三角面 ${(i.triangles/1000).toFixed(0)}k`}})();
+let t0=performance.now(),fr=0,fps=0;
+(function loop(){requestAnimationFrame(loop);R.render(scene,cam);fr++;const n=performance.now();
+ if(n-t0>=500){fps=fr*1000/(n-t0);fr=0;t0=n;const i=R.info.render;window.__stats={mode,N,calls:i.calls,tris:i.triangles,fps:+fps.toFixed(1)};
+  $('#hud').textContent=`${mode} ×${Math.min(N,144)}  FPS ${fps.toFixed(0)}  绘制调用 ${i.calls}  三角面 ${(i.triangles/1000).toFixed(0)}k`}})();
