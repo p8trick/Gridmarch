@@ -1,7 +1,7 @@
 // UnitRenderer v2 — multi-type instanced battlefield units (infantry with LOD, vehicles with independent turrets),
 // per-unit frustum culling, team rings, 4 quality levels, 3 shadow levels, optional auto-downgrade.
 import * as THREE from 'three';
-import {bake,makeLOD,triCount} from './batch.js';
+import {bake,makeLOD,simplify,triCount} from './batch.js';
 const TIER={L0:[.12,.06],L1:[.25,.1],L2:[.45,.15],L3:[.55,.2]};
 export const QUALITY={high:{far:'L0',near:40},mid:{far:'L1',near:30},low:{far:'L2',near:16},min:{far:'L3',near:0}};
 export const ORDER=['high','mid','low','min'];
@@ -14,7 +14,7 @@ export class UnitRenderer{
   this.sets=[];this.types={};this.units=new Map();this.dirty=true;this._le=new Float32Array(16);
   this.auto=true;this._n=0;this._t=0;this._low=0;this._good=0;this._last=0;this.onAuto=null;this.stats={visible:0,counts:{},tris:0};
   this.userQ=quality;this.quality=quality;this.userPR=pixelRatio;this.pr=pixelRatio;this.shadow='off';
-  for(const[name,d]of Object.entries(types)){const ms=d.models||[d.model],T={name,S:d.scale,ringR:d.ringR||.78,H:(d.height||4.21)*d.scale,models:ms,turret:!!d.turretNode,tiered:!!d.tiered};
+  for(const[name,d]of Object.entries(types)){const ms=d.models||[d.model],T={name,S:d.scale,ringR:d.ringR||.78,H:(d.height||4.21)*d.scale,models:ms,turret:!!d.turretNode,tiered:!!d.tiered,lc:d.lodCells};
    if(T.turret){const hn=d.hullNode||'hull';T.hull=ms.map(m=>bake(m.getObjectByName(hn)));T.tur=ms.map(m=>bake(m.getObjectByName(d.turretNode)));T.pivot=ms[0].getObjectByName(d.turretNode).position.clone();
     T.hs=T.hull.map(p=>this._mkSet(p));T.ts=T.tur.map(p=>this._mkSet(p));T.tri=triCount(T.hull[0])+triCount(T.tur[0])}
    else{T.full=bake(ms[0]);T.tri=triCount(T.full);T.ns=this._mkSet(T.full);if(T.tiered){T.tier={};for(const k in TIER){T.tier[k]=makeLOD(ms[0],...TIER[k]);T.tier[k].tri=triCount(T.tier[k])}}}
@@ -35,7 +35,9 @@ export class UnitRenderer{
  clear(){this.units.clear();this.dirty=true}
  // ---- settings ----
  setQuality(q){this.userQ=q;this._applyQuality(q)}
- _applyQuality(q){this.quality=q;for(const T of Object.values(this.types)){if(!T.tiered)continue;if(T.fs)this._drop(T.fs);T.fs=this._mkSet(T.tier[QUALITY[q].far])}this._flags();this.dirty=true}
+ _applyQuality(q){this.quality=q;for(const T of Object.values(this.types)){
+   if(T.turret&&T.lc){(T.hsL||[]).concat(T.tsL||[]).forEach(s=>this._drop(s));const c=T.lc[q],hp=T.hull.map(p=>simplify(p,c)),tp=T.tur.map(p=>simplify(p,c));T.hsL=hp.map(p=>this._mkSet(p));T.tsL=tp.map(p=>this._mkSet(p));T.triL=triCount(hp[0])+triCount(tp[0])}
+   if(!T.tiered)continue;if(T.fs)this._drop(T.fs);T.fs=this._mkSet(T.tier[QUALITY[q].far])}this._flags();this.dirty=true}
  setPixelRatio(r){this.userPR=r;this._applyPR(r)}
  _applyPR(r){this.pr=r;this.R.setPixelRatio(Math.min(devicePixelRatio,r));this.R.setSize(innerWidth,innerHeight);this.dirty=true}
  setShadow(s){this.shadow=s;const c=SHADOW[s];this.light.castShadow=!!c;this.R.shadowMap.enabled=!!c;
@@ -52,12 +54,12 @@ export class UnitRenderer{
   for(const u of this.units.values()){const T=this.types[u.type];sph.center.set(u.x,T.H/2,u.z);if(!fr.intersectsSphere(sph))continue;vis.push({u,d:cam.position.distanceTo(sph.center)})}
   vis.sort((a,b)=>a.d-b.d);
   const Hpx=this.R.domElement.clientHeight||innerHeight,tf=2*Math.tan(cam.fov*Math.PI/360),q=QUALITY[this.quality],counts={};let tris=0;
-  for(const T of Object.values(this.types)){T.near=[];T.far=[];T.bt=T.models.map(()=>[]);T.rank=0;counts[T.name]=0}
+  for(const T of Object.values(this.types)){T.near=[];T.far=[];T.bt=T.models.map(()=>[]);T.bf=T.models.map(()=>[]);T.rank=0;counts[T.name]=0}
   vis.forEach(v=>{const u=v.u,T=this.types[u.type];counts[T.name]++;
-   if(T.turret)T.bt[Math.min(u.team,T.bt.length-1)].push(u);
+   if(T.turret){const t=Math.min(u.team,T.bt.length-1);(T.lc&&!(T.rank++<q.near&&v.d<(T.H*Hpx)/(tf*this.nearPx))?T.bf:T.bt)[t].push(u)}
    else if(T.tiered){(T.rank++<q.near&&v.d<(T.H*Hpx)/(tf*this.nearPx)?T.near:T.far).push(u)}else T.near.push(u)});
   for(const T of Object.values(this.types)){
-   if(T.turret)T.bt.forEach((l,i)=>{this._fill(T.hs[i],l,'m');this._fill(T.ts[i],l,'mt');tris+=l.length*T.tri});
+   if(T.turret){T.bt.forEach((l,i)=>{this._fill(T.hs[i],l,'m');this._fill(T.ts[i],l,'mt');tris+=l.length*T.tri});if(T.lc)T.bf.forEach((l,i)=>{this._fill(T.hsL[i],l,'m');this._fill(T.tsL[i],l,'mt');tris+=l.length*T.triL})}
    else{this._fill(T.ns,T.near,'m');tris+=T.near.length*T.tri;if(T.tiered){this._fill(T.fs,T.far,'m');tris+=T.far.length*T.tier[QUALITY[this.quality].far].tri}}}
   const R=this.ring,mm=new M4();vis.forEach((v,i)=>{const s=this.types[v.u.type].ringR/.78;mm.compose(new V3(v.u.x,.03,v.u.z),new THREE.Quaternion(),new V3(s,1,s));R.setMatrixAt(i,mm);R.setColorAt(i,this.teamColors[v.u.team]||this.teamColors[0])});
   R.count=vis.length;R.instanceMatrix.needsUpdate=true;if(R.instanceColor)R.instanceColor.needsUpdate=true;
