@@ -13,17 +13,18 @@ export class UnitRenderer{
   Object.assign(this,{scene,cam:camera,R:renderer,light,cap:capacity,nearPx,teamColors:teamColors.map(c=>new THREE.Color(c))});
   this.sets=[];this.types={};this.units=new Map();this.dirty=true;this._le=new Float32Array(16);
   this.auto=true;this._n=0;this._t=0;this._low=0;this._good=0;this._last=0;this.onAuto=null;this.stats={visible:0,counts:{},tris:0};
-  this.userQ=quality;this.quality=quality;this.userPR=pixelRatio;this.pr=pixelRatio;this.shadow='off';
+  this.rings=false;this.userQ=quality;this.quality=quality;this.userPR=pixelRatio;this.pr=pixelRatio;this.shadow='off';
   for(const[name,d]of Object.entries(types)){const ms=d.models||[d.model],T={name,S:d.scale,ringR:d.ringR||.78,H:(d.height||4.21)*d.scale,models:ms,turret:!!d.turretNode,tiered:!!d.tiered,lc:d.lodCells};
    if(T.turret){const hn=d.hullNode||'hull';T.hull=ms.map(m=>bake(m.getObjectByName(hn)));T.tur=ms.map(m=>bake(m.getObjectByName(d.turretNode)));T.pivot=ms[0].getObjectByName(d.turretNode).position.clone();
     T.hs=T.hull.map(p=>this._mkSet(p));T.ts=T.tur.map(p=>this._mkSet(p));T.tri=triCount(T.hull[0])+triCount(T.tur[0])}
-   else{T.full=bake(ms[0]);T.tri=triCount(T.full);T.ns=this._mkSet(T.full);if(T.tiered){T.tier={};for(const k in TIER){T.tier[k]=makeLOD(ms[0],...TIER[k]);T.tier[k].tri=triCount(T.tier[k])}}}
+   else{T.full=ms.map(m=>bake(m));T.tri=triCount(T.full[0]);T.ns=T.full.map(p=>this._mkSet(p));if(T.tiered)T.tc=ms.map(()=>({}))}
    this.types[name]=T}
   this.ring=new THREE.InstancedMesh(new THREE.RingGeometry(.55,.78,20).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.92,depthWrite:false}),capacity);
   this.ring.count=0;this.ring.frustumCulled=false;this.ring.renderOrder=1;scene.add(this.ring);
   this._applyQuality(quality);this._applyPR(pixelRatio);this.setShadow(shadow);
  }
  _mkSet(ps){const group=new THREE.Group(),ims=ps.map(p=>{const im=new THREE.InstancedMesh(p.geometry,p.material,this.cap);im.count=0;im.frustumCulled=false;group.add(im);return im});this.scene.add(group);const s={group,ims};this.sets.push(s);return s}
+ _tier(T,i,k){return T.tc[i][k]||(T.tc[i][k]=makeLOD(T.models[i],...TIER[k]))}
  _drop(s){this.scene.remove(s.group);this.sets=this.sets.filter(x=>x!==s)}
  // ---- units ----
  _mat(u){const T=this.types[u.type];u.m=new M4().compose(new V3(u.x,0,u.z),new THREE.Quaternion().setFromAxisAngle(new V3(0,1,0),u.rot||0),new V3(T.S,T.S,T.S));
@@ -37,13 +38,14 @@ export class UnitRenderer{
  setQuality(q){this.userQ=q;this._applyQuality(q)}
  _applyQuality(q){this.quality=q;for(const T of Object.values(this.types)){
    if(T.turret&&T.lc){(T.hsL||[]).concat(T.tsL||[]).forEach(s=>this._drop(s));const c=T.lc[q],hp=T.hull.map(p=>simplify(p,c)),tp=T.tur.map(p=>simplify(p,c));T.hsL=hp.map(p=>this._mkSet(p));T.tsL=tp.map(p=>this._mkSet(p));T.triL=triCount(hp[0])+triCount(tp[0])}
-   if(!T.tiered)continue;if(T.fs)this._drop(T.fs);T.fs=this._mkSet(T.tier[QUALITY[q].far])}this._flags();this.dirty=true}
+   if(!T.tiered)continue;if(T.fs)T.fs.forEach(x=>this._drop(x));const ps=T.models.map((m,i)=>this._tier(T,i,QUALITY[q].far));T.fs=ps.map(p=>this._mkSet(p));T.triF=triCount(ps[0])}this._flags();this.dirty=true}
  setPixelRatio(r){this.userPR=r;this._applyPR(r)}
  _applyPR(r){this.pr=r;this.R.setPixelRatio(Math.min(devicePixelRatio,r));this.R.setSize(innerWidth,innerHeight);this.dirty=true}
  setShadow(s){this.shadow=s;const c=SHADOW[s];this.light.castShadow=!!c;this.R.shadowMap.enabled=!!c;
   if(c){this.light.shadow.mapSize.set(c.size,c.size);if(this.light.shadow.map){this.light.shadow.map.dispose();this.light.shadow.map=null}this.R.shadowMap.type=c.type}
   this._flags();this.scene.traverse(o=>{if(o.material)o.material.needsUpdate=true});this.dirty=true}
  _flags(){const on=this.shadow!=='off';this.sets.forEach(s=>s.ims.forEach(im=>{im.castShadow=im.receiveShadow=on}))}
+ setRings(b){this.rings=b;this.dirty=true}
  setAuto(b){this.auto=b;this._n=this._t=this._low=this._good=0;if(!b){this._applyPR(this.userPR);this._applyQuality(this.userQ)}}
  describe(){return QUALITY[this.quality].far+'·'+this.quality+' ×'+Math.min(devicePixelRatio,this.pr)}
  // ---- per frame ----
@@ -54,15 +56,15 @@ export class UnitRenderer{
   for(const u of this.units.values()){const T=this.types[u.type];sph.center.set(u.x,T.H/2,u.z);if(!fr.intersectsSphere(sph))continue;vis.push({u,d:cam.position.distanceTo(sph.center)})}
   vis.sort((a,b)=>a.d-b.d);
   const Hpx=this.R.domElement.clientHeight||innerHeight,tf=2*Math.tan(cam.fov*Math.PI/360),q=QUALITY[this.quality],counts={};let tris=0;
-  for(const T of Object.values(this.types)){T.near=[];T.far=[];T.bt=T.models.map(()=>[]);T.bf=T.models.map(()=>[]);T.rank=0;counts[T.name]=0}
+  for(const T of Object.values(this.types)){T.near=[];T.far=[];T.bt=T.models.map(()=>[]);T.bf=T.models.map(()=>[]);T.nl=T.models.map(()=>[]);T.fl=T.models.map(()=>[]);T.rank=0;counts[T.name]=0}
   vis.forEach(v=>{const u=v.u,T=this.types[u.type];counts[T.name]++;
    if(T.turret){const t=Math.min(u.team,T.bt.length-1);(T.lc&&!(T.rank++<q.near&&v.d<(T.H*Hpx)/(tf*this.nearPx))?T.bf:T.bt)[t].push(u)}
-   else if(T.tiered){(T.rank++<q.near&&v.d<(T.H*Hpx)/(tf*this.nearPx)?T.near:T.far).push(u)}else T.near.push(u)});
+   else{const t=Math.min(u.team,T.nl.length-1);if(T.tiered)(T.rank++<q.near&&v.d<(T.H*Hpx)/(tf*this.nearPx)?T.nl:T.fl)[t].push(u);else T.nl[t].push(u)}});
   for(const T of Object.values(this.types)){
    if(T.turret){T.bt.forEach((l,i)=>{this._fill(T.hs[i],l,'m');this._fill(T.ts[i],l,'mt');tris+=l.length*T.tri});if(T.lc)T.bf.forEach((l,i)=>{this._fill(T.hsL[i],l,'m');this._fill(T.tsL[i],l,'mt');tris+=l.length*T.triL})}
-   else{this._fill(T.ns,T.near,'m');tris+=T.near.length*T.tri;if(T.tiered){this._fill(T.fs,T.far,'m');tris+=T.far.length*T.tier[QUALITY[this.quality].far].tri}}}
-  const R=this.ring,mm=new M4();vis.forEach((v,i)=>{const s=this.types[v.u.type].ringR/.78;mm.compose(new V3(v.u.x,.03,v.u.z),new THREE.Quaternion(),new V3(s,1,s));R.setMatrixAt(i,mm);R.setColorAt(i,this.teamColors[v.u.team]||this.teamColors[0])});
-  R.count=vis.length;R.instanceMatrix.needsUpdate=true;if(R.instanceColor)R.instanceColor.needsUpdate=true;
+   else{T.nl.forEach((l,i)=>{this._fill(T.ns[i],l,'m');tris+=l.length*T.tri});if(T.tiered)T.fl.forEach((l,i)=>{this._fill(T.fs[i],l,'m');tris+=l.length*T.triF})}}
+  const R=this.ring,mm=new M4();(this.rings?vis:[]).forEach((v,i)=>{const s=this.types[v.u.type].ringR/.78;mm.compose(new V3(v.u.x,.03,v.u.z),new THREE.Quaternion(),new V3(s,1,s));R.setMatrixAt(i,mm);R.setColorAt(i,this.teamColors[v.u.team]||this.teamColors[0])});
+  R.count=this.rings?vis.length:0;R.instanceMatrix.needsUpdate=true;if(R.instanceColor)R.instanceColor.needsUpdate=true;
   this.stats={visible:vis.length,counts,tris};return true}
  _fill(set,list,key){set.ims.forEach(im=>{list.forEach((u,k)=>im.setMatrixAt(k,u[key]));im.count=list.length;im.instanceMatrix.needsUpdate=true});set.group.visible=list.length>0}
  // auto quality: call once per rendered frame while drawing continuously (dt in ms)
