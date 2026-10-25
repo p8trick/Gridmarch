@@ -13,7 +13,7 @@ const gr=new THREE.Mesh(new THREE.PlaneGeometry(MAP*TILE,MAP*TILE),new THREE.Mes
 const gh=new THREE.GridHelper(MAP*TILE,MAP,0x55603f,0x55603f);gh.position.y=.01;scene.add(gh);
 const UR=new UnitRenderer({scene,camera:cam,renderer:R,light:sun,quality:Q.get('q')||'high',shadow:Q.get('s')||'high',pixelRatio:+(Q.get('pr')||3),
  types:{soldier:{model:createSoldier({seed:31}),scale:S,height:4.21,ringR:.78,tiered:true},
-        tank:{models:[createTank({faction:'blue'}),createTank({faction:'red'})],scale:S,height:2.88,ringR:1.2,turretNode:'turret'}}});
+        tank:{models:[createTank({faction:'blue'}),createTank({faction:'red'})],scale:S,height:4.4,ringR:1.2,turretNode:'turret',lodCells:{high:+(Q.get('tc')||.07),mid:.1,low:.14,min:.2}}}});
 const TC=new TacticalCamera(cam,R.domElement,{tile:TILE,mapW:MAP,mapH:MAP});
 // 40 units per side: K tanks + (40-K) infantry, scattered in each side's 4 rear rows
 let K=+(Q.get('k')||10),scan=false,od=true,anim=[],note='',noteT=0;
@@ -44,4 +44,5 @@ function loop(now){requestAnimationFrame(loop);const dt=now-last;last=now;
  R.render(scene,cam);fr++;if(active)UR.frame(dt);
  if(now-t0>=500){fps=fr*1000/(now-t0);fr=0;t0=now;acc+=fps;cnt++;const i=R.info.render;window.__s={fps:+fps.toFixed(1),...UR.stats,calls:i.calls,q:UR.quality,pr:UR.pr,tiles:TC.tiles};$('#hud').textContent=`FPS ${fps.toFixed(0)} (均${(acc/cnt).toFixed(0)})  绘制调用${i.calls}\n`+hud();sync()}}
 function hud(){const s=UR.stats,c=s.counts;return`${UR.describe()} 阴影:${UR.shadow}  可见${s.visible}/${UR.units.size}（步兵${c.soldier||0} 坦克${c.tank||0}） ${(s.tris/1000).toFixed(0)}k面  ${TC.tiles.toFixed(1)}格`+(performance.now()-noteT<8000&&note?'\n'+note:'')}
+window.__TC=TC;window.__UR=UR;
 requestAnimationFrame(loop);
