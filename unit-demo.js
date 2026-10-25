@@ -11,8 +11,11 @@ scene.add(new THREE.HemisphereLight(0xfff2dc,0x6b6a55,1.4));
 const sun=new THREE.DirectionalLight(0xffffff,2.2);sun.position.set(8,18,6);Object.assign(sun.shadow.camera,{left:-16,right:16,top:16,bottom:-16,near:1,far:60});scene.add(sun);
 const gr=new THREE.Mesh(new THREE.PlaneGeometry(MAP*TILE,MAP*TILE),new THREE.MeshStandardMaterial({color:0x9aa77f,roughness:1}));gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;scene.add(gr);
 const gh=new THREE.GridHelper(MAP*TILE,MAP,0x55603f,0x55603f);gh.position.y=.01;scene.add(gh);
+// team-tinted soldier: multiplies the camo vertex colors (keeps the camo pattern), per-team cloned cloth material
+const TINT={0:[.3,.62,1.55],1:[.95,.45,.5]};
+function teamSoldier(team){const m=createSoldier({seed:31}),cl=new Map();m.traverse(o=>{if(o.isMesh&&o.material.vertexColors){if(!cl.has(o.material)){const c=o.material.clone();c.color.setRGB(...TINT[team]);cl.set(o.material,c)}o.material=cl.get(o.material)}});return m}
 const UR=new UnitRenderer({scene,camera:cam,renderer:R,light:sun,quality:Q.get('q')||'high',shadow:Q.get('s')||'high',pixelRatio:+(Q.get('pr')||3),
- types:{soldier:{model:createSoldier({seed:31}),scale:S,height:4.21,ringR:.78,tiered:true},
+ types:{soldier:{models:[teamSoldier(0),teamSoldier(1)],scale:S,height:4.21,ringR:.78,tiered:true},
         tank:{models:[createTank({faction:'blue'}),createTank({faction:'red'})],scale:S,height:4.4,ringR:1.2,turretNode:'turret',lodCells:{high:+(Q.get('tc')||.07),mid:.1,low:.14,min:.2}}}});
 const TC=new TacticalCamera(cam,R.domElement,{tile:TILE,mapW:MAP,mapH:MAP});
 // 40 units per side: K tanks + (40-K) infantry, scattered in each side's 4 rear rows
@@ -27,11 +30,11 @@ UR.onAuto=m=>{note=m;noteT=performance.now()};
 const on=(sel,fn)=>document.querySelectorAll(sel).forEach(b=>b.onclick=()=>fn(b));
 function sync(){document.querySelectorAll('[data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===UR.userQ));document.querySelectorAll('[data-s]').forEach(b=>b.classList.toggle('on',b.dataset.s===UR.shadow));
  document.querySelectorAll('[data-t]').forEach(b=>b.classList.toggle('on',+b.dataset.t===Math.round(TC.tiles)));document.querySelectorAll('[data-k]').forEach(b=>b.classList.toggle('on',+b.dataset.k===K));
- $('#au').textContent='自动降画质:'+(UR.auto?'开':'关');$('#au').classList.toggle('on',UR.auto);$('#od').textContent='按需渲染:'+(od?'开':'关');$('#sc').textContent='炮塔扫描:'+(scan?'开':'关');$('#sc').classList.toggle('on',scan)}
+ $('#au').textContent='自动降画质:'+(UR.auto?'开':'关');$('#au').classList.toggle('on',UR.auto);$('#od').textContent='按需渲染:'+(od?'开':'关');$('#rg').textContent='底圈:'+(UR.rings?'开':'关');$('#sc').textContent='炮塔扫描:'+(scan?'开':'关');$('#sc').classList.toggle('on',scan)}
 on('[data-q]',b=>{UR.setQuality(b.dataset.q);sync()});on('[data-s]',b=>{UR.setShadow(b.dataset.s);sync()});on('[data-t]',b=>{TC.setTiles(+b.dataset.t);sync()});
 on('[data-k]',b=>{K=+b.dataset.k;layout();sync()});
 $('#au').onclick=()=>{UR.setAuto(!UR.auto);sync()};$('#od').onclick=()=>{od=!od;sync()};$('#rl').onclick=()=>TC.rotate(-1);$('#rr').onclick=()=>TC.rotate(1);
-$('#sc').onclick=()=>{scan=!scan;if(!scan)aimAll();sync()};
+$('#rg').onclick=()=>{UR.setRings(!UR.rings);sync()};$('#sc').onclick=()=>{scan=!scan;if(!scan)aimAll();sync()};
 $('#mv').onclick=()=>{const now=performance.now();[...UR.units.values()].filter(u=>u.team===0).slice(0,14).forEach(u=>anim.push({id:u.id,x0:u.x,z0:u.z,x1:u.x,z1:u.z+TILE*3,t0:now,dur:1600}))};
 addEventListener('resize',()=>{TC.resize();R.setSize(innerWidth,innerHeight);UR.dirty=true});layout();sync();
 let last=performance.now(),t0=last,fr=0,fps=0,acc=0,cnt=0,ang=0;
