@@ -1,0 +1,137 @@
+/* 方寸战线 / Gridmarch · 主页 */
+:root{
+  --navy:#0b1e36; --gold:#ffb81c; --gold-hi:#ffd45a; --gold-lo:#ffa90f; --brown:#8a4a0e;
+  --font:ui-rounded,"SF Pro Rounded",-apple-system,"PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;
+
+  /* 版式：全部集中在这里，改数字即可 */
+  --pad-l:max(env(safe-area-inset-left,0px),5vw);
+  --pad-t:max(env(safe-area-inset-top,0px),7vh);
+  --pad-b:max(env(safe-area-inset-bottom,0px),3vh);
+  --title-h:min(22vh,10.5vw);          /* 标题高度（中英文同高） */
+  --menu-top:4vh;                       /* 标题与菜单间距 */
+  --menu-w:min(24vw,240px);
+  --item-h:clamp(44px,7vh,56px);
+  --item-gap:clamp(4px,1.1vh,10px);
+  --bg-pos:55% 50%;                     /* 背景焦点 */
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--navy);overscroll-behavior:none}
+body{
+  font-family:var(--font);color:#fff;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;
+}
+
+/* 背景：铺满视口 */
+.bg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--bg-pos)}
+.scrim{
+  position:fixed;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(8,22,40,.62) 0%,rgba(8,22,40,.28) 32%,rgba(8,22,40,0) 52%);
+}
+
+/* 舞台：只给内容留安全边距 */
+.stage{
+  position:fixed;inset:0;display:flex;flex-direction:column;align-items:flex-start;
+  padding:var(--pad-t) 0 var(--pad-b) var(--pad-l);
+}
+.title{margin:0;height:var(--title-h);display:flex;align-items:center;animation:in-title .5s ease-out both}
+.title img{display:block;height:100%;width:auto}
+/* 英文标题 V1.3 比中文宽得多，按高度的 66% 缩，使两种语言视觉宽度接近 */
+.title[data-lang="en"] img{height:66%}
+
+/* 菜单 */
+.menu{
+  list-style:none;margin:var(--menu-top) 0 0;padding:0;width:var(--menu-w);
+  display:flex;flex-direction:column;gap:var(--item-gap);
+}
+.menu li{animation:in-item .28s ease-out both;animation-delay:calc(.25s + var(--i,0) * 70ms)}
+
+.item{
+  -webkit-appearance:none;appearance:none;border:0;margin:0;padding:0;background:none;color:inherit;font:inherit;
+  display:block;position:relative;width:100%;height:var(--item-h);cursor:pointer;outline:none;
+  border-radius:10px;
+  transform:translateX(var(--x,0px)) skewX(-10deg);
+  transition:transform .16s ease-out;
+}
+/* 底板：深蓝斜切条，带一条细高光和一条“厚度” */
+.item::before,.item::after{content:"";position:absolute;inset:0;border-radius:inherit}
+.item::before{
+  background:linear-gradient(180deg,rgba(20,48,86,.80),rgba(9,24,46,.88));
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.20),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55);
+}
+/* 选中层：金色，只做 opacity 过渡 */
+.item::after{
+  background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown);
+  opacity:0;transition:opacity .16s ease-out;
+}
+.txt{
+  position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px 0 20px;transform:skewX(10deg);
+}
+.main{font-size:16px;font-weight:700;letter-spacing:.1em;text-shadow:0 1px 0 rgba(0,0,0,.35)}
+.sub{font-size:9px;font-weight:700;letter-spacing:.14em;opacity:.6}
+
+.item.is-sel,.item:focus-visible{--x:10px;color:#2b1700}
+.item.is-sel::after,.item:focus-visible::after{opacity:1}
+.item.is-sel .main,.item:focus-visible .main{text-shadow:0 1px 0 rgba(255,255,255,.45)}
+.item.is-sel .sub,.item:focus-visible .sub{opacity:.7}
+.item:active{transform:translateX(var(--x,0px)) translateY(2px) skewX(-10deg)}
+
+.item[aria-disabled="true"]{opacity:.38;pointer-events:none}
+
+/* 提示条 */
+.toast{
+  position:fixed;left:50%;bottom:calc(var(--pad-b) + 8px);z-index:30;
+  transform:translateX(-50%) translateY(10px);opacity:0;pointer-events:none;
+  padding:10px 20px;border-radius:999px;font-size:14px;font-weight:700;letter-spacing:.08em;
+  background:rgba(9,24,46,.92);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.22),0 3px 0 rgba(2,10,22,.55);
+  transition:opacity .16s,transform .16s;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* 设置面板 */
+.sheet{
+  position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  padding:max(env(safe-area-inset-top,0px),3vh) max(env(safe-area-inset-right,0px),3vw)
+          max(env(safe-area-inset-bottom,0px),3vh) max(env(safe-area-inset-left,0px),3vw);
+  background:rgba(5,14,28,.6);
+}
+.sheet[hidden]{display:none}
+.panel{
+  width:min(70vw,460px);max-height:100%;overflow:auto;padding:6px 18px 12px;border-radius:16px;
+  background:#0f2744;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 4px 0 rgba(2,10,22,.6);
+}
+.panel-head{display:flex;align-items:center;justify-content:space-between;min-height:48px}
+.panel-head h2{margin:0;font-size:18px;letter-spacing:.12em}
+.close{
+  -webkit-appearance:none;appearance:none;border:0;background:none;color:#fff;font:inherit;font-size:18px;
+  width:44px;height:44px;margin-right:-10px;cursor:pointer;
+}
+.close:active{opacity:.5}
+.row{display:flex;align-items:center;justify-content:space-between;min-height:48px;border-top:1px solid rgba(255,255,255,.12);font-size:15px;font-weight:600}
+.row em{font-style:normal;font-size:13px;opacity:.5}
+.seg{display:flex;gap:6px}
+.seg button{
+  -webkit-appearance:none;appearance:none;border:0;font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  min-width:72px;height:44px;padding:0 14px;border-radius:10px;color:#fff;
+  background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.18);
+}
+.seg button[aria-pressed="true"]{color:#2b1700;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:0 2px 0 var(--brown)}
+.seg button:active{opacity:.7}
+
+/* 竖屏提示 */
+.rotate{
+  display:none;position:fixed;inset:0;z-index:50;background:var(--navy);
+  flex-direction:column;align-items:center;justify-content:center;gap:20px;
+}
+.rotate p{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em}
+.phone{width:34px;height:58px;border:3px solid var(--gold);border-radius:8px;animation:turn 2s ease-in-out infinite}
+@media (orientation:portrait){.rotate{display:flex}}
+
+@keyframes in-item{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes in-title{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes turn{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}

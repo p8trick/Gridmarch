@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="方寸战线">
+<meta name="theme-color" content="#0b1e36">
+<title>方寸战线 · Gridmarch</title>
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+
+<img class="bg" src="assets/home/home-bg.webp" alt="" decoding="async">
+<div class="scrim"></div>
+
+<main class="stage">
+  <h1 class="title"><img id="title" src="assets/title/title-zh.webp" alt="方寸战线" decoding="async"></h1>
+  <nav><ul id="menu" class="menu"></ul></nav>
+</main>
+
+<div id="toast" class="toast" role="status"></div>
+
+<section id="settings" class="sheet" hidden>
+  <div class="panel" role="dialog" aria-modal="true">
+    <header class="panel-head">
+      <h2 data-i18n="settings">设置</h2>
+      <button id="closeSettings" class="close" type="button" aria-label="关闭">✕</button>
+    </header>
+    <div class="row">
+      <span data-i18n="language">语言</span>
+      <div class="seg">
+        <button type="button" data-lang="zh">中文</button>
+        <button type="button" data-lang="en">English</button>
+      </div>
+    </div>
+    <div class="row"><span data-i18n="quality">画质</span><em data-i18n="soon">即将开放</em></div>
+    <div class="row"><span data-i18n="volume">音量</span><em data-i18n="soon">即将开放</em></div>
+  </div>
+</section>
+
+<div class="rotate">
+  <div class="phone"></div>
+  <p id="rotateText">请横屏使用</p>
+</div>
+
+<script src="home.js"></script>
+</body>
+</html>
