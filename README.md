@@ -8,7 +8,7 @@ assets/
   home/    主页背景 webp
   title/   中英文标题 webp（游戏内使用）
   icons/   apple-touch-icon(180) / 192 / 512
-  splash/  启动图（iOS 按设备尺寸匹配，见 index.html）
+  splash/  启动图 PNG（仅 iPad 横屏 2360×1640，文件名见 index.html）
   _src/    PNG 美术母版（游戏不引用）
 ```
 
