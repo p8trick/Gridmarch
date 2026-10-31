@@ -3,10 +3,12 @@
 回合制战棋（类高级战争），单文件优先的 PWA，部署在 GitHub Pages。
 
 ```
-index.html  home.css  home.js    主页（菜单配置在 home.js 顶部的 MENU）
+index.html  home.css  home.js  manifest.webmanifest    主页（菜单配置在 home.js 顶部的 MENU）
 assets/
   home/    主页背景 webp
   title/   中英文标题 webp（游戏内使用）
+  icons/   apple-touch-icon(180) / 192 / 512
+  splash/  启动图（iOS 按设备尺寸匹配，见 index.html）
   _src/    PNG 美术母版（游戏不引用）
 ```
 
