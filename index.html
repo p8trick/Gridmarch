@@ -15,15 +15,17 @@
 <!-- 启动图：iOS 要求 media 与设备逐项精确匹配；添加到主屏幕时读取，换图后需删除图标重新添加 -->
 <link rel="apple-touch-startup-image" href="assets/splash/iphone17pro-landscape.png"
       media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)">
-<!-- iPad（A16 / Air 11"，2360×1640）：做好后放到 assets/splash/，取消下面注释
+<!-- iPad（A16，2360×1640）；PNG 放在 assets/splash/ipad-2360x1640-landscape.png -->
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2360x1640-landscape.png"
       media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
--->
 <link rel="stylesheet" href="home.css">
 </head>
 <body>
 
-<img class="bg" src="assets/home/home-bg.webp" alt="" decoding="async">
+<picture>
+  <source media="(max-aspect-ratio: 16/9)" srcset="assets/home/home-bg-ipad.webp">
+  <img class="bg" src="assets/home/home-bg.webp" alt="" decoding="async">
+</picture>
 <div class="scrim"></div>
 
 <main class="stage">

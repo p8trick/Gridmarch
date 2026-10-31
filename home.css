@@ -21,7 +21,8 @@ body{
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;
 }
 
-/* 背景：铺满视口 */
+/* 背景：铺满视口。iPad(约1.44:1)用专属图，构图已按它做，居中即可 */
+@media (max-aspect-ratio:16/9){:root{--bg-pos:50% 50%}}
 .bg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--bg-pos)}
 .scrim{
   position:fixed;inset:0;pointer-events:none;
