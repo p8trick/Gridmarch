@@ -1,0 +1,367 @@
+import * as THREE from 'three';
+import {createTrackPath} from './track-path.js';
+import {attachHeavyTankAnimations} from './heavy-tank-animation.js';
+
+// Heavy tank V1.2. +Y up, +Z forward, ground at Y=0. V1.1 geometry, shared motion/fire adapter.
+// Dimensions are stylized gameplay units, not measurements of a real vehicle.
+export function createTank({faction='sand', batch=true, paint=true}={}) {
+  const root=new THREE.Group(); root.name='HeavyTank_V1_2';
+  const palette={sand:['#c3a05a','#dbb971','#8f733e'],blue:['#527ca9','#7199c2','#3c5e86'],red:['#ae5149','#cc6a5e','#843b36'],green:['#7c8750','#a0aa68','#5b673b']};
+  const mats={};
+  const mat=(name,color,extra={})=>mats[name]=new THREE.MeshStandardMaterial({color,roughness:.85,flatShading:true,...extra});
+  const colors=palette[faction]||palette.sand;
+  mat('armor',colors[0],{vertexColors:true});mat('light',colors[1]);mat('shade',colors[2]);
+  mat('rubber','#303338');mat('tread','#42464b',{metalness:.18});mat('edge','#555956',{metalness:.22});
+  mat('well','#5d5844');mat('opticsBody',colors[0]);mat('steel','#6c6d61',{metalness:.2});
+  mat('olive','#62664e');mat('glass','#293b43',{metalness:.25,roughness:.36});mat('black','#171e22');
+  mat('lamp','#e6d6a2',{emissive:'#e6d6a2',emissiveIntensity:.1});mat('amber','#b3733e');mat('tail','#9c4a3d');
+  const hull=new THREE.Group();hull.name='hull';root.add(hull);
+  const turret=new THREE.Group();turret.name='turret';turret.position.set(0,1.425,-.16);turret.scale.set(1.20,1.18,1.02);root.add(turret);
+  const gun=new THREE.Group();gun.name='gun';gun.position.set(0,.43,.92);gun.scale.set(1.25,1.20,.92);turret.add(gun);
+  const recoil=new THREE.Group();recoil.name='barrel_recoil';gun.add(recoil);
+  const trackBindings={};
+  function add(geometry,material,parent,pos=[0,0,0],name='') {const m=new THREE.Mesh(geometry,material);m.position.set(...pos);m.name=name;m.castShadow=m.receiveShadow=true;parent.add(m);return m;}
+  function geom(pos,indices){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(indices);g.computeVertexNormals();return g;}
+  // Rings run clockwise in XZ, so their top-facing normals are +Y.
+  function outline(w,d,b=.07,z=0){return [[-w/2+b,d/2+z],[w/2-b,d/2+z],[w/2,d/2-b+z],[w/2,-d/2+b+z],[w/2-b,-d/2+z],[-w/2+b,-d/2+z],[-w/2,-d/2+b+z],[-w/2,d/2-b+z]];}
+  function loft(rings,variation=false){let p=[],ids=[];const N=rings[0].points.length;rings.forEach(r=>r.points.forEach(q=>p.push(q[0],r.y,q[1])));for(let j=0;j<rings.length-1;j++)for(let i=0;i<N;i++){const a=j*N+i,b=j*N+(i+1)%N,c=b+N,d=a+N;ids.push(a,b,d,b,c,d);}for(let i=1;i<N-1;i++){ids.push(0,i+1,i);let t=(rings.length-1)*N;ids.push(t,t+i,t+i+1);}let g=geom(p,ids);if(variation){g=g.toNonIndexed();let c=[];for(let i=0;i<g.attributes.position.count;i+=3){const shade=[1,.96,1.025,.985,.94,1.01][Math.floor(i/6)%6];for(let j=0;j<3;j++)c.push(shade,shade,shade);}g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));g.computeVertexNormals();}return g;}
+  function bevel(w,h,d,b=.035){b=Math.min(b,w*.24,h*.24,d*.24);return loft([{y:-h/2,points:outline(w-2*b,d-2*b,b*.4)},{y:-h/2+b,points:outline(w,d,b)},{y:h/2-b,points:outline(w,d,b)},{y:h/2,points:outline(w-2*b,d-2*b,b*.4)}]);}
+  function box(parent,pos,size,material=mats.armor,b=.025,name=''){return add(b<=.018?new THREE.BoxGeometry(...size):bevel(...size,b),material,parent,pos,name);}
+  function rod(parent,a,b,r,material=mats.edge,n=8){const A=new THREE.Vector3(...a),B=new THREE.Vector3(...b),delta=B.clone().sub(A);const m=add(new THREE.CylinderGeometry(r,r,delta.length(),n),material,parent,A.clone().add(B).multiplyScalar(.5).toArray());m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return m;}
+  function cyl(parent,pos,rt,rb,h,material,axis='y',n=12,open=false){let o=add(new THREE.CylinderGeometry(rt,rb,h,n,1,open),material,parent,pos);if(axis==='x')o.rotation.z=-Math.PI/2;if(axis==='z')o.rotation.x=Math.PI/2;return o;}
+
+  function slab(parent,points,y0,y1,material=mats.armor,name=''){
+    return add(loft([{y:y0,points},{y:y1,points}],true),material,parent,[0,0,0],name);
+  }
+  // Revolve a radial/axial profile. Skip zero-area pole faces deliberately.
+  function turned(profile,segments=16){
+    const p=[],ids=[];for(let j=0;j<profile.length;j++)for(let i=0;i<segments;i++){const a=i/segments*Math.PI*2;p.push(profile[j][0]*Math.sin(a),profile[j][1],profile[j][0]*Math.cos(a));}
+    for(let j=0;j<profile.length-1;j++)for(let i=0;i<segments;i++){let a=j*segments+i,b=j*segments+(i+1)%segments,c=b+segments,d=a+segments;if(profile[j][0]>1e-8)ids.push(a,b,d);if(profile[j+1][0]>1e-8)ids.push(b,c,d);}
+    const g=geom(p,ids);let v=0;for(let i=0;i<ids.length;i+=3){const a=new THREE.Vector3().fromArray(p,ids[i]*3),b=new THREE.Vector3().fromArray(p,ids[i+1]*3),c=new THREE.Vector3().fromArray(p,ids[i+2]*3);v+=a.dot(b.cross(c));}if(v<0){for(let i=0;i<ids.length;i+=3)[ids[i+1],ids[i+2]]=[ids[i+2],ids[i+1]];g.setIndex(ids);g.computeVertexNormals();}return g;
+  }
+  function recessedDish(geometry){
+    const g=geometry.toNonIndexed();geometry.dispose();const p=g.attributes.position,c=[];
+    for(let i=0;i<p.count;i+=3){let radius=0,depth=0;for(let j=0;j<3;j++){radius+=Math.hypot(p.getX(i+j),p.getZ(i+j))/3;depth+=p.getY(i+j)/3;}
+      const shade=radius>.063 && radius<.182 && depth<.003 ? .57 : radius>.182 ? 1.04 : .93;
+      for(let j=0;j<3;j++)c.push(shade,shade,shade);
+    }g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));return g;
+  }
+  function wheelFace(parent,x,y,z,side,geometry,material){let m=add(geometry,material,parent,[x,y,z]);m.rotation.z=-side*Math.PI/2;return m;}
+  function surfaceBox(parent,pos,size,normal,material,b=.025,name=''){
+    let m=box(parent,pos,size,material,b,name);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(...normal).normalize());return m;
+  }
+
+  // Faceted hull with a narrower, bevelled lower nose and a divided upper glacis.
+  add(loft([
+    {y:.29,points:outline(1.43,3.23,.23,-.01)},
+    {y:.52,points:outline(1.63,3.75,.24,.04)},
+    {y:.82,points:outline(1.78,3.99,.18,.025)},
+    {y:1.18,points:outline(1.76,2.96,.15,-.24)}
+  ],true),mats.armor,hull,[0,0,0],'hull_core');
+  // Raised glacis: selected planar facets, with a central ridge rather than a flat rectangle.
+  const glacisPoints=[[-.86,1.18,1.22],[-.31,1.205,1.22],[.31,1.205,1.22],[.86,1.18,1.22],[-.84,.84,2.035],[-.32,.84,2.05],[.32,.84,2.05],[.84,.84,2.035],[-.79,.62,1.99],[-.30,.61,2.03],[.30,.61,2.03],[.79,.62,1.99],[-.65,.35,1.76],[.65,.35,1.76]];
+  const gp=glacisPoints.flat(),gi=[0,4,1,1,4,5,1,5,2,2,5,6,2,6,3,3,6,7,4,8,5,5,8,9,5,9,6,6,9,10,6,10,7,7,10,11,8,12,9,9,12,13,9,13,10,10,13,11];
+  const glacis=geom(gp,gi).toNonIndexed();let gc=[];for(let i=0;i<glacis.attributes.position.count;i+=3){let v=[1.03,.97,1.00,.94,.98,1.02,.91,.96][Math.floor(i/3)%8];for(let j=0;j<3;j++)gc.push(v,v,v);}glacis.setAttribute('color',new THREE.Float32BufferAttribute(gc,3));
+  add(glacis,mats.armor,hull,[0,0,0],'faceted_glacis');
+  box(hull,[0,1.205,-.36],[1.88,.115,2.84],mats.armor,.035,'deck');
+  // Slightly raised driver plate, hatch and narrow periscope at the turret foot.
+  let driver=box(hull,[-.37,1.235,.93],[.56,.065,.44],mats.light,.028,'driver_hatch');
+  box(hull,[-.37,1.29,1.03],[.27,.09,.14],mats.edge,.018);
+  box(hull,[-.37,1.29,1.105],[.18,.04,.012],mats.glass,.002);
+  for(const s of [-1,1]){
+    // Shoulder decks lie close to the tracks, with a pronounced front slope.
+    box(hull,[s*1.065,1.155,-.30],[.72,.16,3.25],mats.armor,.055,'fender_top');
+    const shoulder=box(hull,[s*1.065,1.04,1.59],[.73,.28,.80],mats.armor,.032,'sloped_front_fender');shoulder.rotation.x=.50;
+    // A cap on each shoulder creates the layered armor silhouette.
+    box(hull,[s*1.06,1.27,.90],[.63,.13,.70],mats.light,.045);
+    box(hull,[s*1.07,1.41,1.23],[.40,.16,.25],mats.edge,.025,'front_lamp_housing');
+    box(hull,[s*1.15,1.41,1.361],[.105,.075,.018],mats.amber,.003);
+    box(hull,[s*.995,1.41,1.361],[.105,.075,.018],mats.lamp,.003);
+    const n=[0,.38,.925];
+    surfaceBox(hull,[s*.63,1.012,1.763],[.205,.12,.065],n,mats.edge,.012,'glacis_headlight');
+    surfaceBox(hull,[s*.63,1.025,1.795],[.125,.064,.015],n,mats.lamp,.003);
+    for(const z of [.52,-.06])box(hull,[s*1.08,1.277,z],[.40,.05,.36],mats.armor,.018);
+    box(hull,[s*1.12,1.284,-.67],[.43,.11,.68],mats.olive,.022,'side_tool_box');
+    box(hull,[s*1.13,1.297,-1.45],[.45,.11,.51],mats.armor,.025);
+    // Five broad panels, matching the blueprint side elevation.
+    for(let i=0;i<5;i++){
+      const z=1.18-i*.58,h=.70,y=1.25-h/2;
+      box(hull,[s*1.405,y,z],[.19,h,.563],mats.armor,.033,'side_skirt_'+i);
+      box(hull,[s*1.408,1.25,z],[.20,.07,.54],mats.light,.01);
+      for(const dz of [-.205,.205])for(const yy of [1.14,.62])cyl(hull,[s*1.511,yy,z+dz],.022,.022,.025,mats.edge,'x',6);
+    }
+    // Wedge side closure: rising shoulder above the front end wheel.
+    const nosePanel=loft([
+      {y:.57,points:outline(.15,.66,.05,1.52)},
+      {y:.72,points:outline(.19,.98,.07,1.65)},
+      {y:.91,points:outline(.19,.81,.05,1.60)},
+      {y:1.18,points:outline(.15,.34,.04,1.34)}
+    ],true);
+    add(nosePanel,mats.armor,hull,[s*1.405,0,0],'nose_side_closure');
+    box(hull,[s*1.515,.91,1.39],[.035,.18,.24],mats.edge,.012,'nose_service_plate');
+    for(const z of [1.27,1.63])cyl(hull,[s*1.52,.73,z],.026,.026,.025,mats.edge,'x',8);
+    // Separate raised shoulder strip, with panel breaks above the main skirt.
+    for(let i=0;i<5;i++){
+      const z=1.05-i*.57;
+      box(hull,[s*1.24,1.345,z],[.36,.16,.54],mats.armor,.025,'upper_side_armor');
+      cyl(hull,[s*1.425,1.35,z-.19],.018,.018,.02,mats.edge,'x',6);
+    }
+    box(hull,[s*1.405,1.03,-1.73],[.15,.35,.32],mats.edge,.025,'rear_corner');
+  }
+
+  // Chunky tracks: polygonal end arcs, individual pads, hinge tabs and recessed wheel dishes.
+  const roadZ=1.55,roadY=.49,roadRadius=.326*.94,endZ=2.02,endY=.76,endRadius=.31*.96;
+  const belt=createTrackPath({roadZ,roadY,roadRadius,endZ,endY,endRadius});
+  const trackLength=belt.length,trackPoint=belt.pointAt;
+  // Place the lowest outside pad face at ground level, retaining all wheel-to-belt relations.
+  const trackGroundOffset=-(roadY-roadRadius-.055-.058-.095/2);
+  for(const side of [-1,1]){
+    const track=new THREE.Group(),x=side*1.335;track.name=side<0?'right_track':'left_track';track.position.y=trackGroundOffset;hull.add(track);
+    const parts={pads:[],links:[],roadTires:[],roadDishes:[],roadHubs:[],endTires:[],endDishes:[],endHubs:[]};
+    trackBindings[side===1?'left':'right']={path:belt,track,parts};
+    const N=belt.contour.length,p=[],ids=[],outer=[],inner=[];
+    for(let i=0;i<N;i++){let q=belt.contour[i];outer.push([q.z-q.dy*.055,q.y+q.dz*.055]);inner.push([q.z+q.dy*.055,q.y-q.dz*.055]);}
+    for(const xx of [x-.365,x+.365])for(const contour of [outer,inner])contour.forEach(q=>p.push(xx,q[1],q[0]));
+    function quad(a,b,c,d){ids.push(a,b,c,a,c,d);}
+    for(let i=0;i<N;i++){let j=(i+1)%N;quad(i,j,2*N+j,2*N+i);quad(N+j,N+i,3*N+i,3*N+j);quad(j,i,N+i,N+j);quad(2*N+i,2*N+j,3*N+j,3*N+i);}
+    let beltVolume=0;for(let i=0;i<ids.length;i+=3){const a=new THREE.Vector3().fromArray(p,ids[i]*3),b=new THREE.Vector3().fromArray(p,ids[i+1]*3),c=new THREE.Vector3().fromArray(p,ids[i+2]*3);beltVolume+=a.dot(b.cross(c));}
+    if(beltVolume<0)for(let i=0;i<ids.length;i+=3)[ids[i+1],ids[i+2]]=[ids[i+2],ids[i+1]];
+    add(geom(p,ids),mats.rubber,track);
+    for(let i=0;i<50;i++){
+      let q=trackPoint(trackLength*(i+.5)/50);
+      let pad=add(bevel(.79,.11,.23,.016),mats.tread,track,[x,q.y+q.dz*.058,q.z-q.dy*.058]);pad.rotation.x=-Math.atan2(q.dy,q.dz);
+      // Thin connector plates stay inside the outer pad width.
+      const link=box(track,[x+side*.352,q.y,q.z],[.075,.075,.225],mats.edge,.01);link.rotation.x=pad.rotation.x;
+      parts.pads.push(pad);parts.links.push(link);
+    }
+    const dishProfile=[[0,-.07],[.275,-.07],[.288,-.04],[.288,.018],[.271,.037],[.245,.031],[.226,-.023],[.145,-.048],[.079,-.027],[.067,.018],[0,.018]];
+    const tireProfile=[[.260,-.205],[.278,-.205],[.317,-.175],[.326,-.13],[.326,.14],[.312,.188],[.278,.205],[.260,.205],[.260,-.205]];
+    for(let i=0;i<6;i++){
+      const z=-roadZ+i*(2*roadZ/5),y=roadY;
+      parts.roadTires.push(wheelFace(track,x,y,z,side,turned(tireProfile.map(([r,a])=>[r*.94,a*1.2]),16),mats.rubber));
+      parts.roadDishes.push(wheelFace(track,x+side*.244,y,z,side,recessedDish(turned(dishProfile.map(([r,a])=>[r*.94,a*1.2]),16)),mats.armor));
+      parts.roadHubs.push(cyl(track,[x+side*.28,y,z],.048,.048,.026,mats.shade,'x',10));
+    }
+    for(const z of [-endZ,endZ]){
+      const y=endY;
+      parts.endTires.push(wheelFace(track,x,y,z,side,turned([[.235,-.20],[.27,-.20],[.31,-.16],[.31,.16],[.27,.20],[.235,.20],[.235,-.20]].map(([r,a])=>[r*.96,a*1.2]),14),mats.rubber));
+      parts.endDishes.push(wheelFace(track,x+side*.24,y,z,side,turned([[0,-.04],[.25,-.04],[.27,-.01],[.27,.025],[.23,.035],[.19,-.016],[.10,-.025],[.075,.02],[0,.02]].map(([r,a])=>[r*.96,a*1.2]),14),mats.shade));
+      parts.endHubs.push(cyl(track,[x+side*.278,y,z],.092,.092,.035,mats.armor,'x',10));
+    }
+  }
+
+  // Include rotated pad corners when seating each complete track on the ground.
+  for(const track of hull.children.filter(o=>o.name==='left_track'||o.name==='right_track')){
+    track.updateWorldMatrix(true,true);track.position.y-=new THREE.Box3().setFromObject(track).min.y;
+  }
+
+  // Layered rear plate, engine grille, towing fixtures and lamp clusters.
+  box(hull,[0,.85,-1.94],[1.67,.64,.12],mats.armor,.04);
+  box(hull,[0,.97,-2.012],[.68,.29,.04],mats.shade,.01);
+  for(let i=0;i<6;i++)box(hull,[0,.854+i*.043,-2.041],[.59,.017,.03],mats.steel,.003);
+  for(const s of [-1,1]){
+    box(hull,[s*.64,.96,-2.02],[.27,.39,.11],mats.edge,.03);
+    for(let i=0;i<5;i++)box(hull,[s*.64,.824+i*.055,-2.08],[.15,.025,.014],mats.black,.002);
+    box(hull,[s*1.065,1.13,-1.94],[.50,.19,.12],mats.edge,.022);
+    box(hull,[s*1.065,.90,-1.94],[.50,.24,.14],mats.armor,.025,'rear_fender_cap');
+    box(hull,[s*1.105,1.14,-2.006],[.25,.083,.015],mats.tail,.002);
+    box(hull,[s*.951,1.14,-2.006],[.045,.083,.015],mats.amber,.002);
+    box(hull,[s*.43,.53,-2.003],[.16,.18,.065],mats.shade,.02);
+    cyl(hull,[s*.44,.52,-2.05],.047,.047,.08,mats.edge,'z',8);
+  }
+  for(let i=0;i<7;i++)box(hull,[0,1.272,-1.29-i*.065],[.70,.025,.028],mats.shade,.003);
+
+  // The turret shell has a broad lower belly and a smaller, offset roof outline.
+  // Wide swept cheek wedges continue into the sides instead of separate small blocks.
+  cyl(turret,[0,.018,0],.77,.82,.12,mats.edge,'y',24);
+  add(loft([
+    {y:.10,points:outline(1.70,2.05,.30,-.045)},
+    {y:.23,points:outline(1.86,2.17,.35,-.045)},
+    {y:.60,points:outline(1.67,1.98,.31,-.10)},
+    {y:.73,points:outline(1.56,1.75,.28,-.14)}
+  ],true),mats.armor,turret,[0,0,0],'turret_shell');
+  for(const side of [-1,1]){
+    // Broad seven-sided cheek cross section, mirrored with consistent winding.
+    const shape=(coords)=>{const p=coords.map(([x,z])=>[side*x,z]);return side===1?p:p.reverse();};
+    const cheek=loft([
+      {y:.115,points:shape([[.29,1.02],[.37,1.16],[.88,1.10],[1.10,.70],[1.10,.08],[.80,.03],[.38,.58]])},
+      {y:.275,points:shape([[.29,1.08],[.38,1.22],[.91,1.16],[1.14,.70],[1.14,.05],[.84,.00],[.40,.58]])},
+      {y:.60,points:shape([[.33,.97],[.41,1.10],[.80,1.03],[1.00,.64],[1.00,.08],[.77,.03],[.41,.55]])},
+      {y:.69,points:shape([[.37,.91],[.44,1.02],[.75,.96],[.94,.60],[.94,.10],[.74,.05],[.44,.52]])}
+    ],true);
+    // Polygon order above runs the other way from the standard hull ring.
+    const ci=cheek.index; // toNonIndexed geometry: reverse per triangle if volume is negative.
+    const pp=cheek.attributes.position,cc=cheek.attributes.color;let volume=0;
+    for(let i=0;i<pp.count;i+=3){let a=new THREE.Vector3().fromBufferAttribute(pp,i),b=new THREE.Vector3().fromBufferAttribute(pp,i+1),c=new THREE.Vector3().fromBufferAttribute(pp,i+2);volume+=a.dot(b.cross(c));}
+    if(volume<0){for(let i=0;i<pp.count;i+=3)for(const attribute of [pp,cc]){const x=attribute.getX(i+1),y=attribute.getY(i+1),z=attribute.getZ(i+1);attribute.setXYZ(i+1,attribute.getX(i+2),attribute.getY(i+2),attribute.getZ(i+2));attribute.setXYZ(i+2,x,y,z);}cheek.computeVertexNormals();}
+    add(cheek,mats.armor,turret,[0,0,0],'cheek_wedge');
+    surfaceBox(turret,[side*.635,.58,1.005],[.092,.15,.048],[side*.18,.33,.92],mats.shade,.008);
+    surfaceBox(turret,[side*.639,.59,1.031],[.052,.10,.018],[side*.18,.33,.92],mats.edge,.005);
+    // Rear turret bustle, segmented storage bins and two protective horizontal rails.
+    for(let i=0;i<2;i++)box(turret,[side*.99,.43,-.44-i*.43],[.30,.48,.41],mats.armor,.034,'bustle_bin');
+    for(const y of [.25,.58])rod(turret,[side*1.18,y,-1.16],[side*1.18,y,-.19],.024,mats.edge,8);
+    for(const z of [-1.10,-.64,-.22])rod(turret,[side*1.176,.18,z],[side*1.176,.67,z],.024,mats.edge,8);
+    // Heavy rectangular stowage box with steel straps on the turret side.
+    box(turret,[side*1.155,.44,-.30],[.25,.43,.65],mats.olive,.032,'heavy_stowage');
+    for(const z of [-.54,-.07])box(turret,[side*1.29,.44,z],[.035,.46,.035],mats.edge,.006);
+    for(const y of [.25,.62])box(turret,[side*1.29,y,-.30],[.035,.035,.67],mats.edge,.006);
+    surfaceBox(turret,[side*.70,.39,1.12],[.18,.20,.045],[side*.15,.22,.96],mats.edge,.018,'cheek_fitting');
+    cyl(turret,[side*.63,.778,-.72],.073,.087,.10,mats.shade,'y',10);
+    cyl(turret,[side*.63,.839,-.72],.048,.052,.065,mats.edge,'y',8);
+    rod(turret,[side*.63,.87,-.72],[side*.63,.87+(side===1?.83:.68),-.72],.010,mats.edge,6);
+  }
+  cyl(turret,[-.36,.77,-1.04],.05,.065,.10,mats.shade,'y',8);
+  rod(turret,[-.36,.82,-1.04],[-.36,1.16,-1.04],.009,mats.edge,6);
+  box(turret,[0,.40,-1.16],[1.69,.49,.21],mats.armor,.035,'rear_bustle');
+  for(const x of [-.58,0,.58])box(turret,[x,.42,-1.275],[.024,.43,.03],mats.shade,.004);
+  box(turret,[.31,.40,-1.30],[.38,.25,.08],mats.olive,.02);
+  for(const x of [.19,.41])box(turret,[x,.40,-1.345],[.023,.24,.014],mats.shade,.003);
+  // Hatches and optics use shallow mounting plates rather than stacked tall blocks.
+  cyl(turret,[.27,.755,-.12],.235,.245,.07,mats.shade,'y',12);
+  cyl(turret,[.27,.804,-.12],.197,.223,.037,mats.armor,'y',12);
+  rod(turret,[.20,.85,-.12],[.34,.85,-.12],.017,mats.shade,6);
+  const sight=new THREE.Group();sight.name='commander_sight';sight.position.set(-.82,0,.12);turret.add(sight);
+  box(sight,[.37,.755,.12],[.44,.07,.39],mats.shade,.028);
+  cyl(sight,[.37,.817,.12],.135,.15,.08,mats.edge,'y',12);
+  box(sight,[.37,.972,.12],[.46,.29,.37],mats.armor,.036,'commander_sight_housing');
+  box(sight,[.37,.985,.302],[.30,.235,.04],mats.edge,.024);
+  box(sight,[.37,.985,.325],[.21,.15,.012],mats.glass,.008);
+  box(sight,[.564,.985,.12],[.025,.19,.25],mats.edge,.016);
+  box(sight,[.580,.985,.12],[.014,.12,.16],mats.glass,.004);
+  for(const x of [-.32,.08]){
+    box(turret,[x,.775,.59],[.255,.08,.19],mats.shade,.018);
+    box(turret,[x,.811,.60],[.20,.052,.14],mats.armor,.012);
+    box(turret,[x,.81,.676],[.13,.027,.014],mats.glass,.003);
+  }
+  box(turret,[-.31,.76,-.72],[.43,.065,.20],mats.armor,.02);
+
+  // Compact roof fitting and circular observation lens.
+  cyl(sight,[.37,.985,.34],.083,.083,.025,mats.black,'z',12);
+  cyl(sight,[.37,.985,.356],.060,.060,.012,mats.glass,'z',12);
+  box(turret,[.22,1.00,-.02],[.28,.10,.15],mats.edge,.018);
+  rod(turret,[.24,1.0,.02],[.24,1.0,.48],.027,mats.black,8);
+  rod(turret,[.16,.85,-.05],[.16,1.0,-.05],.03,mats.edge,8);
+  for(const side of [-1,1])for(const z of [.82,.45])cyl(turret,[side*.96,.49,z],.022,.022,.025,mats.edge,'x',6);
+  // Thick octagonal mantlet and distinct stepped barrel sections, matching the blueprint.
+  box(gun,[0,0,.08],[.56,.51,.44],mats.armor,.085,'mantlet');
+  cyl(gun,[0,0,.338],.227,.227,.12,mats.edge,'z',8);
+  cyl(recoil,[0,0,.472],.202,.227,.17,mats.armor,'z',8);
+  cyl(recoil,[0,0,.69],.168,.202,.30,mats.armor,'z',8);
+  cyl(recoil,[0,0,.89],.183,.183,.08,mats.edge,'z',8);
+  cyl(recoil,[0,0,1.02],.21,.21,.20,mats.armor,'z',8);
+  cyl(recoil,[0,0,1.17],.153,.153,.055,mats.edge,'z',8);
+  cyl(recoil,[0,0,1.74],.15,.155,1.10,mats.armor,'z',8);
+  // Hollow octagonal muzzle. All rings use explicit axial profiles;
+  // the dark bore runs from the front lip back beyond the visible throat.
+  function muzzleRing(name,profile,material){
+    const mesh=add(turned(profile,8),material,recoil,[0,0,0],name);
+    mesh.rotation.x=Math.PI/2;return mesh;
+  }
+  muzzleRing('muzzle_body',[[.151,2.25],[.208,2.25],[.246,2.30],[.246,2.67],[.225,2.72],[.156,2.72],[.156,2.38],[.151,2.25]],mats.tread);
+  muzzleRing('muzzle_rear_band',[[.237,2.32],[.262,2.32],[.271,2.34],[.271,2.39],[.257,2.41],[.237,2.41],[.237,2.32]],mats.edge);
+  muzzleRing('muzzle_front_rim',[[.156,2.63],[.248,2.63],[.267,2.66],[.267,2.72],[.237,2.77],[.173,2.77],[.156,2.735],[.156,2.63]],mats.edge);
+  muzzleRing('muzzle_inner_wall',[[.150,2.38],[.156,2.38],[.156,2.735],[.150,2.72],[.150,2.38]],mats.black);
+  add(new THREE.CircleGeometry(.151,8),mats.black,gun,[0,0,2.385],'bore_back');
+  // Recessed dark seams between the two raised reinforcing bands.
+  for(const side of [-1,1]){
+    box(recoil,[side*.247,0,2.51],[.008,.075,.12],mats.black,.002,'muzzle_side_recess');
+    for(const z of [2.365,2.69])cyl(recoil,[side*.272,0,z],.014,.014,.012,mats.steel,'x',6);
+  }
+
+  // Heavy glacis towing eyes, deck armor strips and rear stowage.
+  for(const side of [-1,1]){
+    box(hull,[side*.57,.55,1.96],[.15,.20,.10],mats.edge,.025,'front_tow_mount');
+    box(hull,[side*.57,.55,2.02],[.065,.10,.025],mats.black,.01);
+    box(hull,[side*1.43,1.00,-1.42],[.22,.47,.51],mats.olive,.025,'rear_stowage');
+    for(const z of [-1.60,-1.24])box(hull,[side*1.55,1.00,z],[.026,.49,.03],mats.edge,.005);
+  }
+  // Blueprint proportion correction: extend armor longitudinally and lower the upper body.
+  // Keep tracks outside this group so all wheels remain circular. Their new centres above
+  // drive the taut belt path instead of stretching a finished wheel/track mesh.
+  const hullArmor=new THREE.Group();hullArmor.name='armor_layout';
+  for(const child of [...hull.children])if(child.isMesh)hullArmor.add(child);
+  hullArmor.scale.set(1.24,1.10,1.23);hullArmor.position.y=.04;hull.add(hullArmor);
+
+  // Large, quiet polygonal paint patches; the armor geometry retains its exact silhouette.
+  // A deterministic 3D Voronoi field keeps colors continuous across adjacent surfaces.
+  function paintArmor(mesh){
+    const source=mesh.geometry.index?mesh.geometry.toNonIndexed():mesh.geometry.clone();
+    const attr=source.attributes.position,world=mesh.matrixWorld,inverse=world.clone().invert();
+    const positions=[],colors=[],cache=new Map(),cell=.66;
+    const shadeValues=[1.08,1.00,.94,.78,1.04,.88,1.12,1.00];
+    const hash=(x,y,z)=>{const v=Math.sin(x*127.1+y*311.7+z*74.7+31)*43758.5453;return v-Math.floor(v);};
+    function seed(x,y,z){const key=x+','+y+','+z;if(!cache.has(key))cache.set(key,{p:new THREE.Vector3((x+.15+.7*hash(x,y,z))*cell,(y+.15+.7*hash(x+9,y,z))*cell,(z+.15+.7*hash(x,y+13,z))*cell),shade:shadeValues[Math.floor(hash(x+8,y-7,z+4)*shadeValues.length)]});return cache.get(key);}
+    function clip(poly,n,k){const result=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],da=a.dot(n)-k,db=b.dot(n)-k,ia=da<=1e-10,ib=db<=1e-10;if(ia)result.push(a);if(ia!==ib)result.push(a.clone().lerp(b,da/(da-db)));}return result;}
+    function emit(poly,shade){for(let i=1;i<poly.length-1;i++){const a=poly[0],b=poly[i],c=poly[i+1];if(b.clone().sub(a).cross(c.clone().sub(a)).lengthSq()<1e-11)continue;for(const v of [a,b,c]){positions.push(...v.clone().applyMatrix4(inverse).toArray());colors.push(shade,shade,shade);}}}
+    function triangle(a,b,c,depth=0){if(depth<3&&Math.max(a.distanceTo(b),b.distanceTo(c),c.distanceTo(a))>.95){const ab=a.clone().lerp(b,.5),bc=b.clone().lerp(c,.5),ca=c.clone().lerp(a,.5);triangle(a,ab,ca,depth+1);triangle(ab,b,bc,depth+1);triangle(ca,bc,c,depth+1);triangle(ab,bc,ca,depth+1);return;}
+      const q=a.clone().add(b).add(c).multiplyScalar(1/3),ix=Math.floor(q.x/cell),iy=Math.floor(q.y/cell),iz=Math.floor(q.z/cell),seeds=[];
+      for(let x=ix-1;x<=ix+1;x++)for(let y=iy-1;y<=iy+1;y++)for(let z=iz-1;z<=iz+1;z++)seeds.push(seed(x,y,z));
+      const distance=Math.min(...seeds.map(s=>s.p.distanceTo(q))),radius=Math.max(q.distanceTo(a),q.distanceTo(b),q.distanceTo(c));
+      for(const owner of seeds){if(owner.p.distanceTo(q)>distance+2*radius)continue;let poly=[a,b,c];for(const other of seeds){if(owner===other)continue;const n=other.p.clone().sub(owner.p),k=(other.p.lengthSq()-owner.p.lengthSq())*.5;poly=clip(poly,n,k);if(poly.length<3)break;}emit(poly,owner.shade);}
+    }
+    for(let i=0;i<attr.count;i+=3)triangle(new THREE.Vector3().fromBufferAttribute(attr,i).applyMatrix4(world),new THREE.Vector3().fromBufferAttribute(attr,i+1).applyMatrix4(world),new THREE.Vector3().fromBufferAttribute(attr,i+2).applyMatrix4(world));
+    const painted=new THREE.BufferGeometry();painted.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));painted.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));painted.computeVertexNormals();source.dispose();mesh.geometry.dispose();mesh.geometry=painted;
+  }
+  root.updateMatrixWorld(true);
+  if(paint)root.traverse(o=>{if(o.isMesh && ['hull_core','faceted_glacis','turret_shell','cheek_wedge'].includes(o.name))paintArmor(o);});
+  // Capture the original neutral geometry, then bake the old nonuniform
+  // display scales into each rigid part. This keeps the V1.1 silhouette while
+  // giving pitch/recoil/muzzle a true orthogonal +Z frame for all aim angles.
+  normalizeAimFrames();
+  let sourceMeshes=0;root.traverse(o=>{if(o.isMesh)sourceMeshes++;});
+  const moving=new Set();
+  for(const binding of Object.values(trackBindings)){
+    const {parts,track,path}=binding;binding.belts=[];binding.wheels=[];
+    for(const [key,objects]of Object.entries(parts)){
+      const batches=batch?[instanceParts(objects,track.name+'_'+key)]:objects;
+      const radius=key.startsWith('road')?roadRadius:endRadius;
+      for(let i=0;i<batches.length;i++){
+        const object=batches[i];moving.add(object);
+        if(key==='pads'||key==='links')binding.belts.push({object,normalOffset:key==='pads'?.058:0,...(!batch?{phases:[path.length*(i+.5)/objects.length]}:{})});
+        else binding.wheels.push({object,radius});
+      }
+    }
+    delete binding.parts;
+  }
+  if(batch){mergeRigid(hull,moving);mergeRigid(recoil);mergeRigid(gun,new Set([recoil]));mergeRigid(turret,new Set([gun]));}
+  // Muzzle coordinates are in the newly baked, unscaled barrel frame.
+  const muzzle=new THREE.Object3D();muzzle.name='muzzle_point';muzzle.position.z=2.77*1.02*.92;recoil.add(muzzle);
+
+  function instanceParts(objects,name){
+    const parent=objects[0].parent;
+    const instanced=new THREE.InstancedMesh(objects[0].geometry.clone(),objects[0].material,objects.length);
+    instanced.name=name;instanced.castShadow=instanced.receiveShadow=true;
+    for(let i=0;i<objects.length;i++){objects[i].updateMatrix();instanced.setMatrixAt(i,objects[i].matrix);}
+    parent.add(instanced);for(const object of objects){object.removeFromParent();object.geometry.dispose();}
+    return instanced;
+  }
+  function normalizeAimFrames(){
+    root.updateMatrixWorld(true);
+    const saved=[];
+    function capture(parent,skip){parent.traverse(o=>{
+      if(!o.isMesh)return;
+      let cursor=o.parent;while(cursor&&cursor!==parent){if(cursor===skip)return;cursor=cursor.parent;}
+      saved.push({object:o,scope:parent,world:o.matrixWorld.clone()});
+    });}
+    capture(turret,gun);capture(gun,recoil);capture(recoil,null);
+    gun.position.multiply(turret.scale);turret.scale.setScalar(1);gun.scale.setScalar(1);
+    root.updateMatrixWorld(true);
+    for(const {object,scope,world}of saved){
+      const local=new THREE.Matrix4().copy(scope.matrixWorld).invert().multiply(world);
+      object.geometry.applyMatrix4(local);scope.add(object);
+      object.position.set(0,0,0);object.quaternion.identity();object.scale.setScalar(1);
+    }
+    root.updateMatrixWorld(true);
+  }
+  function mergeRigid(parent,skip=new Set()){
+    parent.updateWorldMatrix(true,true);const inverse=parent.matrixWorld.clone().invert(),groups=new Map(),remove=[];
+    function collect(o){if(skip.has(o))return;if(o.isMesh){const material=o.material;let bucket=groups.get(material);if(!bucket){bucket={positions:[],normals:[],colors:[]};groups.set(material,bucket);}const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse,o.matrixWorld));const p=g.attributes.position,n=g.attributes.normal,c=g.attributes.color;for(let i=0;i<p.count;i++){bucket.positions.push(p.getX(i),p.getY(i),p.getZ(i));bucket.normals.push(n.getX(i),n.getY(i),n.getZ(i));bucket.colors.push(c?c.getX(i):1,c?c.getY(i):1,c?c.getZ(i):1);}g.dispose();remove.push(o);}o.children.forEach(collect);}parent.children.forEach(collect);remove.forEach(o=>{o.removeFromParent();o.geometry.dispose();});
+    for(const [material,b]of groups){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.positions,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.normals,3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.colors,3));add(g,material,parent,[0,0,0],parent.name+'_'+Object.keys(mats).find(k=>mats[k]===material));}
+  }
+  let triangles=0,meshes=0;root.traverse(o=>{if(o.isMesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3*(o.isInstancedMesh?o.count:1);}});
+  root.userData={version:'1.2',appearanceVersion:'1.1',animationVersion:'tracked-animation-v1',triangles,meshes,sourceMeshes,coordinateSystem:'+Y up / +Z forward',faction:palette[faction]?faction:'sand'};
+  root.setFaction=(value)=>{if(!palette[value])return;['armor','light','shade'].forEach((key,i)=>mats[key].color.set(palette[value][i]));root.userData.faction=value;};
+  root.setAim=(yaw=0,elevation=0)=>{turret.rotation.y=THREE.MathUtils.degToRad(yaw);gun.rotation.x=-THREE.MathUtils.degToRad(THREE.MathUtils.clamp(elevation,-5,22));};
+  attachHeavyTankAnimations({root,left:trackBindings.left,right:trackBindings.right,recoil,muzzle});
+  return root;
+}
