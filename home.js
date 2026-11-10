@@ -3,13 +3,15 @@
   'use strict';
 
   /* ===== 配置：增删菜单只改这里 ===== */
-  var BATTLE_TEST_URL = 'battle_test.html';   // TODO：填战场测试页的相对路径（单人对战暂时也跳这里；连点标题 5 次是开发入口）
+  var VER = window.GM_VERSION || 'dev';       // 版本号在 index.html 里（唯一位置）；跳转时带上 ?v=，各页面据此给所有文件加版本号
+  var BATTLE_URL = 'battle.html?v=' + VER;    // 单人对战 → 战场页（以后改成选图页）
+  var DEV_URL = 'tests/units-terrain.html?v=' + VER;   // 开发入口：连点标题 5 次 → 单位×地形测试页
   var SAVE_KEY = 'gridmarch.save';            // 有这个键就视为有存档
   var LANG_KEY = 'gridmarch.lang';
 
   var MENU = [
     { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { toast: 'soon' } },
-    { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { link: BATTLE_TEST_URL } },  // TODO：以后改成选图页
+    { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { link: BATTLE_URL } },
     { id: 'multi',    zh: '多人对战', en: 'Multiplayer',  sub: 'MULTIPLAYER',   go: { toast: 'soon' } },
     { id: 'editor',   zh: '编辑器',   en: 'Editor',       sub: 'EDITOR',        go: { toast: 'soon' } },
     { id: 'settings', zh: '设置',     en: 'Settings',     sub: 'SETTINGS',      go: { settings: true } }
@@ -127,16 +129,17 @@
     $('#rotateText').textContent = s.rotate;
   }
 
-  /* ===== 开发入口：连点标题 5 次 → 战场测试页 ===== */
+  /* ===== 开发入口：连点标题 5 次 → 单位×地形测试页 ===== */
   var taps = 0, tapTimer = 0;
   $('.title').addEventListener('click', function () {
     taps++;
     clearTimeout(tapTimer);
     tapTimer = setTimeout(function () { taps = 0; }, 2000);
-    if (taps >= 5) { taps = 0; location.href = BATTLE_TEST_URL; }
+    if (taps >= 5) { taps = 0; location.href = DEV_URL; }
   });
 
   /* ===== 启动 ===== */
+  $('#ver').textContent = 'v' + VER;   // 右下角版本号
   build();
   applyLang();
   for (var i = 0; i < items.length; i++) { if (!isDisabled(i)) { select(i); break; } }

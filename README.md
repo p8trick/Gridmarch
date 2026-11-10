@@ -42,8 +42,7 @@ docs/                 ARCHITECTURE.md（结构与约定）、ART_PACKAGES.md（�
 
 ```bash
 npm test                      # 布局校验 + 各地图接缝检查 + 海岸 47 种邻域完备性
-npm run stamp                 # 改了 src/ 下任何文件后运行：给 battle.html / test.html 的 importmap 写入文件内容哈希（iOS 无 SW 时避开 js 死缓存）
-npm run build:offline         # 单文件离线战场页 → dist/battle_offline.html（build:offline:test 是测试页）
+npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后运行：重新生成各页面启动脚本里的文件清单
 ```
 
 详见 `docs/ARCHITECTURE.md`。
@@ -52,4 +51,11 @@ npm run build:offline         # 单文件离线战场页 → dist/battle_offline
 
 - 地址：`battle.html`；`?seed=N` 固定地图（不带则每次随机，种子显示在左下角）；`?debug=1` 显示帧率与面数。
 - 相机：单指拖动平移，双指缩放（松手吸附 5/7/9 格），⟲ ⟳ 按钮 90° 旋转（旋转中心 = 屏幕中心的地面点），点格子显示地形。
-- 暂不做 Service Worker；缓存靠 `npm run stamp`。
+- 暂不做 Service Worker；缓存靠 `npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后运行：重新生成各页面启动脚本里的文件清单
+
+## 版本号与缓存（不做 Service Worker）
+
+- 版本号**只在 index.html 里**（`GM_VERSION`），主页跳转时带上 `?v=版本`：`battle.html?v=0.1.3`、`tests/xxx.html?v=0.1.3`。
+- 每个页面 `<head>` 里的 `<!--GM-BOOT entry="…" css="…"-->` 之间是自动生成的启动脚本：读取 `?v=`，把 src/ 下每个 js 映射成 `路径?v=版本` 再加载入口模块。改了任何文件，只要在 index.html 里改一下版本号，所有页面全部拿新文件。
+- 直接打开页面（没有 `?v=`）用时间戳，每次都拿最新；three.js 不跟版本号走。
+- 新增测试页：复制一个现有页面，改 `entry` / `css` 两个属性，运行 `npm run stamp` 即可。

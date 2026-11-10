@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node tools/check-all.mjs",
-    "build:offline": "node tools/bundle.mjs battle.html",
-    "build:offline:test": "node tools/bundle.mjs test.html",
+
     "stamp": "node tools/stamp.mjs",
     "serve": "python3 -m http.server 8080"
   }

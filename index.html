@@ -15,8 +15,14 @@
 <!-- 启动图：必须是 PNG；iOS 要求 media 与设备精确匹配。仅 iPad 横屏；iPhone 不做，竖屏直接显示“请横屏”动画 -->
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2360x1640-landscape.png"
       media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
-<style>html,body{background:#0b1e36}</style>
-<link rel="stylesheet" href="home.css">
+<style>html,body{background:#0b1e36}
+#ver{position:fixed;right:max(env(safe-area-inset-right,0px),12px);bottom:max(env(safe-area-inset-bottom,0px),8px);z-index:2;font:11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.55);pointer-events:none}</style>
+<script>
+/* ★ 版本号：整个项目唯一的位置。每次更新文件后改这里（比如 0.1.0 → 0.1.1），主页自己的 css/js 和所有页面
+   （战场、测试页）都会跟着换新文件，绕开 iOS 的死缓存。 */
+window.GM_VERSION = '0.1.0';
+document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
+</script>
 </head>
 <body>
 
@@ -32,6 +38,7 @@
 </main>
 
 <div id="toast" class="toast" role="status"></div>
+<div id="ver" aria-hidden="true"></div>
 
 <section id="settings" class="sheet" hidden>
   <div class="panel" role="dialog" aria-modal="true">
@@ -56,6 +63,6 @@
   <p id="rotateText">请横屏使用</p>
 </div>
 
-<script src="home.js"></script>
+<script>document.write('<script src="home.js?v=' + GM_VERSION + '"><\/script>');</script>
 </body>
 </html>
