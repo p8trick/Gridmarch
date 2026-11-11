@@ -59,3 +59,12 @@ npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后�
 - 每个页面 `<head>` 里的 `<!--GM-BOOT entry="…" css="…"-->` 之间是自动生成的启动脚本：读取 `?v=`，把 src/ 下每个 js 映射成 `路径?v=版本` 再加载入口模块。改了任何文件，只要在 index.html 里改一下版本号，所有页面全部拿新文件。
 - 直接打开页面（没有 `?v=`）用时间戳，每次都拿最新；three.js 不跟版本号走。
 - 新增测试页：复制一个现有页面，改 `entry` / `css` 两个属性，运行 `npm run stamp` 即可。
+
+## 文档
+
+- `docs/HANDOFF.md`：**现状 + 已定决策 + 待决 + 下一步**（新窗口唯一必读）
+- `docs/ARCHITECTURE.md`：分层、模块解析、世界约定、集成契约、测试
+- `docs/ART_PACKAGES.md`：美术包版本表与换包流程
+- `docs/HOME.md`：主页开发文档（版本号、菜单、视觉、避坑）
+- `docs/CHANGELOG.md` + `docs/manifests/`：每个版本改了什么 / 文件指纹（生成升级包用）
+- `docs/archive/`：历史文档，平时不用读
