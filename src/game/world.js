@@ -250,11 +250,19 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 沙漠 / 沼泽：整格地块，自带地表（沙丘最高 0.35，沼泽有浅水洼和芦苇）。连片的格子一次传入，沙丘和水洼才连续；
   // 沙漠取"半高沙丘"，让单位站在上面不会被沙丘埋住。模型本身是性能版：按 3×3 格分区合批。
   const dSeed = mapPreset.seed ?? 7;
-  const sand = DESERT.length ? createDesertRegion(DESERT, {variant: 'low_dunes', seed: dSeed}) : null;
-  const marsh = SWAMP.length ? createSwampRegion(SWAMP, {variant: 'standard', seed: dSeed}) : null;
+  // 沙漠 'varied'：每格一座沙丘，高度从 30% / 50% / 70% / 95% 里随机、朝向和长度各不相同，约三分之一的格子有仙人掌；整体再压到 60%（最高约 0.40）
+  // 沼泽：每格水洼位置不同；道具按格随机（标准 55% / 芦苇丛 25% / 枯木 20%），芦苇高矮本来就是每丛随机
+  const SAND = {variant: 'varied', heightScale: .6};
+  const marshProp = ([cx, cz]) => { const t = hash2(cx * 3.7 + cz * 1.9, 5.3); return t < .55 ? 'standard' : t < .8 ? 'reeds' : 'deadwood'; };
+  const sand = DESERT.length ? createDesertRegion(DESERT, {...SAND, seed: dSeed}) : null;
+  const marsh = SWAMP.length ? createSwampRegion(SWAMP, {variant: 'standard', seed: dSeed, propVariant: marshProp}) : null;
   if (sand) { sand.name = 'desert'; scene.add(sand); }
   if (marsh) { marsh.name = 'swamp'; scene.add(marsh); }
-  const sandH = DESERT.length ? desertSampler(DESERT, {variant: 'low_dunes', seed: dSeed}).sample : null;
+  const sandH = DESERT.length ? desertSampler(DESERT, {...SAND, seed: dSeed}).sample : null;
+  // 沼泽站位：脚下是不透明的泥面，把单位往下放，沉进去的部分（靴子 / 履带下缘）就被地面遮住。每格深浅不同（0.02–0.09）；
+  // 单位带有 mireTurns（在沼泽里停了几个回合）时再每回合多沉 MIRE.perTurn，封顶 MIRE.cap —— 规则引擎接入后由它维护这个数，离开沼泽清零
+  const MIRE = {min: .02, max: .09, perTurn: .03, cap: .14};
+  const mireDepth = (cx, cz, u) => Math.min(MIRE.cap, MIRE.min + hash2(cx * 6.1 - cz * 2.7, 8.3) * (MIRE.max - MIRE.min) + (u?.mireTurns || 0) * MIRE.perTurn);
   const bldMap = new Map(BUILD_LIST.map(b => [b.cell.join(','), b]));
   const rc = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0);
   const sampleH = (x, z) => { rc.set(new THREE.Vector3(x, 5, z), down); const h = rc.intersectObject(mountain, true)[0]; return h ? Math.max(0, h.point.y) : 0; };
@@ -283,7 +291,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const groundY = (cx, cz, u) => {
     { const k = cx + ',' + cz; if (bridgeInfo.has(k)) return getBridgeSurfaceY(bridgeByCell.get(k), cx * 2, cz * 2) ?? bridgeInfo.get(k); }   // 桥面高度（必须最先判断：桥格底下是河，否则会被当成涉水而陷进水里）：静止时取格心处的实际桥面
     { const m = hills.get(cx + ',' + cz); if (m) return getMountainStandPoint(m.hill).y; }
-    if (sandH && SAND_SET.has(cx + ',' + cz)) return sandH(cx * 2, cz * 2);   // 沙漠：格心处的沙丘高度（半高沙丘 ≤ 0.35）
+    if (sandH && SAND_SET.has(cx + ',' + cz)) return sandH(cx * 2, cz * 2);   // 沙漠：格心处的沙丘高度（每格不同）
+    if (SWAMP_SET.has(cx + ',' + cz)) return -mireDepth(cx, cz, u);          // 沼泽：陷进泥里一点（每格深浅不同）
     if (water.typeAt(cx, cz) === 'river') return WATER_Y - WADE_DEPTH * (u?.topOff || 1.8);   // 河里没有河床几何：水面不透明，沉下去的下半身被水面遮住
     if (isCoast(cx, cz)) { const an = water.anchorAt?.(cx, cz); if (an) return an[1]; const k = cx + ',' + cz; if (!coastY.has(k)) { const o = coastOffset(cx, cz); coastY.set(k, water.surfaceAt(cx * 2 + o[0], cz * 2 + o[1])?.y ?? 0); } return coastY.get(k); }
     { const bb = bldMap.get(cx + ',' + cz); if (bb?.dockAnchor) return bb.dockAnchor.y; return bb?.y || 0; }
@@ -718,7 +727,9 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
 
   const api = {
-    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY,
+    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, mireDepth, MIRE,
+    // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
+    setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
     beforeRender() { syncInfantryBatches(); },   // 渲染前：把反坦克兵占位的世界变换同步给批量绘制
     apply(camAngle) { state.camA = camAngle; state.viewQuarter = (((Math.round((camAngle - .08 * Math.PI) / (Math.PI / 2))) % 4) + 4) % 4; if (state.sandbox !== lastSand || state.mtnK !== lastMtnK || state.floorTint !== lastTint) rebuildBoard(); syncMountains(); applyUnits(); rings.visible = state.rings && state.units; return refreshTrees(camAngle); },

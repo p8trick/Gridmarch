@@ -42,11 +42,11 @@ function resize() { renderer.setSize(innerWidth, innerHeight); cam.resize(innerW
 
 // ── 点格子：显示地形信息 + 黄框 ──
 const key = c => c[0] + ',' + c[1];
-const sets = {road: new Set(L.roads.map(key)), mountain: new Set(L.mountain.map(key)), desert: new Set((L.desert || []).map(key)), swamp: new Set((L.swamp || []).map(key)), forest: new Set(L.forestExtra.map(key))};
+const sets = {road: new Set(L.roads.map(key)), mountain: new Set(L.mountain.map(key)), bridge: new Set((preset.bridges || []).flatMap(b => b.cells).map(key)), desert: new Set((L.desert || []).map(key)), swamp: new Set((L.swamp || []).map(key)), forest: new Set(L.forestExtra.map(key))};
 const WATER = {sea: '海', shoal: '浅滩', cliff: '断崖', river: '河'};
 function describe(c) {
   const k = key(c), b = world.bldMap.get(k), w = world.water.typeAt(c[0], c[1]);
-  const t = b ? b.name : sets.mountain.has(k) ? '山地' : sets.desert.has(k) ? '沙漠' : sets.swamp.has(k) ? '沼泽' : sets.forest.has(k) ? '树林' : WATER[w] || (sets.road.has(k) ? '公路' : '平原');
+  const t = b ? b.name : sets.bridge.has(k) ? '桥' : sets.mountain.has(k) ? '山地' : sets.desert.has(k) ? '沙漠' : sets.swamp.has(k) ? '沼泽' : sets.forest.has(k) ? '树林' : WATER[w] || (sets.road.has(k) ? '公路' : '平原');
   return `(${c[0]}, ${c[1]}) ${t}`;
 }
 const marker = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-.95, 0, -.95], [.95, 0, -.95], [.95, 0, .95], [-.95, 0, .95]].map(p => new THREE.Vector3(...p))),

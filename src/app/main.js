@@ -13,7 +13,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.prepend(renderer.domElement);
 
 let frozen = false;   // 调试：?fire=秒 时让全部单位开火并推进到该时刻后冻结，便于截图
-const MAPS = ['bay', 'estuary', 'island', 'island-cliff', 'island-mixed', 'island-split', 'shapes'], MAP_LABEL = {bay: '海湾', estuary: '河口·河桥', island: '群岛·浅滩', 'island-cliff': '群岛·断崖', 'island-mixed': '群岛·两岛混合', 'island-split': '群岛·岛内混合', shapes: '形状陈列'};
+const MAPS = ['sandmarsh', 'bay', 'estuary', 'island', 'island-cliff', 'island-mixed', 'island-split', 'shapes'], MAP_LABEL = {sandmarsh: '沙漠沼泽', bay: '海湾', estuary: '河口·河桥', island: '群岛·浅滩', 'island-cliff': '群岛·断崖', 'island-mixed': '群岛·两岛混合', 'island-split': '群岛·岛内混合', shapes: '形状陈列'};
 const MAP_NAME = MAPS.includes(new URLSearchParams(location.search).get('map')) ? new URLSearchParams(location.search).get('map') : 'bay';   // ?map=bay|estuary|island|island-cliff
 const world = buildWorld({map: MAP_NAME});
 const camera = new THREE.OrthographicCamera();
@@ -88,6 +88,8 @@ toggle('bBldFollow', 'bldFollow'); toggle('bAnnex', 'annexPush'); toggle('bTerrB
 $('bTree').onclick = () => { const s = world.state; s.treeMode = (s.treeMode + 1) % 3; $('bTree').textContent = world.TREE_LABELS[s.treeMode]; refresh(); hud(); };
 $('bSize').onclick = () => { const s = world.state; s.sizeMode = (s.sizeMode + 1) % 2; $('bSize').textContent = world.SIZE_LABELS[s.sizeMode]; refresh(); hud(); };
 toggle('bFloor', 'floorTint');
+$('bOri').onclick = () => { location.href = './orientation.html' + location.search; };   // 虚拟横屏测试页（保留网址里的 ?v=）
+let mireN = 0; $('bMire').onclick = () => { mireN = (mireN + 1) % 6; $('bMire').textContent = '沼泽停留 ' + mireN + ' 回合'; info = world.setMireTurns(mireN); mark(); hud(); };   // 看沼泽里的单位每回合多沉一点
 for (const [id, key] of [['kInf', 'inf'], ['kLight', 'light'], ['kMedium', 'medium'], ['kHeavy', 'heavy'], ['kArt', 'art']])
   $(id).oninput = e => { world.state.clsK[key] = e.target.value / 100; $('v' + id).textContent = (e.target.value / 100).toFixed(2); if (world.state.sizeMode !== 1) { world.state.sizeMode = 1; $('bSize').textContent = world.SIZE_LABELS[1]; } refresh(); };
 const PITCHES = [55, 62, 70];

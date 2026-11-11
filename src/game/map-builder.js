@@ -49,6 +49,22 @@ function rect(x0, x1, z0, z1) { const o = []; for (let x = x0; x <= x1; x++) for
 
 // 测试地图预设。一条海岸线只含一个转角（组件当前只支持这样，见各自 README）；河口图是一条直海岸 + 一个直入海的河口
 export const PRESETS = {
+  // 沙漠 / 沼泽陈列：8×10 全陆地。西北一片沙漠（每格不同的沙丘高度 / 仙人掌），东南一片沼泽（每格水洼、芦苇、枯木不同），单位站在上面看站位
+  sandmarsh: {
+    name: '沙漠沼泽陈列',
+    x: [-4, 3], z: [-5, 4], seed: 7,
+    topology: {coastType: 'shoal', land: rect(-4, 3, -5, 4), outside: [...rect(-5, -5, -6, 5), ...rect(4, 4, -6, 5), ...rect(-4, 3, -6, -6), ...rect(-4, 3, 5, 5)]},
+    layout: {
+      mountain: [], roads: [], forest: {x: [0, -1], z: [0, -1]}, forestExtra: [], buildings: [],
+      desert: rect(-3, -1, -4, -2), swamp: rect(0, 2, 0, 3),
+      units: [
+        {k: 'inf', team: 'blue', c: [-3, -4], face: Math.PI, name: '蓝步兵（沙漠）'}, {k: 'tank', type: 'light', team: 'blue', c: [-2, -4], face: Math.PI, name: '蓝轻坦（沙漠）'},
+        {k: 'tank', type: 'medium', team: 'blue', c: [-1, -3], face: Math.PI, name: '蓝中坦（沙漠）'}, {k: 'art', team: 'blue', c: [-3, -2], face: Math.PI, name: '蓝火炮（沙漠）'},
+        {k: 'inf', team: 'red', c: [0, 0], face: 0, name: '红步兵（沼泽）'}, {k: 'tank', type: 'medium', team: 'red', c: [1, 1], face: 0, name: '红中坦（沼泽）'},
+        {k: 'tank', type: 'heavy', team: 'red', c: [2, 2], face: 0, name: '红重坦（沼泽）'}, {k: 'inf', team: 'red', c: [1, 3], face: 0, name: '红步兵（沼泽）'},
+      ],
+    },
+  },
   // 海湾：海在东南象限，内角在海的西北角；北岸断崖、西岸浅滩，断崖与浅滩在内角相接；西北有河 + 河式湖
   bay: {
     name: '海湾·内角',
@@ -337,6 +353,10 @@ function planTopology(preset) {
   const p = newPlan(preset), T = preset.topology, board = boardCells(preset);
   const topo = planCoast47({cells: board, landCells: [...T.land, ...T.outside], coastType: T.coastType, typeForCell: T.typeForCell, seed: preset.seed});
   for (const [x, z] of board) { const t = topo.recordAt(x, z).terrain; p.type.set(key(x, z), t); p.owner.set(key(x, z), t === 'land' ? 'land' : 'coast'); }
+  for (const c of preset.river || []) {   // 内陆河（与海岸互不相接）：河格本身必须是陆地格
+    if (p.type.get(key(...c)) !== 'land') throw Error('river cell must be land @ ' + c);
+    p.type.set(key(...c), 'river'); p.owner.set(key(...c), 'river');
+  }
   return {kind: 'topology', preset, inBoard: p.inBoard, type: p.type, owner: p.owner, topo};
 }
 // 桥占用的格（A 型河桥：河格；B 型：两端桥头在海岸格里，中间是海格）
@@ -373,11 +393,17 @@ export function createWaterWorld(preset, opts = {}) { return preset.mouth ? buil
 // 岛屿图：整张图交给 MT2（海面 + 岸线一起出），陆地格由棋盘自己画
 function buildTopologyWorld(preset, {cutaway = true, grassFromBoard = true} = {}) {
   const plan = planTopology(preset), board = boardCells(preset), group = new THREE.Group(); group.name = 'water_world';
-  const wet = board.filter(([x, z]) => plan.type.get(key(x, z)) !== 'land');
-  const coast = createCoast47(plan.topo, {cells: wet, cutaway, bottom: BASE_Y}); group.add(coast.group);
-  const api = assemble({group, parts: {coast}, plan, board, grassFromBoard});
+  const wet = board.filter(([x, z]) => !['land', 'river'].includes(plan.type.get(key(x, z))));   // 海 / 浅滩 / 断崖
+  const coast = wet.length ? createCoast47(plan.topo, {cells: wet, cutaway, bottom: BASE_Y}) : null;   // 纯陆地图（没有水格）不生成水域组件
+  if (coast) group.add(coast.group);
+  const parts = coast ? {coast} : {};
+  if (preset.river?.length) {   // 内陆河：非水格里除海岸格之外都按陆地处理
+    const rv = new Set(preset.river.map(c => key(...c))), isLand = (x, z) => !rv.has(key(x, z)) && (!plan.inBoard(x, z) || plan.type.get(key(x, z)) === 'land');
+    const river = createRiverArt(preset.river, {isLand, seed: preset.seed}); group.add(river); parts.river = {group: river, dispose: disposeTree(river)};
+  }
+  const api = assemble({group, parts, plan, board, grassFromBoard});
   // 陆军站位参考点：MT2 逐格给出的实际陆面参考点（格内局部坐标，换算 [2x+a0, a1, 2z+a2]）
-  const anchors = new Map(coast.group.userData.cells.filter(m => m.groundAnchor).map(m => [key(m.cx, m.cz), m.groundAnchor]));
+  const anchors = new Map((coast ? coast.group.userData.cells : []).filter(m => m.groundAnchor).map(m => [key(m.cx, m.cz), m.groundAnchor]));
   api.anchorAt = (cx, cz) => { const a = anchors.get(key(cx, cz)); return a ? [2 * cx + a[0], a[1], 2 * cz + a[2]] : null; };
   return api;
 }

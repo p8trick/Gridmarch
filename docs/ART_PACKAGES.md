@@ -18,7 +18,7 @@
 | 轻坦 | `art/units/tank-light/` | V1.5 行进 + 开火动画，性能版 | 在用 |
 | 中坦 | `art/units/tank-medium/` | V3.2 性能版 | 在用 |
 | 重坦 | `art/units/tank-heavy/` | V1.2 性能版 | 在用 |
-| 沙漠 / 沼泽 | `art/terrain/desert-swamp/` | V1.0 Final R3（性能版：3×3 格分区合批；沙漠用 low_dunes 半高沙丘，沼泽 standard） | 在用 |
+| 沙漠 / 沼泽 | `art/terrain/desert-swamp/` | V1.0 Final R3（性能版：3×3 格分区合批；游戏里沙漠用 varied（每格高度 / 朝向不同）×0.6，沼泽 standard + 按格道具；本仓库对 createSwampRegion 加了 propVariant 选项（按格选芦苇 / 枯木），其余源码未改） | 在用 |
 | 步兵 | `art/units/infantry/` | V6.12P（F1 侧脸 + B1 军靴 + W2 左手 + 四色阵营），批量版 | 在用 |
 | 反坦克步兵 | `art/units/infantry/anti-tank-*` | V1.6P，批量版 | 在用 |
 | 火炮 | `art/units/artillery-v2_0.js` | v2.0 | 在用（旧版） |

@@ -151,7 +151,8 @@ function swampProps(b,water,cell,field,{variant,seed,reedHeight}){
  }
  return clumps;
 }
-export function createSwampRegion(input,{variant='standard',seed=7,reedHeight=EXPANSION_SPEC.reedHeightDefault,cutaway=false,bottom=EXPANSION_SPEC.bottom,contextCells=input,props=true}={}){
+// propVariant(cell)：可选，按格返回 'standard' | 'reeds' | 'deadwood'，只改变该格的道具（芦苇多少 / 枯木），水洼形状不变
+export function createSwampRegion(input,{variant='standard',seed=7,reedHeight=EXPANSION_SPEC.reedHeightDefault,cutaway=false,bottom=EXPANSION_SPEC.bottom,contextCells=input,props=true,propVariant=null}={}){
  const cells=cellsChecked(input);if(!EXPANSION_SPEC.swampVariants.includes(variant))throw Error('Unknown swamp variant');
  if(!Number.isFinite(reedHeight)||reedHeight<EXPANSION_SPEC.reedHeightMin||reedHeight>EXPANSION_SPEC.reedHeightMax)throw Error('Reed height must be 0.25–0.90, below the smallest 1.2-high forest tree');
  const {field}=swampSampler(cells,{variant,seed}),root=new T.Group();root.name='swamp_region_r1';
@@ -167,7 +168,8 @@ export function createSwampRegion(input,{variant='standard',seed=7,reedHeight=EX
     contourSurface(water,clip(tri,0,false),'water',cx,cz,seed);
    }
   }
-  const clumps=props?swampProps(b,water,cell,field,{variant,seed,reedHeight}):[];
+  const pv=propVariant?propVariant(cell):variant;if(!['standard','reeds','deadwood','muddy'].includes(pv))throw Error('Unknown swamp prop variant');
+   const clumps=props?swampProps(b,water,cell,field,{variant:pv,seed,reedHeight}):[];
   if(cutaway)tileSides(b,cell,contextCells,bottom,0x7a8134,()=>0);
   finishTile(root,b,water,cell,'swamp',variant).userData.reedClumps=clumps;
  }
