@@ -11,7 +11,7 @@
 | 河口 | `art/water/river-mouth*.js` | M2（MT2 兼容；左右岸型可混合） | 在用（河口图） |
 | 桥梁 | `art/terrain/bridges/` | A 型河桥 / B 型跨海桥 + 桥面高度 API（`getBridgeSurfaceY`） | 在用 |
 | 山 | `art/terrain/mountain/` | AB 最终双版（A 单峰 / B 双峰 × 4 朝向，高度系数 0.90–1.10） | 在用（性能版） |
-| 道路 | `art/terrain/terrain-batch1.js` | R1（含中线导向） | 在用 |
+| 道路 | `art/terrain/terrain-batch1.js` | R1（含中线导向；R2 已收到未换） | 在用 |
 | 六建筑 | `art/terrain/terrain-buildings / -transport`（原版）+ `building-performance / buildings-performance / dockyard-terrain / buildings-index`（性能版 + 港口地形） | V1.6 R3 双版本 + P1 性能版 + D1 港口地形（`mountDockyardOnTerrain`，自动选朝向） | 在用（群岛图有船坞） |
 | 树林 | `art/terrain/forest/` | 树林包 V1.0 双版本（`createForestRegion` 按 3×3 地块合批） | 在用（静止合批，挤开 / 缓动时回到逐棵） |
 | 自然（其余） / 交通 | `art/terrain/terrain-nature.js` 等 | 旧版 | 在用 |
@@ -25,7 +25,7 @@
 
 ## 已收到、尚未接入
 
-快速侦察车、沙漠沼泽地形（V1.0 R3）。
+快速侦察车；道路最终版 R2（现用 R1，R2 统一了标线节奏）。
 
 ## 换包流程
 

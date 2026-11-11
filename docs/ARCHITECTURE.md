@@ -10,9 +10,13 @@
 
 规则：`art/` 不依赖 `game/` 和 `app/`；美术模块之间可以互相依赖（例如河口依赖海岸、桥依赖 `coast-performance.js`）。
 
-## 2. 模块解析（importmap）
+## 2. 模块解析（importmap + 版本号启动脚本）
 
-`index.html` 里只有两条映射：`three → src/vendor/three.module.js`，`palette → src/art/palette.js`。美术模块里一律写 `import 'three'` / `import 'palette'`，其余是相对路径。Node 测试用 `tools/loader.mjs` 做同样的映射。
+各页面（`battle.html`、`tests/*.html`）的 `<head>` 里有一对注释 `<!--GM-BOOT entry="…" css="…"-->…<!--/GM-BOOT-->`，中间是 `tools/stamp.mjs` 生成的启动脚本。它启动时读网址里的 `?v=`（版本号只在 `index.html` 的 `GM_VERSION`，主页跳转时带上；直接打开无 `?v=` 就用时间戳），然后：
+1. 用 `document.write` 写出 importmap：`three → src/vendor/three.module.js`、`palette → src/art/palette.js`，并把 `src/` 下**每个 js** 映射成 `路径?v=版本号`（three.js 不带版本，永远走缓存）；
+2. 再写出样式表和入口模块的 `<script type="module">`。
+
+美术模块里一律写 `import 'three'` / `import 'palette'`，其余是相对路径；浏览器按解析后的完整地址查 importmap，所以相对 import 也会被换成带版本号的地址。Node 测试用 `tools/loader.mjs` 做同样的裸名映射。新增 / 删除 / 重命名 js 后运行 `npm run stamp` 更新清单（清单漏了某个文件也不会坏，只是那个文件不带版本号）。新测试页：复制一个现有页面，改 `entry` / `css` 即可。
 
 > 美术包的原文件里写的是 `./vendor/three.module.js` 和 `./palette.js`。放进仓库时只改这两种导入（其余相对导入若跨目录需要按新位置改）。换新版本时同名文件整体覆盖即可，不要手改美术文件。
 
@@ -53,7 +57,17 @@
 
 ## 8. 发布时要做的（现在还没做）
 
-当前是 71 个 JS 模块按需加载（开发 / GitHub Pages 直接跑没问题）。iOS PWA 冷启动会发 70 多个请求，正式发布建议：
+当前是 80 多个 JS 模块按需加载（开发 / GitHub Pages 直接跑没问题）。iOS PWA 冷启动会发 80 多个请求。**现阶段不做 Service Worker、不做打包**（开发期要方便迭代；单个模型也要能单独升级）。游戏稳定后再评估：
 1. 构建期合并成 4~5 个分块（three / terrain / water / units / game），源码仍保持分散；
 2. Service Worker 预缓存分块，带版本号，换版本整体失效；
 3. 美术包的版本记录进 `docs/ART_PACKAGES.md`，换包时同步更新。
+
+## 9. 战场页与关卡
+
+- `src/battle/main.js`：关卡 → `buildWorld({preset})` → 相机 → 触控 → 按需渲染循环。`camera.js`：战术相机（视距按“短边格数”，90° 旋转动画）。`stage.js`：虚拟横屏舞台（见 `docs/HANDOFF.md` §5）。
+- `src/game/levels/level1.js`：第一关生成器，`makeLevel1(seed)` 返回一个 `PRESETS` 同格式的预设（含 `topology`、`river`、`bridges`、`layout`）；`levels/index.js` 把它注册进 `PRESETS` 供检查脚本使用。
+- `buildWorld` 接受 `{preset}` 直接传入预设；棋盘范围随预设变化；`world.sunFollow(x,z)` / `setShadowRadius(r)` 让阴影跟着相机；纯陆地图（无水格）、内陆河（`preset.river`）都支持。
+
+## 10. 文档与版本快照
+
+`docs/HANDOFF.md`（现状 + 决策 + 下一步，唯一必读）、`docs/HOME.md`（主页）、`docs/ART_PACKAGES.md`、`docs/CHANGELOG.md`（每个版本改了哪些文件）、`docs/manifests/*.json`（每个版本的文件指纹，`tools/pack.mjs` 靠它生成升级包）、`docs/archive/`（历史文档，不读）。
