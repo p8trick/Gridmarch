@@ -60,6 +60,14 @@ npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后�
 - 直接打开页面（没有 `?v=`）用时间戳，每次都拿最新；three.js 不跟版本号走。
 - 新增测试页：复制一个现有页面，改 `entry` / `css` 两个属性，运行 `npm run stamp` 即可。
 
+## 手机网页更新（自动应用升级包）
+不用电脑也能整体更新：把我给的 zip **直接传到仓库根目录**，`.github/workflows/apply-package.yml` 会自动解压、覆盖、按清单删文件，再把 zip 删掉。
+- **升级包**（`升级包_x到y.zip`，只含改动的文件，几十 KB）：日常用这个。里面的 `升级说明.md` 写着改了哪些文件；要删的文件在 `_delete.txt`，机器人会照着删。
+- **完整包**（`Gridmarch_vX.zip`）：整个仓库，跳了很多版本 / 想一次对齐时用。机器人会让仓库和包**完全一致**（包里没有的文件会被删）。包必须带 `index.html`，否则拒绝。每传一次，zip 会留在 git 历史里（约 15 MB），所以别频繁用。
+- 操作：手机浏览器打开仓库根目录 → Add file → Upload files → 选 zip（别在「文件」App 里点开解压）→ Commit changes。一两分钟后看 Actions 页 `apply-package` 是否绿勾，再刷新页面确认版本号。
+- 限制：机器人**没有权限改 `.github/workflows/` 里的文件**，这类文件仍要手动上传（升级说明里会提示）。其他名字的 zip 一律不碰。
+- 脚本是 `tools/apply-package.py`，也能在仓库根目录本地跑：`python3 tools/apply-package.py`。
+
 ## 文档
 
 - `docs/HANDOFF.md`：**现状 + 已定决策 + 待决 + 下一步**（新窗口唯一必读）

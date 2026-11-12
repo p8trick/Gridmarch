@@ -4,6 +4,24 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.22（只动工具和文档，运行文件没变）
+- 新增 `.github/workflows/apply-package.yml`、`tools/apply-package.py`：手机网页把升级包 / 完整包 zip 传到仓库根目录，机器人自动解压、覆盖、删文件（`.github/workflows/` 里的文件机器人改不了，仍要手动传）
+- `tools/pack.mjs`：升级包里多一个 `_delete.txt`（要删的文件清单，给自动应用用），升级说明加了手机上传的提示
+- `README.md` 加「手机网页更新」，`docs/HANDOFF.md` 开机清单第 4 条改为"完整包 + 升级包"
+- `index.html`：`GM_VERSION` `0.21` → `0.22`
+
+## 0.21
+- 虚拟横屏并入战场页：`battle.html`（整个页面放进 `#stage`，删除竖屏提示 `#land`，新增「换边」按钮）、`src/battle/main.js`（画布和相机尺寸用 `stage.w/h`，指针坐标用 `stage.toLogical`）、`src/battle/battle.css`（`#ui` / `#err` / `#loading` / 画布改为相对舞台定位）
+- `index.html`：`GM_VERSION` `0.20` → `0.21`
+- `tools/pack.mjs`：升级包里的"更新后"提示，遇到 `index.html` 已在包内时不再叫你手动改版本号
+
+## 0.20（新窗口第一版；从这一版起交付完整仓库 zip，文件名带版本号）
+- 战场 / 测试页不再处理安全区（灵动岛、手势区）：`src/battle/stage.js` 去掉安全区探测（`insets`、`--sa-*`、`insetsToLogical`）；`src/battle/battle.css`、`src/app/ui.css`、`tests/orientation.html`、`tests/units-terrain.html` 里的 `env(safe-area-inset-*)` 改成固定边距；`src/battle/orientation-test.js` 去掉对应显示
+- `battle.html` 补 `apple-mobile-web-app-status-bar-style=black-translucent`（与主页、横屏测试页一致）
+- 删除 `tools/bundle.mjs`（离线单文件打包，已不适用）；仓库根目录多余的 `升级说明.md` 不再放进包
+- `index.html`：`GM_VERSION` `0.1.0` → `0.20`
+- 虚拟横屏定为 iPhone 的正式方案，iPad 用真横屏（`docs/HANDOFF.md` §5）；并入战场页是下一步
+
 ## v8（旧窗口的收尾版，之后新窗口从 0.20 起）
 - 新增 `docs/HANDOFF.md`（唯一必读的交接文档）、`docs/HOME.md`（并入主页开发文档）
 - 旧开发文档改名并归档：`docs/archive/钢铁经线_开发文档.md` → `docs/archive/方寸战线_开发文档_测试阶段.md`（旧文件请删除）

@@ -12,7 +12,7 @@ function layout() { cv.width = Math.round(stage.w * dpr); cv.height = Math.round
 stage.onChange(layout);
 
 function drawFrame() {
-  const w = stage.w, h = stage.h, s = stage.side, ins = stage.insets;
+  const w = stage.w, h = stage.h, s = stage.side;
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
   g.fillStyle = '#10283f'; g.fillRect(0, 0, w, h);
   g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.beginPath();
@@ -24,7 +24,7 @@ function drawFrame() {
     g.fillStyle = 'rgba(64,200,96,.40)'; g.fillRect(barLeft ? 0 : w - 24, 0, 24, h); g.fillStyle = '#40c860'; g.fillRect(barLeft ? 0 : w - 6, h / 2 - 67, 6, 134);
   } else { g.fillStyle = 'rgba(64,200,96,.40)'; g.fillRect(0, h - 24, w, 24); g.fillStyle = '#40c860'; g.fillRect(w / 2 - 67, h - 6, 134, 6); }
   g.fillStyle = '#fff'; g.font = '16px -apple-system,system-ui'; g.textAlign = 'center';
-  g.fillText('↑ 画面上方（文字是正的 = 旋转正确）', w / 2, 70 + (ins.top || 0)); g.fillText('红 = 灵动岛一侧　绿 = 回主页横条一侧（24px 带 = 系统手势区）', w / 2, h / 2 - 90);
+  g.fillText('↑ 画面上方（文字是正的 = 旋转正确）', w / 2, 70); g.fillText('红 = 灵动岛一侧　绿 = 回主页横条一侧（24px 带 = 系统手势区）', w / 2, h / 2 - 90);
   g.textAlign = 'left'; g.fillText('↖ 舞台左上', 40, 28); g.textAlign = 'right'; g.fillText('舞台右上 ↗', w - 40, 28); g.fillText('舞台右下 ↘', w - 40, h - 14); g.textAlign = 'left'; g.fillText('↙ 舞台左下', 40, h - 14);
 }
 function draw() {
@@ -37,7 +37,7 @@ function draw() {
   const live = pts.filter(t => t.down), cur = live.length && live[0].pts[live[0].pts.length - 1];
   const pinch = live.length === 2 ? Math.hypot(...['x', 'y'].map(k => live[0].pts.at(-1)[k] - live[1].pts.at(-1)[k])).toFixed(0) : '-';
   const so = screen.orientation ? screen.orientation.type + ' ' + screen.orientation.angle + '°' : '无';
-  $('hud').textContent = `系统视口 ${stage.W}×${stage.H}　系统方向 ${so}\n舞台 ${stage.w}×${stage.h}　${stage.rot ? '旋转 ' + stage.rot + '°　灵动岛在' + (stage.side === 'left' ? '左' : '右') : '系统横屏，不旋转'}\n安全区(舞台) 上${stage.insets.top} 下${stage.insets.bottom} 左${stage.insets.left} 右${stage.insets.right}\n手指(舞台坐标) ${cur ? cur.x.toFixed(0) + ', ' + cur.y.toFixed(0) : '-'}　双指间距 ${pinch}\n边缘起手 ${edgeStarts} 次　离开页面 ${hidden} 次　${lastTap}`;
+  $('hud').textContent = `系统视口 ${stage.W}×${stage.H}　系统方向 ${so}\n舞台 ${stage.w}×${stage.h}　${stage.rot ? '旋转 ' + stage.rot + '°　灵动岛在' + (stage.side === 'left' ? '左' : '右') : '系统横屏，不旋转'}\n手指(舞台坐标) ${cur ? cur.x.toFixed(0) + ', ' + cur.y.toFixed(0) : '-'}　双指间距 ${pinch}\n边缘起手 ${edgeStarts} 次　离开页面 ${hidden} 次　${lastTap}`;
 }
 // 触摸：clientX/Y 是物理屏幕坐标，用 stage.toLogical 换算
 cv.onpointerdown = e => { cv.setPointerCapture(e.pointerId); const p = stage.toLogical(e.clientX, e.clientY); trails.set(e.pointerId, {pts: [p], down: true});

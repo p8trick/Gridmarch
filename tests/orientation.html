@@ -8,10 +8,10 @@
 <style>
 html,body{margin:0;position:fixed;inset:0;background:#0b1e36;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font:13px -apple-system,system-ui,sans-serif;color:#fff}
 #stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
-#hud{position:absolute;left:calc(var(--sa-left,0px) + 12px);top:calc(var(--sa-top,0px) + 8px);padding:6px 10px;border-radius:8px;background:rgba(18,30,46,.78);white-space:pre;line-height:1.55;font-size:12px;pointer-events:none}
-#btns{position:absolute;right:calc(var(--sa-right,0px) + 12px);top:calc(var(--sa-top,0px) + 8px);display:flex;gap:8px}
+#hud{position:absolute;left:12px;top:8px;padding:6px 10px;border-radius:8px;background:rgba(18,30,46,.78);white-space:pre;line-height:1.55;font-size:12px;pointer-events:none}
+#btns{position:absolute;right:12px;top:8px;display:flex;gap:8px}
 .btn{min-width:44px;height:44px;padding:0 12px;box-sizing:border-box;border-radius:12px;border:1px solid rgba(255,255,255,.3);background:rgba(18,30,46,.78);color:#fff;font-size:15px;touch-action:manipulation}
-#grid{position:absolute;left:50%;bottom:calc(var(--sa-bottom,0px) + 10px);transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,52px);gap:6px}
+#grid{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,52px);gap:6px}
 #grid .btn{min-width:0;padding:0;font-size:12px}
 #grid .on{background:#2f7a3a}
 </style>
