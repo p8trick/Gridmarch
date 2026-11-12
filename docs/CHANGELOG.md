@@ -4,6 +4,12 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.23
+- 修竖屏伪横屏的黑色空白：`src/battle/stage.js` 量尺寸改用 `100vw×100vh` 隐形探针（`innerHeight` 在 iOS 独立窗口竖屏下比真实屏幕矮一截）；舞台上新增 CSS 变量 `--sw` / `--sh`（舞台宽 / 高的 1%）
+- 主页并入虚拟横屏舞台：`index.html`（整页放进 `#stage`，去掉竖屏提示层，背景改成 `<img id="bg">`，新增「换边」按钮）、`home.css`（`vw/vh` 全改 `--sw/--sh`，`fixed` 改 `absolute`，去掉所有 `env(safe-area-inset-*)`）、`home.js`（动态加载 `stage.js`、按舞台比例选背景图、换边按钮、去掉“请横屏”文字）
+- `src/battle/orientation-test.js`：HUD 第一行多打 `inner` / `screen` / `client` 数字，排查黑条用
+- `index.html`：`GM_VERSION` `0.22` → `0.23`
+
 ## 0.22（只动工具和文档，运行文件没变）
 - 新增 `.github/workflows/apply-package.yml`、`tools/apply-package.py`：手机网页把升级包 / 完整包 zip 传到仓库根目录，机器人自动解压、覆盖、删文件（`.github/workflows/` 里的文件机器人改不了，仍要手动传）
 - `tools/pack.mjs`：升级包里多一个 `_delete.txt`（要删的文件清单，给自动应用用），升级说明加了手机上传的提示

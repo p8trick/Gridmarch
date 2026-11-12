@@ -3,6 +3,7 @@ import {Stage} from './stage.js';
 //  1. 在 iPhone 控制中心打开「竖屏方向锁定」，从主页进入本页（竖握手机时画面应该横过来）。
 //  2. 把手机横过来握着：文字应该是正的；灵动岛（红色标记）在你选的那一边。不对就点「换边」。
 //  3. 随便划、双指缩放、点底部 5 个按钮：十字准星应该跟手指完全重合；数字里的"舞台坐标"在四个角应是 (0,0)…(宽,高)。
+//  3.5 看有没有黑条：竖握手机时，画面四边都应该铺满到屏幕边缘（包括回主页横条那一边）；还有黑条就截图发我，第一行数字是关键。
 //  4. 专门试：从灵动岛那一边、从回主页横条那一边的屏幕边缘起手往里划，看是否误触退出（下面"边缘起手"会计数；"离开页面"计数 > 0 就是被系统手势退出过了）。
 const $ = id => document.getElementById(id);
 const stage = new Stage($('stage')), cv = $('c'), g = cv.getContext('2d');
@@ -37,7 +38,7 @@ function draw() {
   const live = pts.filter(t => t.down), cur = live.length && live[0].pts[live[0].pts.length - 1];
   const pinch = live.length === 2 ? Math.hypot(...['x', 'y'].map(k => live[0].pts.at(-1)[k] - live[1].pts.at(-1)[k])).toFixed(0) : '-';
   const so = screen.orientation ? screen.orientation.type + ' ' + screen.orientation.angle + '°' : '无';
-  $('hud').textContent = `系统视口 ${stage.W}×${stage.H}　系统方向 ${so}\n舞台 ${stage.w}×${stage.h}　${stage.rot ? '旋转 ' + stage.rot + '°　灵动岛在' + (stage.side === 'left' ? '左' : '右') : '系统横屏，不旋转'}\n手指(舞台坐标) ${cur ? cur.x.toFixed(0) + ', ' + cur.y.toFixed(0) : '-'}　双指间距 ${pinch}\n边缘起手 ${edgeStarts} 次　离开页面 ${hidden} 次　${lastTap}`;
+  $('hud').textContent = `舞台量到 100vw×100vh = ${stage.W}×${stage.H}　inner ${innerWidth}×${innerHeight}　screen ${screen.width}×${screen.height}　client ${document.documentElement.clientWidth}×${document.documentElement.clientHeight}　系统方向 ${so}\n舞台 ${stage.w}×${stage.h}　${stage.rot ? '旋转 ' + stage.rot + '°　灵动岛在' + (stage.side === 'left' ? '左' : '右') : '系统横屏，不旋转'}\n手指(舞台坐标) ${cur ? cur.x.toFixed(0) + ', ' + cur.y.toFixed(0) : '-'}　双指间距 ${pinch}\n边缘起手 ${edgeStarts} 次　离开页面 ${hidden} 次　${lastTap}`;
 }
 // 触摸：clientX/Y 是物理屏幕坐标，用 stage.toLogical 换算
 cv.onpointerdown = e => { cv.setPointerCapture(e.pointerId); const p = stage.toLogical(e.clientX, e.clientY); trails.set(e.pointerId, {pts: [p], down: true});

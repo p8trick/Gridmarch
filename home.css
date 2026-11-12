@@ -2,18 +2,26 @@
 :root{
   --navy:#0b1e36; --gold:#ffb81c; --gold-hi:#ffd45a; --gold-lo:#ffa90f; --brown:#8a4a0e;
   --font:ui-rounded,"SF Pro Rounded",-apple-system,"PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;
-
-  /* 版式：全部集中在这里，改数字即可 */
-  --pad-l:max(env(safe-area-inset-left,0px),5vw);
-  --pad-t:max(env(safe-area-inset-top,0px),7vh);
-  --pad-b:max(env(safe-area-inset-bottom,0px),3vh);
-  --title-h:min(22vh,10.5vw);          /* 标题高度（中英文同高） */
-  --menu-top:4vh;                       /* 标题与菜单间距 */
-  --menu-w:min(24vw,240px);
-  --item-h:clamp(44px,7vh,56px);
-  --item-gap:clamp(4px,1.1vh,10px);
-  --bg-pos:55% 50%;                     /* 背景焦点 */
+  --sw:1vw; --sh:1vh;   /* 舞台宽 / 高的 1%：stage.js 会在 #stage 上换成舞台自己的值（竖屏转 90° 时 vw / vh 不能直接用），所以下面不再写 vw / vh */
 }
+/* 舞台：stage.js 接管尺寸和旋转；就绪前先藏起来，免得竖屏时闪一下没转的画面（3 秒后无论如何显示） */
+#stage{
+  position:fixed;inset:0;overflow:hidden;visibility:hidden;animation:reveal 0s 3s forwards;
+
+  /* 版式：全部集中在这里，改数字即可（不处理安全区，画面铺满） */
+  --pad-l:calc(var(--sw)*5);
+  --pad-t:calc(var(--sh)*7);
+  --pad-b:calc(var(--sh)*3);
+  --title-h:min(calc(var(--sh)*22),calc(var(--sw)*10.5));   /* 标题高度（中英文同高） */
+  --menu-top:calc(var(--sh)*4);                              /* 标题与菜单间距 */
+  --menu-w:min(calc(var(--sw)*24),240px);
+  --item-h:clamp(44px,calc(var(--sh)*7),56px);
+  --item-gap:clamp(4px,calc(var(--sh)*1.1),10px);
+  --bg-pos:55% 50%;                                          /* 背景焦点 */
+}
+#stage.ready{visibility:visible}
+#stage.tall{--bg-pos:50% 50%}   /* 舞台比例 ≤ 16:9（iPad）：背景用专属图，居中即可 */
+@keyframes reveal{to{visibility:visible}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--navy);overscroll-behavior:none}
 body{
@@ -21,17 +29,16 @@ body{
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;
 }
 
-/* 背景：铺满视口。iPad(约1.44:1)用专属图，构图已按它做，居中即可 */
-@media (max-aspect-ratio:16/9){:root{--bg-pos:50% 50%}}
-.bg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--bg-pos)}
+/* 背景：铺满舞台。iPad(约1.44:1)用专属图（home.js 按舞台比例选图），构图已按它做，居中即可 */
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--bg-pos)}
 .scrim{
-  position:fixed;inset:0;pointer-events:none;
+  position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,rgba(8,22,40,.62) 0%,rgba(8,22,40,.28) 32%,rgba(8,22,40,0) 52%);
 }
 
-/* 舞台：只给内容留安全边距 */
-.stage{
-  position:fixed;inset:0;display:flex;flex-direction:column;align-items:flex-start;
+/* 主内容区：左上留固定边距（不处理安全区） */
+.home{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:flex-start;
   padding:var(--pad-t) 0 var(--pad-b) var(--pad-l);
 }
 .title{margin:0;height:var(--title-h);display:flex;align-items:center;animation:in-title .5s ease-out both}
@@ -82,7 +89,7 @@ body{
 
 /* 提示条 */
 .toast{
-  position:fixed;left:50%;bottom:calc(var(--pad-b) + 8px);z-index:30;
+  position:absolute;left:50%;bottom:calc(var(--pad-b) + 8px);z-index:30;
   transform:translateX(-50%) translateY(10px);opacity:0;pointer-events:none;
   padding:10px 20px;border-radius:999px;font-size:14px;font-weight:700;letter-spacing:.08em;
   background:rgba(9,24,46,.92);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.22),0 3px 0 rgba(2,10,22,.55);
@@ -92,14 +99,13 @@ body{
 
 /* 设置面板 */
 .sheet{
-  position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
-  padding:max(env(safe-area-inset-top,0px),3vh) max(env(safe-area-inset-right,0px),3vw)
-          max(env(safe-area-inset-bottom,0px),3vh) max(env(safe-area-inset-left,0px),3vw);
+  position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+  padding:calc(var(--sh)*3) calc(var(--sw)*3);
   background:rgba(5,14,28,.6);
 }
 .sheet[hidden]{display:none}
 .panel{
-  width:min(70vw,460px);max-height:100%;overflow:auto;padding:6px 18px 12px;border-radius:16px;
+  width:min(calc(var(--sw)*70),460px);max-height:100%;overflow:auto;padding:6px 18px 12px;border-radius:16px;
   background:#0f2744;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 4px 0 rgba(2,10,22,.6);
 }
 .panel-head{display:flex;align-items:center;justify-content:space-between;min-height:48px}
@@ -120,18 +126,17 @@ body{
 .seg button[aria-pressed="true"]{color:#2b1700;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:0 2px 0 var(--brown)}
 .seg button:active{opacity:.7}
 
-/* 竖屏提示 */
-.rotate{
-  display:none;position:fixed;inset:0;z-index:50;background:var(--navy);
-  flex-direction:column;align-items:center;justify-content:center;gap:20px;
+/* 换边按钮：只在画面被旋转（竖屏锁定）时出现；画面上下颠倒了就点一下，选择会记住 */
+.flip{
+  position:absolute;top:10px;right:12px;z-index:10;-webkit-appearance:none;appearance:none;border:0;
+  height:34px;padding:0 14px;border-radius:999px;font:inherit;font-size:12px;font-weight:700;letter-spacing:.08em;color:#fff;cursor:pointer;
+  background:rgba(9,24,46,.55);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.22);
 }
-.rotate p{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em}
-.phone{width:34px;height:58px;border:3px solid var(--gold);border-radius:8px;animation:turn 2s ease-in-out infinite}
-@media (orientation:portrait){.rotate{display:flex}}
+.flip[hidden]{display:none}
+.flip:active{opacity:.6}
 
 @keyframes in-item{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 @keyframes in-title{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
-@keyframes turn{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
