@@ -14,6 +14,8 @@ html,body{margin:0;position:fixed;inset:0;background:#0b1e36;overflow:hidden;tou
 #grid{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,52px);gap:6px}
 #grid .btn{min-width:0;padding:0;font-size:12px}
 #grid .on{background:#2f7a3a}
+/* 排查开关「容器」：fixed = 原来的 position:fixed;inset:0；vh = 按指南改成 100vw×100vh */
+html.vh,html.vh body{position:static;inset:auto;width:100vw;height:100vh}
 </style>
 <!--GM-BOOT entry="src/battle/orientation-test.js" css=""-->
 <script>
@@ -33,6 +35,6 @@ html,body{margin:0;position:fixed;inset:0;background:#0b1e36;overflow:hidden;tou
 <!--/GM-BOOT-->
 </head><body>
 <div id="stage"><canvas id="c"></canvas><div id="hud"></div>
-  <div id="btns"><button class="btn" id="bSide">换边</button><button class="btn" id="bClr">清轨迹</button><button class="btn" id="bBack">‹ 返回</button></div>
+  <div id="btns"><button class="btn" id="bSide">换边</button><button class="btn" id="bRot">旋转</button><button class="btn" id="bRoot">容器</button><button class="btn" id="bClr">清轨迹</button><button class="btn" id="bBack">‹ 返回</button></div>
   <div id="grid"></div></div>
 </body></html>

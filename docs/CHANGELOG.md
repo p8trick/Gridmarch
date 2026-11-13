@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.25（回退 + 单独排查）
+- 回退：战场页、主页恢复为 v8 的做法（真横屏；竖屏显示“请横屏使用”），不再用舞台——0.21 起并入舞台后竖屏出现黑边，原因没查清。涉及 `battle.html`、`src/battle/main.js`、`src/battle/battle.css`、`index.html`、`home.css`、`home.js`，相对 v8 只去掉了 `env(safe-area-*)`
+- 舞台只留在 `tests/orientation.html` 单独排查：新增「旋转 开/关」「容器 fixed/100vh」两个开关（`gm.norot`、`gm.root`），配合诊断面板的测量方式，一次摸清黑边出在哪；`src/battle/stage.js` 新增 `setNoRot()`
+- `docs/HANDOFF.md`、`docs/HOME.md` 同步；`index.html`：`GM_VERSION` `0.24` → `0.25`
+
 ## 0.24
 - 竖屏黑边的现场诊断（0.23 的 100vh 探针没解决）：`src/battle/stage.js` 测量方式可切换（`gm.measure`：vh / lvh / svh / dvh / inner / screen / fixed，默认 vh），新增 `stageDebug()`（画各单位量到的屏幕边界 + 数字面板 + 切换按钮）和 `onLongPress()`
 - 长按「换边」0.8 秒打开诊断：`src/battle/main.js`（战场页）、`home.js`（主页）；`src/battle/orientation-test.js`（测试页打开就带）

@@ -4,10 +4,18 @@ import {Stage, stageDebug} from './stage.js';
 //  2. 把手机横过来握着：文字应该是正的；灵动岛（红色标记）在你选的那一边。不对就点「换边」。
 //  3. 随便划、双指缩放、点底部 5 个按钮：十字准星应该跟手指完全重合；数字里的"舞台坐标"在四个角应是 (0,0)…(宽,高)。
 //  3.5 看有没有黑条：竖握手机时，画面四边都应该铺满到屏幕边缘（包括回主页横条那一边）；还有黑条就截图发我，第一行数字是关键。
+//  3.6 排查黑边（竖握、竖屏锁定）：依次试顶部「旋转」「容器」两个开关的 4 种组合（诊断面板里还能换测量方式），告诉我哪几种底部有空白、哪几种是满的。
 //  4. 专门试：从灵动岛那一边、从回主页横条那一边的屏幕边缘起手往里划，看是否误触退出（下面"边缘起手"会计数；"离开页面"计数 > 0 就是被系统手势退出过了）。
 const $ = id => document.getElementById(id);
 const stage = new Stage($('stage')), cv = $('c'), g = cv.getContext('2d');
 stageDebug(stage);   // 测试页打开就带现场诊断（再长按「换边」可关）
+// 排查开关（竖屏黑边）：「旋转」开 / 关 = 竖屏时画面转不转 90°；「容器」fixed / 100vh = html、body 的写法。都会记住。
+const KR = 'gm.root', rootOn = () => { try { return localStorage.getItem(KR) === 'vh'; } catch (e) { return false; } };
+const rotOn = () => { try { return localStorage.getItem('gm.norot') !== '1'; } catch (e) { return true; } };
+const applyToggles = () => { document.documentElement.classList.toggle('vh', rootOn()); $('bRoot').textContent = '容器:' + (rootOn() ? '100vh' : 'fixed'); $('bRot').textContent = '旋转:' + (rotOn() ? '开' : '关'); };
+$('bRoot').onclick = () => { try { localStorage.setItem(KR, rootOn() ? 'fixed' : 'vh'); } catch (e) {} applyToggles(); stage.update(); };
+$('bRot').onclick = () => { stage.setNoRot(rotOn()); applyToggles(); };
+applyToggles(); stage.update();
 let trails = new Map(), edgeStarts = 0, hidden = 0, lastTap = '';
 const dpr = Math.min(devicePixelRatio, 3);
 function layout() { cv.width = Math.round(stage.w * dpr); cv.height = Math.round(stage.h * dpr); draw(); }

@@ -22,8 +22,8 @@
     en: { src: 'assets/title/title-en.webp', alt: 'Gridmarch' }
   };
   var STR = {
-    zh: { flip: '换边', settings: '设置', language: '语言', quality: '画质', volume: '音量', soon: '即将开放', close: '关闭', doc: '方寸战线 · Gridmarch' },
-    en: { flip: 'Flip', settings: 'Settings', language: 'Language', quality: 'Graphics', volume: 'Volume', soon: 'Coming soon', close: 'Close', doc: 'Gridmarch' }
+    zh: { rotate: '请横屏使用', settings: '设置', language: '语言', quality: '画质', volume: '音量', soon: '即将开放', close: '关闭', doc: '方寸战线 · Gridmarch' },
+    en: { rotate: 'Please rotate your device', settings: 'Settings', language: 'Language', quality: 'Graphics', volume: 'Volume', soon: 'Coming soon', close: 'Close', doc: 'Gridmarch' }
   };
 
   /* ===== 工具 ===== */
@@ -126,6 +126,7 @@
       el.setAttribute('aria-pressed', el.dataset.lang === lang ? 'true' : 'false');
     });
     $('#closeSettings').setAttribute('aria-label', s.close);
+    $('#rotateText').textContent = s.rotate;
   }
 
   /* ===== 开发入口：连点标题 5 次 → 单位×地形测试页 ===== */
@@ -136,24 +137,6 @@
     tapTimer = setTimeout(function () { taps = 0; }, 2000);
     if (taps >= 5) { taps = 0; location.href = DEV_URL; }
   });
-
-  /* ===== 虚拟横屏舞台：iPhone 竖屏锁定时整页转 90°（src/battle/stage.js，战场页同款）===== */
-  var stageEl = $('#stage'), bgEl = $('#bg'), flipEl = $('#flip');
-  var BG_WIDE = 'assets/home/home-bg.webp', BG_TALL = 'assets/home/home-bg-ipad.webp';
-  function layout(st) {
-    var tall = st.w / st.h <= 16 / 9;                   // 舞台比例 ≤ 16:9（iPad）用专属背景，其余（iPhone）用宽图
-    stageEl.classList.toggle('tall', tall);
-    var src = tall ? BG_TALL : BG_WIDE;
-    if (bgEl.getAttribute('src') !== src) bgEl.src = src;
-    flipEl.hidden = !st.rot;                            // 只有画面被旋转时才需要「换边」
-  }
-  import('./src/battle/stage.js?v=' + VER).then(function (m) {
-    var st = new m.Stage(stageEl);
-    st.onChange(layout); layout(st);
-    m.onLongPress(flipEl, function () { m.stageDebug(st); });   // 长按「换边」0.8 秒：现场诊断（排查竖屏黑边用）
-    flipEl.addEventListener('click', function () { st.toggleSide(); });
-    stageEl.classList.add('ready');
-  }).catch(function () { bgEl.src = BG_WIDE; stageEl.classList.add('ready'); });   // 舞台加载失败：按原样显示
 
   /* ===== 启动 ===== */
   $('#ver').textContent = 'v' + VER;   // 右下角版本号

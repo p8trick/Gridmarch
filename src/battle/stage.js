@@ -10,7 +10,8 @@
 //
 // 测量方式（0.24 起可现场切换，用来排查竖屏黑边）：默认 'vh'（100vw×100vh 探针），其余见 MODES。
 // 现场诊断：长按「换边」按钮 0.8 秒 → stageDebug()：画出各种单位量到的屏幕边界、显示数字、可点按钮切换测量方式。
-const KEY = 'gm.stageSide', MKEY = 'gm.measure';
+const KEY = 'gm.stageSide', MKEY = 'gm.measure', NKEY = 'gm.norot';
+const noRotNow = () => { try { return localStorage.getItem(NKEY) === '1'; } catch (e) { return false; } };   // 排查用：竖屏时也不旋转
 export const MODES = ['vh', 'lvh', 'svh', 'dvh', 'inner', 'screen', 'fixed'];
 const modeNow = () => { try { const m = localStorage.getItem(MKEY); if (MODES.includes(m)) return m; } catch (e) {} return 'vh'; };
 
@@ -34,6 +35,7 @@ export class Stage {
   onChange(f) { this.listeners.push(f); }
   setSide(side) { this.side = side; try { localStorage.setItem(KEY, side); } catch (e) {} this.update(); }
   toggleSide() { this.setSide(this.side === 'left' ? 'right' : 'left'); }
+  setNoRot(on) { try { localStorage.setItem(NKEY, on ? '1' : '0'); } catch (e) {} this.update(); }
   setMode(m) { try { localStorage.setItem(MKEY, m); } catch (e) {} this.update(); }
   measure() {
     const m = modeNow(); let W = 0, H = 0;
@@ -48,7 +50,7 @@ export class Stage {
     return W > 0 && H > 0 ? {W, H} : {W: innerWidth, H: innerHeight};   // 量不到（单位不支持等）就退回 inner
   }
   update() {
-    const {W, H} = this.measure(), rot = W >= H ? 0 : this.side === 'left' ? 90 : -90;
+    const {W, H} = this.measure(), rot = W >= H || noRotNow() ? 0 : this.side === 'left' ? 90 : -90;
     if (W === this.W && H === this.H && rot === this.rot && this.sideApplied === this.side) return;
     Object.assign(this, {W, H, rot, w: rot ? H : W, h: rot ? W : H, sideApplied: this.side});
     const t = rot === 90 ? `translate(${W}px,0) rotate(90deg)` : rot === -90 ? `translate(0,${H}px) rotate(-90deg)` : 'none';
