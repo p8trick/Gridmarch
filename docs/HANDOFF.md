@@ -76,6 +76,7 @@ docs/         HANDOFF（本文）、ARCHITECTURE、ART_PACKAGES、HOME、CHANGEL
 - 触摸坐标要换算（`stage.toLogical` / `stage.vec`，纯函数，Node 里验证过往返一致）；DOM 按钮由浏览器处理，不用管；舞台逻辑尺寸用 `stage.w/h` 代替 `innerWidth/innerHeight`。**不处理安全区**（灵动岛 / 手势区）：画面铺满，控件只留固定小边距，不加空白或白边（战棋基本不点屏幕边缘，先拖动地图再点边缘单位）。
 - **【已通过真机测试】**（0.20）：伪横屏效果不错，可接受；iPhone 以后就用这套，配合「竖屏方向锁定」基本都是锁住的（没锁时晃动会让画面跳变，但内容一样）。iPad 用真横屏（系统旋转锁），系统横屏时 `Stage` 不旋转。**0.21 已并入 `battle.html`**：`#stage` 包住整个战场页，指针坐标走 `stage.toLogical`，相机宽高比和画布尺寸取 `stage.w/h`，竖屏提示 `#land` 已删；系统竖屏时左上多一个「换边」按钮（画面上下颠倒就点一下，选择会记住，和横屏测试页共用）。测试页 `tests/orientation.html` 保留。
 - **0.22 真机反馈**：系统竖屏下的伪横屏，短边（回主页横条那一边）出现黑色空白；系统横屏时是真全屏。原因判断：iOS 独立窗口竖屏时 `innerHeight` 比真实屏幕矮一截。**0.23**：`Stage` 改取 `100vw×100vh` 探针量尺寸（不再用 `innerWidth/Height`）；主页也并入舞台（去掉“请横屏”提示层，`vw/vh` 改 `--sw/--sh`，新增「换边」按钮，主页也不再处理安全区）。**待真机确认**；若还有黑条，打开 `tests/orientation.html` 截图，第一行有 100vh / inner / screen / client 数字。
+- **0.23 真机反馈**：改成 100vh 探针后，竖屏下主页和战场页仍有黑边，真横屏是真全屏。代码里已没有任何 `env(safe-area-*)`，所有页面都带 `viewport-fit=cover`。**0.24 加现场诊断，不再猜**：长按「换边」按钮 0.8 秒（主页 / 战场页；`tests/orientation.html` 打开就带）→ 屏幕上画出各单位（fixed / 100vh / lvh / svh / dvh / inner）量到的右边和下边，面板显示数字，并能点按钮现场切换舞台的测量方式（`gm.measure`：vh / lvh / svh / dvh / inner / screen / fixed）；哪种切过去黑边消失，就把它改成默认。
 
 ## 6. 架构要点（详见 ARCHITECTURE.md）
 - 分层：`art/`（不依赖 game/app）→ `game/`（把美术接成世界）→ `battle/` 与 `app/`（页面层）。

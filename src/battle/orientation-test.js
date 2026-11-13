@@ -1,4 +1,4 @@
-import {Stage} from './stage.js';
+import {Stage, stageDebug} from './stage.js';
 // 虚拟横屏测试页。用法：
 //  1. 在 iPhone 控制中心打开「竖屏方向锁定」，从主页进入本页（竖握手机时画面应该横过来）。
 //  2. 把手机横过来握着：文字应该是正的；灵动岛（红色标记）在你选的那一边。不对就点「换边」。
@@ -7,6 +7,7 @@ import {Stage} from './stage.js';
 //  4. 专门试：从灵动岛那一边、从回主页横条那一边的屏幕边缘起手往里划，看是否误触退出（下面"边缘起手"会计数；"离开页面"计数 > 0 就是被系统手势退出过了）。
 const $ = id => document.getElementById(id);
 const stage = new Stage($('stage')), cv = $('c'), g = cv.getContext('2d');
+stageDebug(stage);   // 测试页打开就带现场诊断（再长按「换边」可关）
 let trails = new Map(), edgeStarts = 0, hidden = 0, lastTap = '';
 const dpr = Math.min(devicePixelRatio, 3);
 function layout() { cv.width = Math.round(stage.w * dpr); cv.height = Math.round(stage.h * dpr); draw(); }

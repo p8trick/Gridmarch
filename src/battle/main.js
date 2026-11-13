@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {buildWorld} from '../game/world.js';
 import {makeLevel1} from '../game/levels/level1.js';
 import {TacticalCamera, CAMERA} from './camera.js';
-import {Stage} from './stage.js';
+import {Stage, stageDebug, onLongPress} from './stage.js';
 
 // 战场入口（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 const $ = id => document.getElementById(id);
@@ -105,6 +105,7 @@ stage.onChange(resize);   // 舞台尺寸 / 旋转变化时重设画布和相机
 // 「换边」按钮：只在舞台被旋转时出现；画面上下颠倒了就点一下（选择会记住）
 const syncSide = () => { $('bSide').style.display = stage.rot ? '' : 'none'; };
 stage.onChange(syncSide); syncSide();
+onLongPress($('bSide'), () => stageDebug(stage));   // 长按「换边」0.8 秒：现场诊断（排查竖屏黑边用）
 $('bSide').onclick = () => stage.toggleSide();
 
 // ── 主循环（按需渲染：没有动画 / 没有操作时不出帧）──

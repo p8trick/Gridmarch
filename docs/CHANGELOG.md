@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.24
+- 竖屏黑边的现场诊断（0.23 的 100vh 探针没解决）：`src/battle/stage.js` 测量方式可切换（`gm.measure`：vh / lvh / svh / dvh / inner / screen / fixed，默认 vh），新增 `stageDebug()`（画各单位量到的屏幕边界 + 数字面板 + 切换按钮）和 `onLongPress()`
+- 长按「换边」0.8 秒打开诊断：`src/battle/main.js`（战场页）、`home.js`（主页）；`src/battle/orientation-test.js`（测试页打开就带）
+- `index.html`：`GM_VERSION` `0.23` → `0.24`
+
 ## 0.23
 - 修竖屏伪横屏的黑色空白：`src/battle/stage.js` 量尺寸改用 `100vw×100vh` 隐形探针（`innerHeight` 在 iOS 独立窗口竖屏下比真实屏幕矮一截）；舞台上新增 CSS 变量 `--sw` / `--sh`（舞台宽 / 高的 1%）
 - 主页并入虚拟横屏舞台：`index.html`（整页放进 `#stage`，去掉竖屏提示层，背景改成 `<img id="bg">`，新增「换边」按钮）、`home.css`（`vw/vh` 全改 `--sw/--sh`，`fixed` 改 `absolute`，去掉所有 `env(safe-area-inset-*)`）、`home.js`（动态加载 `stage.js`、按舞台比例选背景图、换边按钮、去掉“请横屏”文字）

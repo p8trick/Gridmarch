@@ -150,6 +150,7 @@
   import('./src/battle/stage.js?v=' + VER).then(function (m) {
     var st = new m.Stage(stageEl);
     st.onChange(layout); layout(st);
+    m.onLongPress(flipEl, function () { m.stageDebug(st); });   // 长按「换边」0.8 秒：现场诊断（排查竖屏黑边用）
     flipEl.addEventListener('click', function () { st.toggleSide(); });
     stageEl.classList.add('ready');
   }).catch(function () { bgEl.src = BG_WIDE; stageEl.classList.add('ready'); });   // 舞台加载失败：按原样显示
