@@ -4,6 +4,10 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.28
+- `tests/units-terrain.html` 竖屏底部留白：`src/app/ui.css`（`html,body` / 画布改 100vw×100vh，底部条 `bottom:calc(100% - 100vh)`）、`src/app/main.js`（画布尺寸、点选、拖动换算用 100vw×100vh 探针量出的 `vp`，不再用 `innerWidth/innerHeight`；横竖屏切换时重新测量；HUD 末行显示 100vh / inner 数字）
+- `index.html`：`GM_VERSION` `0.27` → `0.28`
+
 ## 0.27
 - 主页去掉「换边」按钮：`index.html`、`home.css`、`home.js`（换边只在战场页里做，选择共用；`src/battle/stage.js` 回到前台 / 页面从缓存恢复时重新读取选择，所以在战场页换边后回主页会自动跟着变）
 - 主页版本号：往里挪（`right:34px; bottom:24px`，避开屏幕圆角）、加粗、白字黑描边，叠在背景图上也看得清

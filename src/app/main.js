@@ -6,6 +6,15 @@ const err = $('err');
 addEventListener('error', e => { err.style.display = 'block'; err.textContent = '出错：' + (e.message || e.error); });
 addEventListener('unhandledrejection', e => { err.style.display = 'block'; err.textContent = '出错：' + (e.reason && e.reason.message || e.reason); });
 
+// 视口尺寸：iPhone 竖屏独立窗口里 innerHeight 和 position:fixed;inset:0 都比屏幕矮（17 Pro 竖屏 812 vs 874），底部会留白；
+// 100vw×100vh 才是整屏（0.25 在真机验证）。所以画布和换算都用这个探针量出来的 vp，不用 innerWidth / innerHeight。
+const vpProbe = document.createElement('div');
+vpProbe.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;visibility:hidden;pointer-events:none';
+document.documentElement.appendChild(vpProbe);
+const vp = {w: innerWidth, h: innerHeight};
+const measureVP = () => { const r = vpProbe.getBoundingClientRect(); vp.w = r.width > 0 ? Math.round(r.width) : innerWidth; vp.h = r.height > 0 ? Math.round(r.height) : innerHeight; };
+measureVP();
+
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -25,8 +34,8 @@ const snapSpan = () => { let b = ZOOMS[0]; for (const z of ZOOMS) if (Math.abs(z
 const camA = () => angle + Math.PI * .08;
 
 function resize() {
-  renderer.setSize(innerWidth, innerHeight);
-  const a = innerWidth / innerHeight;
+  renderer.setSize(vp.w, vp.h);
+  const a = vp.w / vp.h;
   camera.left = -span / 2; camera.right = span / 2; camera.top = span / (2 * a); camera.bottom = -span / (2 * a);
   camera.near = .1; camera.far = 150; camera.updateProjectionMatrix();
 }
@@ -49,7 +58,8 @@ function hud() {
     : `持续渲染 ｜ ${fps.toFixed(0)} fps ｜ 单帧提交 ${lastMs.toFixed(1)}ms`;
   $('hud').textContent =
     head + `\n本帧 ${renderer.info.render.triangles} △ ｜ ${renderer.info.render.calls} 次绘制 ｜ 屏内单位 ${cullInfo.inView}/${cullInfo.total}\n` +
-    `${selText()}\n林间空地 ${info.cleared} 棵让位，半透明 ${info.faded || 0}，挤开 ${info.moved || 0}`;
+    `${selText()}\n林间空地 ${info.cleared} 棵让位，半透明 ${info.faded || 0}，挤开 ${info.moved || 0}` +
+    `\n视口 100vw×100vh ${vp.w}×${vp.h}　inner ${innerWidth}×${innerHeight}`;
 }
 let lastT = performance.now();
 function loop(now) {
@@ -113,7 +123,7 @@ function pickUnit(px, py) {
   for (const u of world.units) {
     if (!u.holder.visible) continue;
     _v.set(u.holder.position.x, u.holder.position.y + .8, u.holder.position.z).project(camera);
-    const d = Math.hypot((_v.x * .5 + .5) * innerWidth - px, (-_v.y * .5 + .5) * innerHeight - py);
+    const d = Math.hypot((_v.x * .5 + .5) * vp.w - px, (-_v.y * .5 + .5) * vp.h - py);
     if (d < bd) { bd = d; best = u; }
   }
   return best;
@@ -122,13 +132,13 @@ function handleTap(px, py) {
   if (world.units.some(u => u.path)) return;
   const sel = world.state.selected;
   if (sel) {
-    _rc.setFromCamera(new THREE.Vector2(px / innerWidth * 2 - 1, -(py / innerHeight) * 2 + 1), camera);
+    _rc.setFromCamera(new THREE.Vector2(px / vp.w * 2 - 1, -(py / vp.h) * 2 + 1), camera);
     const cell = world.cellFromRay(_rc.ray);
     if (cell && world.canMoveTo(sel, cell)) { world.moveTo(sel, cell); mark(); hud(); return; }
   }
   const u = pickUnit(px, py);
   if (!u && !sel) {
-    _rc.setFromCamera(new THREE.Vector2(px / innerWidth * 2 - 1, -(py / innerHeight) * 2 + 1), camera);
+    _rc.setFromCamera(new THREE.Vector2(px / vp.w * 2 - 1, -(py / vp.h) * 2 + 1), camera);
     const c = world.cellFromRay(_rc.ray); if (c && world.cycleOwner(c)) { mark(); hud(); return; }
   }
   if (u && u !== sel) world.select(u); else world.deselect();
@@ -145,14 +155,16 @@ cv.onpointermove = e => {
     pinched = true; spanTarget = null;
     if (prevD) span = Math.max(7.5, Math.min(22, span * prevD / d)); prevD = d; resize(); zoomLabel(); mark();
   } else {
-    const dx = (e.clientX - old[0]) * span / innerWidth, dz = (e.clientY - old[1]) * span / innerWidth / Math.sin(pitch * Math.PI / 180), a = camA();
+    const dx = (e.clientX - old[0]) * span / vp.w, dz = (e.clientY - old[1]) * span / vp.w / Math.sin(pitch * Math.PI / 180), a = camA();
     target.x -= dx * Math.cos(a) + dz * Math.sin(a); target.z += dx * Math.sin(a) - dz * Math.cos(a); mark();
   }
 };
 cv.onpointerup = e => { const t = tap; pts.delete(e.pointerId); prevD = 0; tap = null; if (pinched && pts.size < 2) { pinched = false; snapSpan(); } if (t && t.moved < 8 && performance.now() - t.t < 500) handleTap(e.clientX, e.clientY); };
 cv.onpointercancel = e => { pts.delete(e.pointerId); prevD = 0; tap = null; if (pinched && pts.size < 2) { pinched = false; snapSpan(); } };
 cv.onwheel = e => { e.preventDefault(); span = Math.max(7.5, Math.min(22, span * Math.exp(e.deltaY * .001))); resize(); zoomLabel(); mark(); clearTimeout(wheelTimer); wheelTimer = setTimeout(snapSpan, 180); };
-onresize = () => { resize(); mark(); };
+const remeasure = () => { measureVP(); resize(); mark(); };
+onresize = remeasure;
+addEventListener('orientationchange', () => { remeasure(); setTimeout(remeasure, 150); setTimeout(remeasure, 450); });   // iOS 旋转时尺寸会滞后一拍
 
 // 调试网址参数：?t=x,z 相机目标(格坐标)  ?s=视距(世界单位)  ?a=转向(度)  ?p=俯角(度)  ?fold=1 收起面板
 { const q = new URLSearchParams(location.search);
