@@ -12,31 +12,29 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<!-- 启动图：必须是 PNG；iOS 要求 media 与设备精确匹配。仅 iPad 横屏；iPhone 不做，竖屏直接显示“请横屏”动画 -->
+<!-- 启动图：必须是 PNG；iOS 要求 media 与设备精确匹配。仅 iPad 横屏；iPhone 不做（竖屏锁定时主页会自己转成横屏，见 src/battle/stage.js） -->
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2360x1640-landscape.png"
       media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
 <style>html,body{background:#0b1e36}
-#ver{position:fixed;right:12px;bottom:8px;z-index:2;font:11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.55);pointer-events:none}</style>
+#ver{position:absolute;right:12px;bottom:8px;z-index:2;font:11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.55);pointer-events:none}</style>
 <script>
 /* ★ 版本号：整个项目唯一的位置。每次更新文件后改这里（比如 0.1.0 → 0.1.1），主页自己的 css/js 和所有页面
    （战场、测试页）都会跟着换新文件，绕开 iOS 的死缓存。 */
-window.GM_VERSION = '0.25';
+window.GM_VERSION = '0.26';
 document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
 </script>
 </head>
 <body>
-
-<picture>
-  <source media="(max-aspect-ratio: 16/9)" srcset="assets/home/home-bg-ipad.webp">
-  <img class="bg" src="assets/home/home-bg.webp" alt="" decoding="async">
-</picture>
+<div id="stage">
+<img class="bg" id="bg" alt="" decoding="async">
 <div class="scrim"></div>
 
-<main class="stage">
+<main class="home">
   <h1 class="title"><img id="title" src="assets/title/title-zh.webp" alt="方寸战线" decoding="async"></h1>
   <nav><ul id="menu" class="menu"></ul></nav>
 </main>
 
+<button id="flip" class="flip" type="button" data-i18n="flip" hidden>换边</button>
 <div id="toast" class="toast" role="status"></div>
 <div id="ver" aria-hidden="true"></div>
 
@@ -57,10 +55,6 @@ document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
     <div class="row"><span data-i18n="volume">音量</span><em data-i18n="soon">即将开放</em></div>
   </div>
 </section>
-
-<div class="rotate">
-  <div class="phone"></div>
-  <p id="rotateText">请横屏使用</p>
 </div>
 
 <script>document.write('<script src="home.js?v=' + GM_VERSION + '"><\/script>');</script>

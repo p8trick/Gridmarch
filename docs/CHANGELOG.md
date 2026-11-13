@@ -4,6 +4,13 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.26（舞台并回战场页和主页）
+- 根因（0.25 测试页验证）：`html,body` 写成 `position:fixed; inset:0` / `height:100%` 时，竖屏独立窗口里只有 812（比屏幕矮 62），底部留白；改成 `width:100vw; height:100vh` 就铺满
+- 战场页并回舞台：`battle.html`（整页放进 `#stage`，去掉竖屏提示 `#land`，新增「换边」）、`src/battle/main.js`（画布 / 相机尺寸用 `stage.w/h`，指针坐标用 `stage.toLogical`，长按「换边」0.8 秒开现场诊断）、`src/battle/battle.css`（`html,body` 改 100vw×100vh，界面层相对舞台定位）
+- 主页并回舞台：`index.html`（整页放进 `#stage`，去掉竖屏提示层，背景改 `<img id="bg">`，新增「换边」）、`home.css`（`html,body` 改 100vw×100vh；`vw/vh` 改 `--sw/--sh`；去掉 `env(safe-area-*)`）、`home.js`（动态加载 `stage.js`、按舞台比例选背景、换边、长按诊断）
+- `src/battle/orientation-test.js`：「容器」开关默认 100vh
+- `index.html`：`GM_VERSION` `0.25` → `0.26`
+
 ## 0.25（回退 + 单独排查）
 - 回退：战场页、主页恢复为 v8 的做法（真横屏；竖屏显示“请横屏使用”），不再用舞台——0.21 起并入舞台后竖屏出现黑边，原因没查清。涉及 `battle.html`、`src/battle/main.js`、`src/battle/battle.css`、`index.html`、`home.css`、`home.js`，相对 v8 只去掉了 `env(safe-area-*)`
 - 舞台只留在 `tests/orientation.html` 单独排查：新增「旋转 开/关」「容器 fixed/100vh」两个开关（`gm.norot`、`gm.root`），配合诊断面板的测量方式，一次摸清黑边出在哪；`src/battle/stage.js` 新增 `setNoRot()`

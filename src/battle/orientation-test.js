@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 const stage = new Stage($('stage')), cv = $('c'), g = cv.getContext('2d');
 stageDebug(stage);   // 测试页打开就带现场诊断（再长按「换边」可关）
 // 排查开关（竖屏黑边）：「旋转」开 / 关 = 竖屏时画面转不转 90°；「容器」fixed / 100vh = html、body 的写法。都会记住。
-const KR = 'gm.root', rootOn = () => { try { return localStorage.getItem(KR) === 'vh'; } catch (e) { return false; } };
+const KR = 'gm.root', rootOn = () => { try { return localStorage.getItem(KR) !== 'fixed'; } catch (e) { return true; } };   // 默认 100vh（0.25 验证：fixed;inset:0 在竖屏下矮 62）
 const rotOn = () => { try { return localStorage.getItem('gm.norot') !== '1'; } catch (e) { return true; } };
 const applyToggles = () => { document.documentElement.classList.toggle('vh', rootOn()); $('bRoot').textContent = '容器:' + (rootOn() ? '100vh' : 'fixed'); $('bRot').textContent = '旋转:' + (rotOn() ? '开' : '关'); };
 $('bRoot').onclick = () => { try { localStorage.setItem(KR, rootOn() ? 'fixed' : 'vh'); } catch (e) {} applyToggles(); stage.update(); };
