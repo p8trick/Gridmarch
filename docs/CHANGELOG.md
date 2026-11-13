@@ -4,6 +4,12 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.27
+- 主页去掉「换边」按钮：`index.html`、`home.css`、`home.js`（换边只在战场页里做，选择共用；`src/battle/stage.js` 回到前台 / 页面从缓存恢复时重新读取选择，所以在战场页换边后回主页会自动跟着变）
+- 主页版本号：往里挪（`right:34px; bottom:24px`，避开屏幕圆角）、加粗、白字黑描边，叠在背景图上也看得清
+- `src/battle/stage.js`、`src/battle/orientation-test.js`：排查开关（测量方式 / 关闭旋转 / 容器）不再存 `localStorage`，只在当前页面有效，刷新恢复默认（旋转开、容器 100vh、测量 vh），避免测试留下的状态影响别的页面
+- `src/battle/battle.css`：注释同步；`index.html`：`GM_VERSION` `0.26` → `0.27`
+
 ## 0.26（舞台并回战场页和主页）
 - 根因（0.25 测试页验证）：`html,body` 写成 `position:fixed; inset:0` / `height:100%` 时，竖屏独立窗口里只有 812（比屏幕矮 62），底部留白；改成 `width:100vw; height:100vh` 就铺满
 - 战场页并回舞台：`battle.html`（整页放进 `#stage`，去掉竖屏提示 `#land`，新增「换边」）、`src/battle/main.js`（画布 / 相机尺寸用 `stage.w/h`，指针坐标用 `stage.toLogical`，长按「换边」0.8 秒开现场诊断）、`src/battle/battle.css`（`html,body` 改 100vw×100vh，界面层相对舞台定位）

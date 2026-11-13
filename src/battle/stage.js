@@ -8,12 +8,12 @@
 // 不处理安全区（灵动岛 / 手势区）：画面铺满，控件只留固定小边距，不加空白或白边；代码里不用 env(safe-area-*)。
 // CSS 里用 var(--sw) / var(--sh)（舞台宽高的 1%）代替 vw / vh。
 //
-// 测量方式（0.24 起可现场切换，用来排查竖屏黑边）：默认 'vh'（100vw×100vh 探针），其余见 MODES。
+// 测量方式（可现场切换，用来排查）：默认 'vh'（100vw×100vh 探针），其余见 MODES；切换只在当前页面有效，刷新恢复默认。
 // 现场诊断：长按「换边」按钮 0.8 秒 → stageDebug()：画出各种单位量到的屏幕边界、显示数字、可点按钮切换测量方式。
-const KEY = 'gm.stageSide', MKEY = 'gm.measure', NKEY = 'gm.norot';
-const noRotNow = () => { try { return localStorage.getItem(NKEY) === '1'; } catch (e) { return false; } };   // 排查用：竖屏时也不旋转
+const KEY = 'gm.stageSide';   // 换边的选择会存下来，主页和战场页共用（只在战场页里换）
 export const MODES = ['vh', 'lvh', 'svh', 'dvh', 'inner', 'screen', 'fixed'];
-const modeNow = () => { try { const m = localStorage.getItem(MKEY); if (MODES.includes(m)) return m; } catch (e) {} return 'vh'; };
+let MODE = 'vh', NOROT = false;   // 排查开关：只在当前页面有效，刷新就恢复默认（0.27 起不再存 localStorage，免得测试留下的状态影响别的页面）
+const modeNow = () => MODE;
 
 // 纯函数（Node 里可测试）：rot ∈ {0, 90, -90}；W、H 是物理视口宽高
 export const toLogical = (rot, W, H, cx, cy) => rot === 90 ? {x: cy, y: W - cx} : rot === -90 ? {x: H - cy, y: cx} : {x: cx, y: cy};
@@ -30,13 +30,17 @@ export class Stage {
     document.documentElement.appendChild(this.probe);
     const again = () => { this.update(); setTimeout(() => this.update(), 120); setTimeout(() => this.update(), 400); };   // iOS 旋转时 innerWidth/Height 会滞后一拍
     addEventListener('resize', again); addEventListener('orientationchange', again);
+    // 在战场页换边后回到主页（含系统返回手势从缓存恢复页面）：回到前台时重新读一次，选择才会连带生效
+    const sync = () => { try { const s = localStorage.getItem(KEY); if ((s === 'left' || s === 'right') && s !== this.side) { this.side = s; this.update(); } } catch (e) {} };
+    addEventListener('pageshow', sync); document.addEventListener('visibilitychange', sync);
     this.update();
   }
   onChange(f) { this.listeners.push(f); }
   setSide(side) { this.side = side; try { localStorage.setItem(KEY, side); } catch (e) {} this.update(); }
   toggleSide() { this.setSide(this.side === 'left' ? 'right' : 'left'); }
-  setNoRot(on) { try { localStorage.setItem(NKEY, on ? '1' : '0'); } catch (e) {} this.update(); }
-  setMode(m) { try { localStorage.setItem(MKEY, m); } catch (e) {} this.update(); }
+  get noRot() { return NOROT; }
+  setNoRot(on) { NOROT = !!on; this.update(); }
+  setMode(m) { MODE = m; this.update(); }
   measure() {
     const m = modeNow(); let W = 0, H = 0;
     if (m === 'inner') { W = innerWidth; H = innerHeight; }
@@ -50,7 +54,7 @@ export class Stage {
     return W > 0 && H > 0 ? {W, H} : {W: innerWidth, H: innerHeight};   // 量不到（单位不支持等）就退回 inner
   }
   update() {
-    const {W, H} = this.measure(), rot = W >= H || noRotNow() ? 0 : this.side === 'left' ? 90 : -90;
+    const {W, H} = this.measure(), rot = W >= H || NOROT ? 0 : this.side === 'left' ? 90 : -90;
     if (W === this.W && H === this.H && rot === this.rot && this.sideApplied === this.side) return;
     Object.assign(this, {W, H, rot, w: rot ? H : W, h: rot ? W : H, sideApplied: this.side});
     const t = rot === 90 ? `translate(${W}px,0) rotate(90deg)` : rot === -90 ? `translate(0,${H}px) rotate(-90deg)` : 'none';

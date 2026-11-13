@@ -16,11 +16,11 @@
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2360x1640-landscape.png"
       media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
 <style>html,body{background:#0b1e36}
-#ver{position:absolute;right:12px;bottom:8px;z-index:2;font:11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.55);pointer-events:none}</style>
+#ver{position:absolute;right:34px;bottom:24px;z-index:2;font:600 11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.05em;color:rgba(255,255,255,.95);text-shadow:-1px 0 #000,1px 0 #000,0 -1px #000,0 1px #000,-1px -1px #000,1px 1px #000,-1px 1px #000,1px -1px #000,0 0 5px rgba(0,0,0,.9);pointer-events:none}</style>
 <script>
 /* ★ 版本号：整个项目唯一的位置。每次更新文件后改这里（比如 0.1.0 → 0.1.1），主页自己的 css/js 和所有页面
    （战场、测试页）都会跟着换新文件，绕开 iOS 的死缓存。 */
-window.GM_VERSION = '0.26';
+window.GM_VERSION = '0.27';
 document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
 </script>
 </head>
@@ -34,7 +34,6 @@ document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
   <nav><ul id="menu" class="menu"></ul></nav>
 </main>
 
-<button id="flip" class="flip" type="button" data-i18n="flip" hidden>换边</button>
 <div id="toast" class="toast" role="status"></div>
 <div id="ver" aria-hidden="true"></div>
 

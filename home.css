@@ -126,15 +126,6 @@ body{
 .seg button[aria-pressed="true"]{color:#2b1700;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:0 2px 0 var(--brown)}
 .seg button:active{opacity:.7}
 
-/* 换边按钮：只在画面被旋转（竖屏锁定）时出现；画面上下颠倒了就点一下，选择会记住 */
-.flip{
-  position:absolute;top:10px;right:12px;z-index:10;-webkit-appearance:none;appearance:none;border:0;
-  height:34px;padding:0 14px;border-radius:999px;font:inherit;font-size:12px;font-weight:700;letter-spacing:.08em;color:#fff;cursor:pointer;
-  background:rgba(9,24,46,.55);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.22);
-}
-.flip[hidden]{display:none}
-.flip:active{opacity:.6}
-
 @keyframes in-item{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 @keyframes in-title{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 

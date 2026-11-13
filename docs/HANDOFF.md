@@ -77,6 +77,7 @@ docs/         HANDOFF（本文）、ARCHITECTURE、ART_PACKAGES、HOME、CHANGEL
 - **【已通过真机测试】**（0.20）：伪横屏的画面方向、触摸换算都没问题，iPhone 想用这套（配合「竖屏方向锁定」），iPad 用真横屏。
 - **黑边根因（0.25 在 `tests/orientation.html` 用「容器」开关验证）**：`html,body` 写成 `position:fixed; inset:0` 时，iPhone 竖屏独立窗口里它只有 812（`screen` 874、`inner` 812，差 62），舞台被限制在这里，底部手势区一侧留白；改成 `width:100vw; height:100vh` 就铺满。（0.21～0.24 的七种测量方式、去 `env(safe-area-*)` 都不是原因；你的全屏指南“prefer 100vh”正是这个意思。）
 - **0.26 并回**：战场页、主页重新用舞台，`html,body` 改用 `100vw×100vh`（`battle.css`、`home.css`）；舞台尺寸取 `100vw×100vh` 探针；长按「换边」0.8 秒仍可打开现场诊断；测试页「旋转」「容器」开关保留（容器默认 100vh）。**待真机确认**（见 §7）。
+- **0.27**：主页去掉换边按钮（只在战场页换，选择共用，页面回到前台时重新读取）；主页版本号往里挪（`right:34px; bottom:24px`，避开屏幕圆角）并加黑色描边；排查开关（测量方式 / 关闭旋转 / 容器）不再存 `localStorage`，只在当前页面有效、刷新恢复默认，免得测试时留下的状态影响别的页面。
 
 ## 6. 架构要点（详见 ARCHITECTURE.md）
 - 分层：`art/`（不依赖 game/app）→ `game/`（把美术接成世界）→ `battle/` 与 `app/`（页面层）。

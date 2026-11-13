@@ -9,12 +9,12 @@ import {Stage, stageDebug} from './stage.js';
 const $ = id => document.getElementById(id);
 const stage = new Stage($('stage')), cv = $('c'), g = cv.getContext('2d');
 stageDebug(stage);   // 测试页打开就带现场诊断（再长按「换边」可关）
-// 排查开关（竖屏黑边）：「旋转」开 / 关 = 竖屏时画面转不转 90°；「容器」fixed / 100vh = html、body 的写法。都会记住。
-const KR = 'gm.root', rootOn = () => { try { return localStorage.getItem(KR) !== 'fixed'; } catch (e) { return true; } };   // 默认 100vh（0.25 验证：fixed;inset:0 在竖屏下矮 62）
-const rotOn = () => { try { return localStorage.getItem('gm.norot') !== '1'; } catch (e) { return true; } };
-const applyToggles = () => { document.documentElement.classList.toggle('vh', rootOn()); $('bRoot').textContent = '容器:' + (rootOn() ? '100vh' : 'fixed'); $('bRot').textContent = '旋转:' + (rotOn() ? '开' : '关'); };
-$('bRoot').onclick = () => { try { localStorage.setItem(KR, rootOn() ? 'fixed' : 'vh'); } catch (e) {} applyToggles(); stage.update(); };
-$('bRot').onclick = () => { stage.setNoRot(rotOn()); applyToggles(); };
+// 排查开关（竖屏黑边）：「旋转」开 / 关 = 竖屏时画面转不转 90°；「容器」100vh / fixed = html、body 的写法（100vh 是对的，fixed 会留白）。
+// 都不保存：刷新就恢复默认（旋转开、容器 100vh）。
+let rootVh = true;
+const applyToggles = () => { document.documentElement.classList.toggle('vh', rootVh); $('bRoot').textContent = '容器:' + (rootVh ? '100vh' : 'fixed'); $('bRot').textContent = '旋转:' + (stage.noRot ? '关' : '开'); };
+$('bRoot').onclick = () => { rootVh = !rootVh; applyToggles(); stage.update(); };
+$('bRot').onclick = () => { stage.setNoRot(!stage.noRot); applyToggles(); };
 applyToggles(); stage.update();
 let trails = new Map(), edgeStarts = 0, hidden = 0, lastTap = '';
 const dpr = Math.min(devicePixelRatio, 3);

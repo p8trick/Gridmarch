@@ -1,4 +1,4 @@
-/* 战场页面：全屏用 position:fixed + inset:0，不用 dvh；不处理安全区（灵动岛 / 手势区），画面铺满 */
+/* 战场页面：html、body 用 100vw×100vh（不用 position:fixed;inset:0 —— 竖屏独立窗口里它会矮 62；也不用 dvh）；不处理安全区（灵动岛 / 手势区），画面铺满 */
 html,body{margin:0;width:100vw;height:100vh;background:#1b2227;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font:13px -apple-system,system-ui,sans-serif;color:#fff}
 #stage{position:fixed;inset:0;overflow:hidden}   /* JS 起来后由 stage.js 接管尺寸和旋转 */
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
