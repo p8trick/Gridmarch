@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.29（本窗口最后一版）
+- `tests/units-terrain.html` 顶部加安全区（竖屏下免得被灵动岛挡）：`src/app/ui.css`（`#hud`、`#err`）、`tests/units-terrain.html`（`#bFold`）的 `top` 加 `env(safe-area-inset-top)`
+- `docs/HANDOFF.md` 按本窗口结果整理：新窗口从 0.30 起；§5 改写（舞台方案、全屏规则、安全区例外、排查工具、沿革）；§7 新增“竖屏状态栏图标”未解决项；§10 教训；§3 / §4 补自动应用工作流
+- `index.html`：`GM_VERSION` `0.28` → `0.29`
+
 ## 0.28
 - `tests/units-terrain.html` 竖屏底部留白：`src/app/ui.css`（`html,body` / 画布改 100vw×100vh，底部条 `bottom:calc(100% - 100vh)`）、`src/app/main.js`（画布尺寸、点选、拖动换算用 100vw×100vh 探针量出的 `vp`，不再用 `innerWidth/innerHeight`；横竖屏切换时重新测量；HUD 末行显示 100vh / inner 数字）
 - `index.html`：`GM_VERSION` `0.27` → `0.28`
