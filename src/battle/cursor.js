@@ -25,16 +25,22 @@ export function createCursor(THREE) {
     for (const [geo, m, ro, y] of parts) { const mesh = new THREE.Mesh(geo, m); mesh.renderOrder = ro; mesh.position.y = y; g.add(mesh); }
     group.add(g); corners.push(g);
   });
-  const fillMat = new THREE.MeshBasicMaterial({color: COLORS.fill, transparent: true, opacity: .2, depthWrite: false}), fill = new THREE.Mesh(new THREE.PlaneGeometry(1.84, 1.84).rotateX(-Math.PI / 2), fillMat);
-  fill.renderOrder = 27; fill.position.y = -.02; group.add(fill);
+  const fillMat = new THREE.MeshBasicMaterial({color: COLORS.fill, transparent: true, opacity: .2, depthWrite: false}), fill = new THREE.Mesh(new THREE.PlaneGeometry(1.84, 1.84, 8, 8).rotateX(-Math.PI / 2), fillMat);   // 8×8 细分：底色跟着地形起伏（沙丘、桥面）
+  const fillBase = fill.geometry.attributes.position.array.slice();
+  fill.renderOrder = 27; group.add(fill);
   // 建筑标记：菱形水晶 + 深色描边壳
   const gem = new THREE.Group(), gemGeo = new THREE.OctahedronGeometry(.3);
   const gemTop = new THREE.Mesh(gemGeo, mat(COLORS.building)), gemOut = new THREE.Mesh(gemGeo, mat(COLORS.dark, 1, THREE.BackSide));
   gemOut.scale.setScalar(1.28); gemTop.renderOrder = 33; gemOut.renderOrder = 32; gem.add(gemOut, gemTop); gem.scale.y = 1.7; gem.visible = false; group.add(gem);
   const st = {kind: 'cell', t0: 0, base: 0, now: 0};
   const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
-  function show(x, y, z, kind = 'cell', now = performance.now() / 1000) {   // y = 格子地面高度（world.baseY）
-    st.kind = kind; st.t0 = now; st.base = y; group.position.set(x, y + .08, z); group.visible = true;
+  // x,z = 格子中心；sample(px, pz) = 地形表面高度（world.surfaceY）。光圈整体放在格子中心的表面上，四个护角和底色再各自贴合自己位置的高度
+  function show(x, z, kind = 'cell', sample = () => 0, now = performance.now() / 1000) {
+    const y0 = sample(x, z); st.kind = kind; st.t0 = now; group.position.set(x, y0 + .08, z); group.visible = true;
+    corners.forEach(c => { const [sx, sz] = c.userData.dir; c.userData.dy = sample(x + sx * H, z + sz * H) - y0; });
+    const pos = fill.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, sample(x + fillBase[i * 3], z + fillBase[i * 3 + 2]) - y0 - .02);
+    pos.needsUpdate = true; fill.position.y = 0; fill.frustumCulled = false;
     const b = kind === 'building'; gem.visible = b; fillMat.color.setHex(b ? COLORS.building : COLORS.fill); fillMat.opacity = b ? .28 : .2;
   }
   function hide() { group.visible = false; }
@@ -43,8 +49,8 @@ export function createCursor(THREE) {
     if (!group.visible) return false;
     const k = now - st.t0, pop = 1 + .38 * (1 - ease(k / .22)), breathe = Math.sin(now * 5) * .045, b = st.kind === 'building';
     const h = (H + breathe) * pop, th = b ? 1.25 : 1;
-    corners.forEach(c => { const [sx, sz] = c.userData.dir; c.position.set(sx * h, 0, sz * h); c.scale.set(1, th, 1); });
-    fill.scale.setScalar(pop); fillMat.opacity = (b ? .28 : .2) + Math.sin(now * 5) * .05;
+    corners.forEach(c => { const [sx, sz] = c.userData.dir; c.position.set(sx * h, c.userData.dy || 0, sz * h); c.scale.set(1, th, 1); });
+    fill.scale.set(pop, 1, pop); fillMat.opacity = (b ? .28 : .2) + Math.sin(now * 5) * .05;
     if (b) { gem.rotation.y = now * 1.6; gem.position.y = 2.5 + Math.sin(now * 3) * .16 + (1 - ease(k / .3)) * .9; }
     return true;
   }

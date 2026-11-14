@@ -301,6 +301,18 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 树：连片林按抖动网格铺满；孤立林格（周围无林）随机 2–3 棵，避免"只有一棵"的寒酸感
   // 格子的地面高度：山体取山脚（groundY 对山体返回山顶站位点，那是摆单位用的；画格子光圈要贴在地面上，否则透视下会偏上）
   const baseY = (cx, cz) => hills.has(cx + ',' + cz) ? 0 : groundY(cx, cz);
+  // 任意点的"可见表面高度"（画格子光圈用）：cx,cz 决定按哪种地形的规则取，x,z 是具体采样点（光圈四角、底色网格都会取）
+  //   桥面 → 桥面高度；山体 → 山脚；沙漠 → 沙丘起伏；河 / 海 → 水面；海岸格 → 锚点高度；沼泽 → 0；其余 → 平地 / 建筑底面
+  const surfaceY = (cx, cz, x = cx * 2, z = cz * 2) => {
+    const k = cx + ',' + cz;
+    if (bridgeInfo.has(k)) return getBridgeSurfaceY(bridgeByCell.get(k), x, z) ?? bridgeInfo.get(k);
+    if (hills.has(k)) return 0;
+    if (sandH && SAND_SET.has(k)) return sandH(x, z);
+    if (SWAMP_SET.has(k)) return 0;
+    const t = water.typeAt(cx, cz);
+    if (t === 'river' || t === 'sea') return water.surfaceAt(x, z)?.y ?? WATER_Y;
+    return groundY(cx, cz);
+  };
   const trees = [], rand = rng(11);
   const addTree = (x, z) => {
     const v = Math.floor(rand() * 3), sd = Math.floor(rand() * 9999);
@@ -627,6 +639,11 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     let cx = Math.round(_hit.x / 2), cz = Math.round(_hit.z / 2);
     const py = new THREE.Plane(new THREE.Vector3(0, 1, 0), -MTN_STAND * state.mtnK);
     if (ray.intersectPlane(py, _hit)) { const mx = Math.round(_hit.x / 2), mz = Math.round(_hit.z / 2); if (terrainAt(mx, mz) === 'mountain') { cx = mx; cz = mz; } }
+    for (const dy of [BRIDGE_SPEC.riverDeckY, BRIDGE_SPEC.seaDeckY]) {   // 桥面比地面高：按桥面高度再取一次，点桥时选中的是桥格而不是桥后面的格子
+      if (!ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -dy), _hit)) continue;
+      const bx = Math.round(_hit.x / 2), bz = Math.round(_hit.z / 2);
+      if (bridgeInfo.has(bx + ',' + bz)) { cx = bx; cz = bz; break; }
+    }
     return [cx, cz];
   }
 
@@ -729,7 +746,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
 
   const api = {
-    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, mireDepth, MIRE,
+    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
