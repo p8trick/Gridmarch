@@ -3,6 +3,7 @@ import {buildWorld} from '../game/world.js';
 import {makeLevel1} from '../game/levels/level1.js';
 import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
+import {createCursor} from './cursor.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -55,7 +56,7 @@ const bounds = {x0: preset.x[0] * 2 - 1, x1: preset.x[1] * 2 + 1, z0: preset.z[0
 const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell;
 const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
 
-let dirty = true, lastQuarter = -1;
+let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
 function applyView() {   // 视角象限变化时才重排建筑朝向 / 附楼（旋转动画里只在过 45° 的那一刻发生一次）
   if (cam.quarter !== lastQuarter) { lastQuarter = cam.quarter; world.apply(cam.camA); }
@@ -71,9 +72,7 @@ function describe(c) {
   const t = b ? b.name : sets.bridge.has(k) ? '桥' : sets.mountain.has(k) ? '山地' : sets.desert.has(k) ? '沙漠' : sets.swamp.has(k) ? '沼泽' : sets.forest.has(k) ? '树林' : WATER[w] || (sets.road.has(k) ? '公路' : '平原');
   return `(${c[0]}, ${c[1]}) ${t}`;
 }
-const marker = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-.95, 0, -.95], [.95, 0, -.95], [.95, 0, .95], [-.95, 0, .95]].map(p => new THREE.Vector3(...p))),
-  new THREE.LineBasicMaterial({color: 0xffe08a, depthTest: false}));
-marker.renderOrder = 30; marker.visible = false; world.scene.add(marker);
+const cursor = createCursor(THREE); world.scene.add(cursor.group);   // 格子光圈（见 cursor.js）
 let picked = null;
 const raycaster = new THREE.Raycaster();
 function handleTap(px, py) {
@@ -81,8 +80,8 @@ function handleTap(px, py) {
   const c = world.cellFromRay(raycaster.ray);
   const inside = c && c[0] >= preset.x[0] && c[0] <= preset.x[1] && c[1] >= preset.z[0] && c[1] <= preset.z[1];
   picked = inside ? c : null;
-  if (picked) marker.position.set(c[0] * 2, world.groundY(c[0], c[1]) + .08, c[1] * 2);
-  marker.visible = !!picked; hud(); mark();
+  if (picked) cursor.show(c[0] * 2, world.groundY(c[0], c[1]), c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell'); else cursor.hide();
+  hud(); mark();
 }
 
 // ── HUD ──
@@ -138,6 +137,7 @@ function loop(now) {
   const camChanged = cam.update(dt);
   if (camChanged) { applyView(); hud(); dirty = true; }
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
+  if (cursor.update(now / 1000) && now - lastCur > 30) { dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
