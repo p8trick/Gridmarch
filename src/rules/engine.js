@@ -9,14 +9,18 @@ const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 // terrain：二维数组 terrain[y][x]，值是 TERRAINS 里的 id；
 // units：[{type, owner, x, y, hp?, ammo?, fuel?}]；players：[{style}]（默认两个均衡型军队）
-export function createGame({terrain, units = [], players, config = {}}) {
+// owners：{'x,y': 玩家序号}，产出建筑的归属（没写的是中立）；funds：各玩家开局资金（默认 0）
+export function createGame({terrain, units = [], players, config = {}, owners = {}, funds}) {
   const g = {
     w: terrain[0].length, h: terrain.length, terrain,
     config: {...CONFIG, ...config},
     players: players || [{style: DEFAULT_STYLE}, {style: DEFAULT_STYLE}],
     units: [], turn: 0, day: 1, winner: null, nextId: 1,
+    owners: {...owners}, funds: funds ? [...funds] : [], built: new Set(), everHad: [],
   };
+  while (g.funds.length < g.players.length) g.funds.push(0);
   for (const u of units) addUnit(g, u);
+  collectIncome(g);   // 第 1 天先手方也在回合开始领收入（开局资金 + 收入）
   return g;
 }
 
@@ -25,11 +29,35 @@ export function addUnit(g, u) {
   if (!TERRAINS[g.terrain[u.y]?.[u.x]]) throw Error('位置不在地图内 ' + u.x + ',' + u.y);
   const unit = {id: g.nextId++, type: u.type, owner: u.owner, x: u.x, y: u.y,
     hp: u.hp ?? 100, ammo: u.ammo ?? t.ammo, fuel: u.fuel ?? t.fuel, moved: false, acted: false};
-  g.units.push(unit); return unit;
+  g.everHad[u.owner] = true; g.units.push(unit); return unit;
 }
 
 export const unitAt = (g, x, y) => g.units.find(u => u.x === x && u.y === y) || null;
 export const getUnit = (g, id) => g.units.find(u => u.id === id) || null;
+
+// ── 经济：回合开始领收入；只有自己的兵工厂能生产陆军，每座每回合 1 个 ──
+export function incomeOf(g, player) {
+  let sum = 0;
+  for (const [k, o] of Object.entries(g.owners)) {
+    if (o !== player) continue;
+    const [x, y] = k.split(',').map(Number); sum += TERRAINS[g.terrain[y][x]].income || 0;
+  }
+  return Math.floor(sum * g.config.incomeMul);
+}
+function collectIncome(g) { g.funds[g.turn] += incomeOf(g, g.turn); g.built = new Set(); }
+
+export function produce(g, x, y, type) {
+  const t = UNITS[type], tr = TERRAINS[g.terrain[y]?.[x]];
+  if (!t || !tr || g.winner !== null) return {ok: false, err: '不能操作'};
+  if (tr !== TERRAINS.factory || g.owners[key(x, y)] !== g.turn) return {ok: false, err: '这里不是你的兵工厂'};
+  if (t.buildable === false || t.cost === null) return {ok: false, err: '这个单位暂不可生产'};
+  if (g.built.has(key(x, y))) return {ok: false, err: '这座兵工厂本回合已经生产过'};
+  if (unitAt(g, x, y)) return {ok: false, err: '兵工厂上有单位'};
+  if (g.funds[g.turn] < t.cost) return {ok: false, err: '资金不足'};
+  g.funds[g.turn] -= t.cost; g.built.add(key(x, y));
+  const u = addUnit(g, {type, owner: g.turn, x, y}); u.moved = u.acted = true;   // 新单位本回合不能行动
+  return {ok: true, unit: u};
+}
 
 // 可到达的格子：Map('x,y' → 已花的移动力）。敌方单位挡路；友方可穿过但不能停在上面。
 export function reachable(g, unit) {
@@ -88,9 +116,9 @@ export function wait(g, id) {
   u.moved = u.acted = true; return {ok: true};
 }
 
+// 歼灭：曾经有过单位、现在一个不剩的玩家出局（一开始就没有单位的不算，比如只测经济的场景）
 function checkWinner(g) {
-  const alive = g.players.map((_, i) => g.units.some(u => u.owner === i));
-  const left = alive.map((a, i) => a ? i : -1).filter(i => i >= 0);
+  const left = g.players.map((_, i) => i).filter(i => !g.everHad[i] || g.units.some(u => u.owner === i));
   if (left.length === 1) g.winner = left[0]; else if (left.length === 0) g.winner = -1;   // -1 = 同归于尽
 }
 
@@ -105,6 +133,7 @@ export function endTurn(g) {
   }
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
   for (const u of g.units) if (u.owner === g.turn) u.moved = u.acted = false;
+  collectIncome(g);
   return {ok: true};
 }
 

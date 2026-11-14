@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, move, attack, targetsOf, endTurn, wait, unitAt} from '../src/rules/engine.js';
+import {createGame, addUnit, reachable, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -89,6 +89,42 @@ t('军队风格：攻 +10% / 守 −10% 会改变伤害；默认均衡型 = 1', 
   const mk = style => createGame({terrain: map(2, 1), players: [{style}, {style: 'balanced'}], units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 1, y: 0}]});
   assert.equal(attack(mk('balanced'), 1, 2).hit.damage, 49);
   assert.equal(calcDamage({base: 55, attackerHp: 100, defenderHp: 100, stars: 1, atkMul: 1.1, defMul: 0.9}), Math.floor(55 * 1.1 * ((200 - 90 - 10) / 100)));
+});
+
+// 经济场景：0 号方 = 总部(0,0) + 兵工厂(1,0) + 大城市(2,0)；1 号方 = 兵工厂(6,0) + 总部(7,0)；(3,0) 小城市中立
+const econ = (o = {}) => {
+  const m = map(8, 1); [m[0][0], m[0][1], m[0][2], m[0][3], m[0][6], m[0][7]] = ['hq', 'factory', 'city_large', 'city_small', 'factory', 'hq'];
+  return createGame({terrain: m, owners: {'0,0': 0, '1,0': 0, '2,0': 0, '6,0': 1, '7,0': 1}, ...o});
+};
+
+t('收入：总部 1500 + 兵工厂 1000 + 大城市 1500；开局第一回合就领收入', () => {
+  const g = econ(); assert.equal(incomeOf(g, 0), 4000); assert.equal(incomeOf(g, 1), 2500);
+  assert.equal(g.funds[0], 4000); assert.equal(g.funds[1], 0);
+  endTurn(g); assert.equal(g.funds[1], 2500);                        // 1 号方轮到时领
+  assert.equal(econ({config: {incomeMul: 2}}).funds[0], 8000);        // 整体倍率
+});
+
+t('生产：扣钱、新单位本回合不能动、每座兵工厂每回合 1 个', () => {
+  const g = econ(); const r = produce(g, 1, 0, 'inf');
+  assert(r.ok); assert.equal(g.funds[0], 3000); assert(r.unit.moved && r.unit.acted);
+  assert(!produce(g, 1, 0, 'inf').ok);                                // 同一座本回合只能 1 个（也被占着）
+  assert(!move(g, r.unit.id, 2, 0).ok);                               // 新单位不能动
+  endTurn(g); endTurn(g); assert.equal(g.funds[0], 3000 + 4000);       // 下一个自己的回合：再领 4000
+  assert.equal(r.unit.moved, false);
+});
+
+t('生产限制：钱不够、中立 / 对方兵工厂、非兵工厂、防空导弹暂不可生产', () => {
+  const g = econ();
+  assert.equal(produce(g, 1, 0, 'tank').err, '资金不足');             // 4000 < 7000
+  assert.equal(produce(g, 6, 0, 'inf').err, '这里不是你的兵工厂');      // 对方的
+  assert.equal(produce(g, 2, 0, 'inf').err, '这里不是你的兵工厂');      // 大城市不能造
+  g.funds[0] = 99999; assert.equal(produce(g, 1, 0, 'missile').err, '这个单位暂不可生产');
+  assert(produce(g, 1, 0, 'neotank').ok); assert.equal(g.funds[0], 99999 - 20000);
+});
+
+t('价格表：11 个单位都有造价（防空导弹以外都可生产）', () => {
+  for (const id of UNIT_IDS) assert(UNITS[id].cost > 0, id);
+  assert.deepEqual(UNIT_IDS.filter(i => UNITS[i].buildable === false), ['missile']);
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);
