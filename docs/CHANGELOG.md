@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.32
+
+- 测试页顶部固定距离 55px → 52px：`src/app/ui.css`（`--top-safe`；错误条随之变为 52+52）
+- 主页菜单离岛侧边缘至少 52px：`home.css`（`--pad-l: max(5vw, 56px)`：按钮倾斜后最靠边的角约退进 4px，实测可见边缘 ≈ 52px；标题同步右移几像素）；`index.html`：`GM_VERSION` `0.31` → `0.32`
+
 ## 0.31
 
 - **测试页直接加到主屏幕时顶部空白**：`tests/units-terrain.html` 缺少 `apple-mobile-web-app-capable` 和 `status-bar-style=black-translucent`（`index.html`、`orientation.html` 都有），iOS 按默认状态栏样式把内容推到状态栏下面（inner 少了约 62px）。从主页跳转过去没问题，是因为沿用了主页已经建立的窗口样式。补上这几行 meta；已经加到主屏幕的旧图标要删掉重新添加才会生效。

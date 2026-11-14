@@ -9,7 +9,7 @@
   position:fixed;inset:0;overflow:hidden;visibility:hidden;animation:reveal 0s 3s forwards;
 
   /* 版式：全部集中在这里，改数字即可（不处理安全区，画面铺满） */
-  --pad-l:calc(var(--sw)*5);
+  --pad-l:max(calc(var(--sw)*5),56px);   /* 按钮倾斜后最靠边的角约退进 4px：56px 让可见边缘不小于 52px（岛下沿约 51px），灵动岛在这一侧时不遮按钮 */
   --pad-t:calc(var(--sh)*7);
   --pad-b:calc(var(--sh)*3);
   --title-h:min(calc(var(--sh)*22),calc(var(--sw)*10.5));   /* 标题高度（中英文同高） */

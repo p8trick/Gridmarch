@@ -1,6 +1,6 @@
 /* 全屏：html、body、画布都用 100vw×100vh，不用 height:100% / position:fixed;inset:0（竖屏独立窗口里它们矮 62，底部留白）；底部条的 bottom 用 calc(100% - 100vh) 补回这一截 */
-/* 顶部浮层离屏幕顶的固定距离（灵动岛下缘约 51px，取 55px）。不用 env(safe-area-inset-top)：从网址直接打开本页时它会在顶部多出一条空白 */
-:root{--top-safe:55px}
+/* 顶部浮层离屏幕顶的固定距离（灵动岛下缘约 51px，取 52px）。不用 env(safe-area-inset-top)：从网址直接打开本页时它会在顶部多出一条空白 */
+:root{--top-safe:52px}
 html,body{margin:0;width:100vw;height:100vh;background:#26333c;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font:14px -apple-system,system-ui,sans-serif;color:#fff}
 canvas{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block}
 #hud{position:fixed;left:8px;top:var(--top-safe);background:rgba(25,35,40,.82);border-radius:10px;padding:6px 10px;font-size:12px;line-height:1.5;white-space:pre;pointer-events:none}
