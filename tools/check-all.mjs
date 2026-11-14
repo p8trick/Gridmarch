@@ -5,6 +5,7 @@ const run = (script, args = []) => spawnSync(process.execPath, ['--no-warnings',
 let bad = 0;
 const r1 = run('check-layout.mjs'); process.stdout.write(r1.stdout.replace(/.*toNonIndexed.*\n/g, '')); if (r1.status) bad++;
 const r3 = run('check-coast-blob47.mjs'); process.stdout.write(r3.stdout); if (r3.status || /拒绝 [1-9]/.test(r3.stdout)) bad++;
+const r4 = run('check-rules.mjs'); process.stdout.write(r4.stdout + r4.stderr); if (r4.status) bad++;   // 规则引擎测试（0.33）
 const names = run('list-presets.mjs').stdout.split('\n').filter(l => /^[\w-]+$/.test(l));
 for (const k of names) {
   const r = run('check-water-seams.mjs', [k]); const rows = r.stdout.split('\n').filter(l => /边\d/.test(l));

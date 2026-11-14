@@ -16,6 +16,7 @@ npm run serve                 # python3 -m http.server 8080
 
 ```
 （战场不再是独立页面：0.30 起是 index.html 里的一个视图，代码在 src/battle/main.js）
+src/rules/      规则引擎（单位 / 地形 / 伤害表 / 移动 / 战斗 / 回合；纯数据与纯函数，`node tools/check-rules.mjs` 测试）
 test.html             单位×地形测试页（原 index.html，开发用）
 （根目录 index.html 属于主页，不在本仓库包里）
 src/
