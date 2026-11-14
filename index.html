@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
+<!-- 整个游戏只有这一个 html：主页（#homeView）和战场（#battle，js 模块 src/battle/main.js 按需载入）是同一文档里的两个视图，不做页面跳转，系统边缘滑动手势就没有历史可翻。 -->
 <!-- 启动图：必须是 PNG；iOS 要求 media 与设备精确匹配。仅 iPad 横屏；iPhone 不做（竖屏锁定时主页会自己转成横屏，见 src/battle/stage.js） -->
 <link rel="apple-touch-startup-image" href="assets/splash/ipad-2360x1640-landscape.png"
       media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
@@ -20,12 +21,29 @@
 <script>
 /* ★ 版本号：整个项目唯一的位置。每次更新文件后改这里（比如 0.1.0 → 0.1.1），主页自己的 css/js 和所有页面
    （战场、测试页）都会跟着换新文件，绕开 iOS 的死缓存。 */
-window.GM_VERSION = '0.29';
+window.GM_VERSION = '0.30';
 document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
+document.write('<link rel="stylesheet" href="src/battle/battle.css?v=' + GM_VERSION + '">');
 </script>
+<!--GM-BOOT self="1"-->
+<script>
+/* 由 tools/stamp.mjs 生成，请勿手改。版本号只在 index.html 里：主页带 ?v=版本 跳进来；直接打开没有 v 时用时间戳（永远拿最新）。 */
+(function () {
+  var v = window.GM_VERSION || 'dev', B = "./", im = {};
+  var FILES = ["app/main.js","art/palette.js","art/terrain/bridges/bridge-performance.js","art/terrain/bridges/bridges.js","art/terrain/building-performance.js","art/terrain/buildings-index.js","art/terrain/buildings-performance.js","art/terrain/desert-swamp/expansion-geometry.js","art/terrain/desert-swamp/expansion-performance.js","art/terrain/desert-swamp/expansion-terrain.js","art/terrain/dockyard-terrain.js","art/terrain/forest/forest-original.js","art/terrain/forest/forest-performance.js","art/terrain/mountain/mountain-rockmass.js","art/terrain/mountain/terrain-mountain-a2.js","art/terrain/mountain/terrain-mountain-performance.js","art/terrain/terrain-batch1.js","art/terrain/terrain-buildings.js","art/terrain/terrain-nature.js","art/terrain/terrain-transport.js","art/units/artillery-v2_0.js","art/units/infantry/anti-tank-batch.js","art/units/infantry/anti-tank-fire.js","art/units/infantry/anti-tank-performance.js","art/units/infantry/anti-tank-soldier.js","art/units/infantry/boot-profile.js","art/units/infantry/face-profile-trial.js","art/units/infantry/infantry-batch.js","art/units/infantry/infantry-factions.js","art/units/infantry/infantry-fire.js","art/units/infantry/infantry-performance.js","art/units/infantry/soldier-performance.js","art/units/infantry/soldier-rig.js","art/units/infantry/soldier-v5_2.js","art/units/tank-heavy/heavy-tank-animation.js","art/units/tank-heavy/shared/tank-fire.js","art/units/tank-heavy/shared/tracked-motion.js","art/units/tank-heavy/tank-performance.js","art/units/tank-heavy/tank.js","art/units/tank-heavy/track-path.js","art/units/tank-heavy/vehicle-animation.js","art/units/tank-light/animation/instance-moving-parts.js","art/units/tank-light/animation/shared/tank-fire.js","art/units/tank-light/animation/shared/tracked-motion.js","art/units/tank-light/animation/vehicle-animation.js","art/units/tank-light/light-track-v1_4.js","art/units/tank-light/model-core.js","art/units/tank-light/tank.js","art/units/tank-medium/tank-batching.js","art/units/tank-medium/tank-fire.js","art/units/tank-medium/tank-motion.js","art/units/tank-medium/tank-performance.js","art/units/tank-medium/tank.js","art/units/tank-medium/track-path.js","art/units/track-path.js","art/water/cliff-coast-c1.js","art/water/cliff-coast-rules.js","art/water/cliff-outline-warp.js","art/water/coast-final.js","art/water/coast-performance.js","art/water/coast-topology.js","art/water/coast47-component.js","art/water/coast47-mask.js","art/water/coast47-performance.js","art/water/coast47-plan.js","art/water/river-mouth-mt2.js","art/water/river-mouth.js","art/water/river-performance.js","art/water/river-r61-art.js","art/water/river-r61-footprint.js","art/water/sea-board-components.js","art/water/sea-performance.js","art/water/sea-study.js","art/water/shoal-blueprint-a7.js","art/water/shoal-rules.js","battle/camera.js","battle/main.js","battle/orientation-test.js","battle/stage.js","game/levels/index.js","game/levels/level1.js","game/map-builder.js","game/units/infantry-actors.js","game/units/tank-family.js","game/world.js","vendor/three.module.js"], BARE = {"three":"vendor/three.module.js","palette":"art/palette.js"};
+  function u(f) { return B + 'src/' + f + (f.indexOf('vendor/') === 0 ? '' : '?v=' + v); }   // vendor（three.js）不随版本号变，永远走缓存
+  FILES.forEach(function (f) { im[B + 'src/' + f] = u(f); });
+  for (var k in BARE) im[k] = u(BARE[k]);
+  window.GM_VERSION = v;
+  document.write('<script type="importmap">' + JSON.stringify({imports: im}) + '<\/script>');
+
+})();
+</script>
+<!--/GM-BOOT-->
 </head>
 <body>
 <div id="stage">
+<div id="homeView">
 <img class="bg" id="bg" alt="" decoding="async">
 <div class="scrim"></div>
 
@@ -54,6 +72,8 @@ document.write('<link rel="stylesheet" href="home.css?v=' + GM_VERSION + '">');
     <div class="row"><span data-i18n="volume">音量</span><em data-i18n="soon">即将开放</em></div>
   </div>
 </section>
+</div>
+<div id="battle" hidden></div>
 </div>
 
 <script>document.write('<script src="home.js?v=' + GM_VERSION + '"><\/script>');</script>

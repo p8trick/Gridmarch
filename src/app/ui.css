@@ -1,7 +1,9 @@
 /* 全屏：html、body、画布都用 100vw×100vh，不用 height:100% / position:fixed;inset:0（竖屏独立窗口里它们矮 62，底部留白）；底部条的 bottom 用 calc(100% - 100vh) 补回这一截 */
+/* 顶部浮层离屏幕顶的固定距离（灵动岛下缘约 51px，取 55px）。不用 env(safe-area-inset-top)：从网址直接打开本页时它会在顶部多出一条空白 */
+:root{--top-safe:55px}
 html,body{margin:0;width:100vw;height:100vh;background:#26333c;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font:14px -apple-system,system-ui,sans-serif;color:#fff}
 canvas{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block}
-#hud{position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 8px);background:rgba(25,35,40,.82);border-radius:10px;padding:6px 10px;font-size:12px;line-height:1.5;white-space:pre;pointer-events:none}
+#hud{position:fixed;left:8px;top:var(--top-safe);background:rgba(25,35,40,.82);border-radius:10px;padding:6px 10px;font-size:12px;line-height:1.5;white-space:pre;pointer-events:none}
 #bar{max-height:44vh;overflow:auto;position:fixed;left:0;right:0;bottom:calc(100% - 100vh);padding:8px 8px 8px;display:flex;flex-direction:column;gap:6px;background:linear-gradient(transparent,rgba(20,28,32,.85) 30%)}
 .row{display:flex;gap:6px;flex-wrap:wrap}
 button{flex:1 1 auto;min-width:64px;padding:9px 6px;border-radius:10px;border:1px solid #607078;background:rgba(35,48,54,.92);color:#fff;font-size:13px}
@@ -9,4 +11,4 @@ button.on{background:#3d7a4a;border-color:#8fd19e}
 .sl{display:flex;align-items:center;gap:8px;font-size:12px;background:rgba(35,48,54,.92);border-radius:10px;padding:4px 10px;flex:1 1 140px}
 .sl input{flex:1;min-width:0}
 .sl b{min-width:34px;text-align:right;font-weight:600}
-#err{position:fixed;inset:calc(env(safe-area-inset-top,0px) + 60px) 10px auto 10px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px}
+#err{position:fixed;inset:calc(var(--top-safe) + 52px) 10px auto 10px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px}

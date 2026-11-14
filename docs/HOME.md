@@ -23,7 +23,7 @@ assets/
 ## 3. 已定决策
 **菜单**：继续 / 单人对战 / 多人对战 / 编辑器 / 设置。
 - 继续：读 `localStorage` 键 `gridmarch.save`，没有则置灰且不可点。
-- 单人对战：跳 `BATTLE_URL`（= `battle.html?v=版本号`；以后改成选图页）。
+- 单人对战：`enterBattle()` 切到 `#battle` 视图并按需载入 `src/battle/main.js`（不跳转页面；以后改成选图页）。
 - 多人对战、编辑器：点击弹“即将开放”。
 - 开发入口不在菜单里：**2 秒内连点标题 5 次**跳 `DEV_URL`（= `tests/units-terrain.html?v=版本号`，单位 × 地形测试页，里面有「横屏测试」入口）。
 - 菜单项在 `home.js` 顶部 `MENU` 数组，增删只改这里。

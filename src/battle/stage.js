@@ -36,6 +36,7 @@ export class Stage {
     this.update();
   }
   onChange(f) { this.listeners.push(f); }
+  offChange(f) { this.listeners = this.listeners.filter(g => g !== f); }   // 战场拆除时摘掉自己的监听（舞台全程只有一个，监听不摘会越积越多）
   setSide(side) { this.side = side; try { localStorage.setItem(KEY, side); } catch (e) {} this.update(); }
   toggleSide() { this.setSide(this.side === 'left' ? 'right' : 'left'); }
   get noRot() { return NOROT; }

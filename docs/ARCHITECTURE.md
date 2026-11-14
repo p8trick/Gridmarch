@@ -12,7 +12,7 @@
 
 ## 2. 模块解析（importmap + 版本号启动脚本）
 
-各页面（`battle.html`、`tests/*.html`）的 `<head>` 里有一对注释 `<!--GM-BOOT entry="…" css="…"-->…<!--/GM-BOOT-->`，中间是 `tools/stamp.mjs` 生成的启动脚本。它启动时读网址里的 `?v=`（版本号只在 `index.html` 的 `GM_VERSION`，主页跳转时带上；直接打开无 `?v=` 就用时间戳），然后：
+各页面（`index.html`、`tests/*.html`；`index.html` 用 `self="1"` 只生成 importmap，入口由 home.js 按需 import）的 `<head>` 里有一对注释 `<!--GM-BOOT entry="…" css="…"-->…<!--/GM-BOOT-->`，中间是 `tools/stamp.mjs` 生成的启动脚本。它启动时读网址里的 `?v=`（版本号只在 `index.html` 的 `GM_VERSION`，主页跳转时带上；直接打开无 `?v=` 就用时间戳），然后：
 1. 用 `document.write` 写出 importmap：`three → src/vendor/three.module.js`、`palette → src/art/palette.js`，并把 `src/` 下**每个 js** 映射成 `路径?v=版本号`（three.js 不带版本，永远走缓存）；
 2. 再写出样式表和入口模块的 `<script type="module">`。
 

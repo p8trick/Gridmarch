@@ -20,6 +20,9 @@
   --bg-pos:55% 50%;                                          /* 背景焦点 */
 }
 #stage.ready{visibility:visible}
+/* 两个视图叠在舞台里：主页（#homeView）和战场（#battle，样式在 src/battle/battle.css）；切换只改 hidden，不跳转页面 */
+#homeView{position:absolute;inset:0}
+#homeView[hidden]{display:none}
 #stage.tall{--bg-pos:50% 50%}   /* 舞台比例 ≤ 16:9（iPad）：背景用专属图，居中即可 */
 @keyframes reveal{to{visibility:visible}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}

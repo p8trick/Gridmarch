@@ -4,14 +4,14 @@
 
   /* ===== 配置：增删菜单只改这里 ===== */
   var VER = window.GM_VERSION || 'dev';       // 版本号在 index.html 里（唯一位置）；跳转时带上 ?v=，各页面据此给所有文件加版本号
-  var BATTLE_URL = 'battle.html?v=' + VER;    // 单人对战 → 战场页（以后改成选图页）
+  var PARAMS = new URLSearchParams(location.search);   // 开发用：index.html?go=battle&seed=N&debug=1 直接进战场
   var DEV_URL = 'tests/units-terrain.html?v=' + VER;   // 开发入口：连点标题 5 次 → 单位×地形测试页
   var SAVE_KEY = 'gridmarch.save';            // 有这个键就视为有存档
   var LANG_KEY = 'gridmarch.lang';
 
   var MENU = [
     { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { toast: 'soon' } },
-    { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { link: BATTLE_URL } },
+    { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { battle: true } },
     { id: 'multi',    zh: '多人对战', en: 'Multiplayer',  sub: 'MULTIPLAYER',   go: { toast: 'soon' } },
     { id: 'editor',   zh: '编辑器',   en: 'Editor',       sub: 'EDITOR',        go: { toast: 'soon' } },
     { id: 'settings', zh: '设置',     en: 'Settings',     sub: 'SETTINGS',      go: { settings: true } }
@@ -76,7 +76,7 @@
   function activate(i) {
     if (isDisabled(i)) return;
     var g = MENU[i].go;
-    if (g.link) { setTimeout(function () { location.href = g.link; }, 120); }
+    if (g.battle) { setTimeout(function () { enterBattle(); }, 120); }
     else if (g.settings) { openSettings(); }
     else if (g.toast) { toast(g.toast); }
   }
@@ -90,6 +90,7 @@
     if (b) { select(items.indexOf(b)); activate(items.indexOf(b)); }
   });
   document.addEventListener('keydown', function (e) {
+    if (battleOn) return;
     if (!sheet.hidden) { if (e.key === 'Escape') closeSettings(); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
@@ -137,7 +138,7 @@
     if (taps >= 5) { taps = 0; location.href = DEV_URL; }
   });
 
-  /* ===== 虚拟横屏舞台：iPhone 竖屏锁定时整页转 90°（src/battle/stage.js，战场页同款）。主页没有换边按钮：在战场页里换，选择存在本机，主页自动跟着 ===== */
+  /* ===== 虚拟横屏舞台：iPhone 竖屏锁定时整页转 90°（src/battle/stage.js，主页和战场共用这一个舞台）。主页没有换边按钮：在战场里换，选择存在本机，主页自动跟着 ===== */
   var stageEl = $('#stage'), bgEl = $('#bg');
   var BG_WIDE = 'assets/home/home-bg.webp', BG_TALL = 'assets/home/home-bg-ipad.webp';
   function layout(st) {
@@ -146,17 +147,41 @@
     var src = tall ? BG_TALL : BG_WIDE;
     if (bgEl.getAttribute('src') !== src) bgEl.src = src;
   }
-  import('./src/battle/stage.js?v=' + VER).then(function (m) {
+  var stageP = import('./src/battle/stage.js').then(function (m) {   // 经 index.html 的 importmap 自动带版本号
     var st = new m.Stage(stageEl);
     st.onChange(layout); layout(st);
     stageEl.classList.add('ready');
-  }).catch(function () { bgEl.src = BG_WIDE; stageEl.classList.add('ready'); });   // 舞台加载失败：按原样显示
+    return st;
+  });
+  stageP.catch(function () { bgEl.src = BG_WIDE; stageEl.classList.add('ready'); });   // 舞台加载失败：按原样显示
+
+  /* ===== 视图切换：主页 ↔ 战场都在这一个文档里（不跳转页面，系统边缘滑动手势就没有历史可翻）=====
+     战场是 src/battle/main.js 里的模块，第一次进入时才载入；退出时它自己释放显存。 */
+  var homeEl = $('#homeView'), battleEl = $('#battle'), battleOn = false;
+  function enterBattle(seed) {
+    if (battleOn) return;
+    battleOn = true;
+    homeEl.hidden = true; battleEl.hidden = false;
+    battleEl.innerHTML = '<div id="loading">正在载入…</div>';
+    Promise.all([stageP, import('./src/battle/main.js')]).then(function (r) {
+      return r[1].mountBattle(battleEl, r[0], { seed: seed, debug: PARAMS.has('debug'), onExit: exitBattle });
+    }).catch(function (e) {
+      exitBattle(); toast('载入战场失败：' + (e && e.message || e));
+    });
+  }
+  function exitBattle() {
+    battleOn = false;
+    battleEl.hidden = true; battleEl.innerHTML = '';
+    homeEl.hidden = false;
+    if (sel >= 0) items[sel].focus({ preventScroll: true });
+  }
 
   /* ===== 启动 ===== */
   $('#ver').textContent = 'v' + VER;   // 右下角版本号
   build();
   applyLang();
   for (var i = 0; i < items.length; i++) { if (!isDisabled(i)) { select(i); break; } }
+  if (PARAMS.get('go') === 'battle') enterBattle(PARAMS.get('seed'));   // 开发直达
   // 预载另一种语言的标题，切换时无延迟
   setTimeout(function () { new Image().src = TITLE[lang === 'zh' ? 'en' : 'zh'].src; }, 800);
 })();

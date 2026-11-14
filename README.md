@@ -15,7 +15,7 @@ npm run serve                 # python3 -m http.server 8080
 ## 目录
 
 ```
-battle.html           战场页（正式游戏入口）：主页的"单人对战"跳这里
+（战场不再是独立页面：0.30 起是 index.html 里的一个视图，代码在 src/battle/main.js）
 test.html             单位×地形测试页（原 index.html，开发用）
 （根目录 index.html 属于主页，不在本仓库包里）
 src/
@@ -49,13 +49,13 @@ npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后�
 
 ## 战场页
 
-- 地址：`battle.html`；`?seed=N` 固定地图（不带则每次随机，种子显示在左下角）；`?debug=1` 显示帧率与面数。
+- 地址：`index.html?go=battle`（直达战场，开发用；平时从主页「单人对战」进）；`&seed=N` 固定地图（不带则每次随机，种子显示在左下角）；`?debug=1` 显示帧率与面数。
 - 相机：单指拖动平移，双指缩放（松手吸附 5/7/9 格），⟲ ⟳ 按钮 90° 旋转（旋转中心 = 屏幕中心的地面点），点格子显示地形。
 - 暂不做 Service Worker；缓存靠 `npm run stamp                 # 新增 / 删除 / 重命名 src/ 下的 js 后运行：重新生成各页面启动脚本里的文件清单
 
 ## 版本号与缓存（不做 Service Worker）
 
-- 版本号**只在 index.html 里**（`GM_VERSION`），主页跳转时带上 `?v=版本`：`battle.html?v=0.1.3`、`tests/xxx.html?v=0.1.3`。
+- 版本号**只在 index.html 里**（`GM_VERSION`），主页和战场是同一个文档，直接用 `GM_VERSION`；跳到测试页时带上 `?v=版本`：`tests/xxx.html?v=0.30`。
 - 每个页面 `<head>` 里的 `<!--GM-BOOT entry="…" css="…"-->` 之间是自动生成的启动脚本：读取 `?v=`，把 src/ 下每个 js 映射成 `路径?v=版本` 再加载入口模块。改了任何文件，只要在 index.html 里改一下版本号，所有页面全部拿新文件。
 - 直接打开页面（没有 `?v=`）用时间戳，每次都拿最新；three.js 不跟版本号走。
 - 新增测试页：复制一个现有页面，改 `entry` / `css` 两个属性，运行 `npm run stamp` 即可。

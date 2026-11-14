@@ -4,7 +4,14 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
-## 0.29（本窗口最后一版）
+## 0.30（新窗口第一版）
+
+- **战场并入主页，整个游戏只有一个 html**（不再有页面跳转，系统边缘滑动前进 / 后退手势没有历史可翻）：删除 `battle.html`；`index.html`（新增 `#homeView` / `#battle` 两个视图、`<!--GM-BOOT self="1"-->` 只生成 importmap）、`home.js`（单人对战 = 切换视图并按需 `import('./src/battle/main.js')`；舞台只创建一次、两个视图共用；开发直达 `index.html?go=battle&seed=N&debug=1`）、`home.css`（`#homeView`）、`src/battle/main.js`（改成 `mountBattle` / `unmountBattle`，退出和「换图」时停循环、摘监听、释放显存与 WebGL 上下文；「换图」原地重建，不再刷新页面）、`src/battle/battle.css`（全部挂在 `#battle` 下）、`src/battle/stage.js`（新增 `offChange`）、`tools/stamp.mjs`（支持 `self="1"` 和无入口页面）
+- `tests/units-terrain.html` 顶部不再用 `env(safe-area-inset-top)`（从网址直接打开时顶部会多出空白）：`src/app/ui.css`（新增 `--top-safe:55px`，`#hud`、`#err` 用它）、`tests/units-terrain.html`（`#bFold`）；原来多出来的 +8px 间距一并去掉
+- 文档：`README.md`、`docs/HOME.md`、`docs/ARCHITECTURE.md` 同步页面结构（`docs/HANDOFF.md` 按习惯等本轮结束时再整理）
+- `index.html`：`GM_VERSION` `0.29` → `0.30`
+
+## 0.29
 - `tests/units-terrain.html` 顶部加安全区（竖屏下免得被灵动岛挡）：`src/app/ui.css`（`#hud`、`#err`）、`tests/units-terrain.html`（`#bFold`）的 `top` 加 `env(safe-area-inset-top)`
 - `docs/HANDOFF.md` 按本窗口结果整理：新窗口从 0.30 起；§5 改写（舞台方案、全屏规则、安全区例外、排查工具、沿革）；§7 新增“竖屏状态栏图标”未解决项；§10 教训；§3 / §4 补自动应用工作流
 - `index.html`：`GM_VERSION` `0.28` → `0.29`
