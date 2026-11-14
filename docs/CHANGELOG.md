@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.31
+
+- **测试页直接加到主屏幕时顶部空白**：`tests/units-terrain.html` 缺少 `apple-mobile-web-app-capable` 和 `status-bar-style=black-translucent`（`index.html`、`orientation.html` 都有），iOS 按默认状态栏样式把内容推到状态栏下面（inner 少了约 62px）。从主页跳转过去没问题，是因为沿用了主页已经建立的窗口样式。补上这几行 meta；已经加到主屏幕的旧图标要删掉重新添加才会生效。
+- `index.html`：`GM_VERSION` `0.30` → `0.31`
+
 ## 0.30（新窗口第一版）
 
 - **战场并入主页，整个游戏只有一个 html**（不再有页面跳转，系统边缘滑动前进 / 后退手势没有历史可翻）：删除 `battle.html`；`index.html`（新增 `#homeView` / `#battle` 两个视图、`<!--GM-BOOT self="1"-->` 只生成 importmap）、`home.js`（单人对战 = 切换视图并按需 `import('./src/battle/main.js')`；舞台只创建一次、两个视图共用；开发直达 `index.html?go=battle&seed=N&debug=1`）、`home.css`（`#homeView`）、`src/battle/main.js`（改成 `mountBattle` / `unmountBattle`，退出和「换图」时停循环、摘监听、释放显存与 WebGL 上下文；「换图」原地重建，不再刷新页面）、`src/battle/battle.css`（全部挂在 `#battle` 下）、`src/battle/stage.js`（新增 `offChange`）、`tools/stamp.mjs`（支持 `self="1"` 和无入口页面）
