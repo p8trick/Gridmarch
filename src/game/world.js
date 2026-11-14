@@ -299,6 +299,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   };
 
   // 树：连片林按抖动网格铺满；孤立林格（周围无林）随机 2–3 棵，避免"只有一棵"的寒酸感
+  // 格子的地面高度：山体取山脚（groundY 对山体返回山顶站位点，那是摆单位用的；画格子光圈要贴在地面上，否则透视下会偏上）
+  const baseY = (cx, cz) => hills.has(cx + ',' + cz) ? 0 : groundY(cx, cz);
   const trees = [], rand = rng(11);
   const addTree = (x, z) => {
     const v = Math.floor(rand() * 3), sd = Math.floor(rand() * 9999);
@@ -727,7 +729,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
 
   const api = {
-    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, mireDepth, MIRE,
+    scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

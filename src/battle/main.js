@@ -80,7 +80,7 @@ function handleTap(px, py) {
   const c = world.cellFromRay(raycaster.ray);
   const inside = c && c[0] >= preset.x[0] && c[0] <= preset.x[1] && c[1] >= preset.z[0] && c[1] <= preset.z[1];
   picked = inside ? c : null;
-  if (picked) cursor.show(c[0] * 2, world.groundY(c[0], c[1]), c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell'); else cursor.hide();
+  if (picked) cursor.show(c[0] * 2, world.baseY(c[0], c[1]), c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell'); else cursor.hide();
   hud(); mark();
 }
 
