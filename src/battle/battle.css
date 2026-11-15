@@ -21,7 +21,8 @@
 #battle .ars-row{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:12px;top:8px;bottom:10px;display:flex;gap:12px}
 #battle .ars-box{position:relative;background:var(--bg);color:var(--text);border:3px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
 #battle .ars-box::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:var(--army);z-index:2}
-#battle .ars-menu{flex:none;width:236px;padding:12px 8px 8px 10px}
+#battle .ars.side-r .ars-row{left:12px;right:max(calc(var(--sw,1px) * 5),56px)}   /* 灵动岛在右边时，右边多留空，展示盒不被遮 */
+#battle .ars-menu{flex:none;width:224px;padding:12px 8px 8px 10px}
 #battle .ars-show{flex:1;min-width:0;padding:10px;background:transparent}   /* 右盒本身不画底色：奶油色全靠 .ars-pv 的外扩阴影，这样窗口才是透的 */
 #battle .ars-head{display:flex;align-items:center;justify-content:space-between;height:34px;flex:none;padding-right:2px}
 #battle .ars-head>b{font-size:17px;font-weight:800}

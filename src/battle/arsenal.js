@@ -19,8 +19,9 @@ const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线�
 const TEAM_NAME = {blue: '蓝军', red: '红军'};
 
 export function createArsenal({THREE, renderer, host, stage, game}) {
-  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, drag = null, el = null, pv = null, toastT = 0;
-  const cache = new Map();   // 'type|team' → {holder} | null（尚未建模）| 'error'
+  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0;
+  const cache = new Map(), pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
+   // 'type|team' → {holder} | null（尚未建模）| 'error'
 
   // ── 预览场景（独立于战场）──
   const scene = new THREE.Scene();
@@ -71,7 +72,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   // ── DOM ──
   const funds = () => game.funds[team === 'blue' ? 0 : 1];
   function build() {
-    el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r');
+    el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r') + (stage.side === 'right' ? ' side-r' : ' side-l');   // 灵动岛在哪一边，那一边就多留出空来
     el.innerHTML = `<div class="ars-dim"></div><div class="ars-row">
       <div class="ars-box ars-menu">
         <div class="ars-head"><b>兵工厂</b><span class="ars-fund">资金 <b id="arsFund"></b></span></div>
@@ -80,19 +81,46 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       <div class="ars-box ars-show">
         <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
           <div class="ars-tag"><b id="arsName"></b><button class="ars-sw" data-act="team">${TEAM_NAME[team]}</button></div>
-          <button class="ars-x" data-act="close" aria-label="关闭">✕</button><small class="ars-hint">拖动旋转</small></div>
+          <button class="ars-x" data-act="close" aria-label="关闭">✕</button><small class="ars-hint">拖动旋转 · 双指缩放 · 双击复位</small></div>
         <div class="ars-bar"><div class="ars-stats"></div><button class="ars-buy" data-act="buy"></button></div>
         <div class="ars-toast"></div>
       </div></div>`;
     host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv');
-    pv.onpointerdown = e => { if (e.target.closest('button')) return; drag = {x: e.clientX, y: e.clientY, spin}; pv.setPointerCapture(e.pointerId); };
-    pv.onpointermove = e => { if (drag) spin = drag.spin + stage.vec(e.clientX - drag.x, e.clientY - drag.y).x * .012; };   // 舞台被旋转时，横向滑动落在逻辑坐标的另一个轴上：两个分量都要交给 vec 换算
-    pv.onpointerup = pv.onpointercancel = () => { drag = null; };
+    // 手势：单指 = 转模型；双指 = 捏合缩放（1×–4.5×，超近距离看细节）+ 双指一起拖动平移；双击 = 复位；电脑上滚轮缩放。
+    // 舞台被旋转时，手指向量要经 stage.vec 换算到逻辑坐标（横向滑动落在另一个轴上：两个分量都要交给 vec）
+    const startGesture = () => {
+      const a = [...pts.values()];
+      if (a.length === 1) gest = {m: 'rot', x: a[0].x, y: a[0].y, spin};
+      else if (a.length >= 2) { const [p, q] = a; gest = {m: 'zoom', d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, mx: (p.x + q.x) / 2, my: (p.y + q.y) / 2, px: panX, py: panY}; }
+    };
+    const clampView = () => { zoom = Math.min(4.5, Math.max(1, zoom)); if (zoom < 1.02) { zoom = 1; panX = panY = 0; return; } const hh = current ? current.h : 1.5; panX = Math.min(1.8, Math.max(-1.8, panX)); panY = Math.min(hh * .6 + .2, Math.max(-hh * .6 - .2, panY)); };
+    const resetView = () => { zoom = 1; panX = panY = 0; };
+    pv.onpointerdown = e => {
+      if (e.target.closest('button')) return;
+      pts.set(e.pointerId, {x: e.clientX, y: e.clientY}); pv.setPointerCapture(e.pointerId); startGesture();
+      tapDown = pts.size === 1 ? {x: e.clientX, y: e.clientY, t: performance.now()} : null;
+    };
+    pv.onpointermove = e => {
+      const p = pts.get(e.pointerId); if (!p) return; p.x = e.clientX; p.y = e.clientY; if (!gest) return;
+      if (gest.m === 'rot') spin = gest.spin + stage.vec(p.x - gest.x, p.y - gest.y).x * .012;
+      else {
+        const [a, b] = [...pts.values()]; zoom = gest.z * (Math.hypot(a.x - b.x, a.y - b.y) / gest.d);
+        const v = stage.vec((a.x + b.x) / 2 - gest.mx, (a.y + b.y) / 2 - gest.my); panX = gest.px - v.x * pxW; panY = gest.py + v.y * pxW; clampView();
+      }
+    };
+    pv.onpointerup = pv.onpointercancel = e => {
+      pts.delete(e.pointerId);
+      if (e.type === 'pointerup' && tapDown && !pts.size && performance.now() - tapDown.t < 300 && Math.hypot(e.clientX - tapDown.x, e.clientY - tapDown.y) < 8) {   // 轻点；350ms 内连点两次 = 复位
+        const now = performance.now(); if (now - lastTap < 350) { resetView(); lastTap = 0; } else lastTap = now;
+      }
+      tapDown = null; if (pts.size) startGesture(); else gest = null;
+    };
+    pv.addEventListener('wheel', e => { e.preventDefault(); zoom *= e.deltaY < 0 ? 1.12 : 1 / 1.12; clampView(); }, {passive: false});
     el.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.u) { sel = b.dataset.u; spin = .5; refresh(); }
+      if (b.dataset.u) { sel = b.dataset.u; spin = .5; resetView(); refresh(); }
       else if (b.dataset.act === 'close') close();
-      else if (b.dataset.act === 'team') { team = team === 'blue' ? 'red' : 'blue'; el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r'); b.textContent = TEAM_NAME[team]; refresh(); }   // 仅供验收美术：换军队色看模型
+      else if (b.dataset.act === 'team') { team = team === 'blue' ? 'red' : 'blue'; el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r') + (stage.side === 'right' ? ' side-r' : ' side-l'); b.textContent = TEAM_NAME[team]; refresh(); }   // 仅供验收美术：换军队色看模型
       else if (b.dataset.act === 'buy') toast('演示：生产还没接入引擎（不扣钱、不出兵）');
     });
     refresh();
@@ -115,7 +143,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   function toast(m) { const t = el.querySelector('.ars-toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1600); }
 
   function open(cell, owner) { if (el) close(); openCell = cell; team = TEAM_NAME[owner] ? owner : 'blue'; build(); }
-  function close() { if (!el) return; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; drag = null; if (current) { turn.remove(current.holder); current = null; } }
+  function close() { if (!el) return; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; pts.clear(); gest = null; resetView(); if (current) { turn.remove(current.holder); current = null; } }
 
   // ── 每帧：把预览画进右侧留空矩形（舞台旋转时也成立：DOM 在舞台内，用 offset 链取逻辑坐标）──
   const v4 = new THREE.Vector4(), s4 = new THREE.Vector4();
@@ -123,7 +151,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   function renderPreview(dt) {
     if (!el || !pv) return;
     const r = rect(); if (r.w < 8 || r.h < 8) return;
-    if (!drag) spin += dt * .6;
+    if (!gest && zoom < 1.05) spin += dt * .6;   // 手指按着、或已经放大在看细节时不自转
     turn.rotation.y = spin;
     const hole = `${r.x},${r.y},${r.w},${r.h}`;
     if (hole !== lastHole) {   // 预览窗位置变了才重挖：压暗层在窗口矩形处挖洞，转台才不会被压暗（窗口四角的圆角由 .ars-pv 外扩的奶油色阴影盖住）
@@ -134,8 +162,9 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     const asp = r.w / r.h, fov = 28, hh = current ? current.h : 1.5, half = hh / 2 * 1.14 + .5, ty = hh / 2 - .12;
     cam.aspect = asp; cam.fov = fov; cam.updateProjectionMatrix();
     const fitV = half / Math.sin(fov * Math.PI / 360), fitH = 2.3 / Math.sin(Math.atan(Math.tan(fov * Math.PI / 360) * asp));
-    const d = Math.max(fitV, fitH), el20 = .3;
-    cam.position.set(0, ty + d * Math.sin(el20), d * Math.cos(el20)); cam.lookAt(0, ty, 0);
+    const d = Math.max(fitV, fitH) / zoom, el20 = .3, tY = ty + panY;   // 缩放 = 相机拉近；平移 = 观察点在 x / y 上移动
+    cam.position.set(panX, tY + d * Math.sin(el20), d * Math.cos(el20)); cam.lookAt(panX, tY, 0);
+    pxW = 2 * d * Math.tan(fov * Math.PI / 360) / r.h;   // 每个屏幕像素对应的世界距离（平移手势用）
     renderer.getViewport(v4); renderer.getScissor(s4); const st = renderer.getScissorTest(), ar = renderer.autoClear;
     const vy = stage.h - (r.y + r.h);
     renderer.setViewport(r.x, vy, r.w, r.h); renderer.setScissor(r.x, vy, r.w, r.h); renderer.setScissorTest(true); renderer.autoClear = true;
