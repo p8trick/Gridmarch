@@ -71,6 +71,14 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
 
   // ── DOM ──
   const funds = () => game.funds[team === 'blue' ? 0 : 1];
+  // 视图 / 手势辅助：必须在 build() 之外定义——close() 也要用 resetView（0.46 把它们放进了 build() 里，关闭面板时报 ReferenceError）
+  const startGesture = () => {
+    const a = [...pts.values()];
+    if (a.length === 1) gest = {m: 'rot', x: a[0].x, y: a[0].y, spin};
+    else if (a.length >= 2) { const [p, q] = a; gest = {m: 'zoom', d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, mx: (p.x + q.x) / 2, my: (p.y + q.y) / 2, px: panX, py: panY}; }
+  };
+  const clampView = () => { zoom = Math.min(4.5, Math.max(1, zoom)); if (zoom < 1.02) { zoom = 1; panX = panY = 0; return; } const hh = current ? current.h : 1.5; panX = Math.min(1.8, Math.max(-1.8, panX)); panY = Math.min(hh * .6 + .2, Math.max(-hh * .6 - .2, panY)); };
+  const resetView = () => { zoom = 1; panX = panY = 0; };
   function build() {
     el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r');
     el.innerHTML = `<div class="ars-dim"></div><div class="ars-row">
@@ -88,13 +96,6 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv');
     // 手势：单指 = 转模型；双指 = 捏合缩放（1×–4.5×，超近距离看细节）+ 双指一起拖动平移；双击 = 复位；电脑上滚轮缩放。
     // 舞台被旋转时，手指向量要经 stage.vec 换算到逻辑坐标（横向滑动落在另一个轴上：两个分量都要交给 vec）
-    const startGesture = () => {
-      const a = [...pts.values()];
-      if (a.length === 1) gest = {m: 'rot', x: a[0].x, y: a[0].y, spin};
-      else if (a.length >= 2) { const [p, q] = a; gest = {m: 'zoom', d: Math.hypot(p.x - q.x, p.y - q.y) || 1, z: zoom, mx: (p.x + q.x) / 2, my: (p.y + q.y) / 2, px: panX, py: panY}; }
-    };
-    const clampView = () => { zoom = Math.min(4.5, Math.max(1, zoom)); if (zoom < 1.02) { zoom = 1; panX = panY = 0; return; } const hh = current ? current.h : 1.5; panX = Math.min(1.8, Math.max(-1.8, panX)); panY = Math.min(hh * .6 + .2, Math.max(-hh * .6 - .2, panY)); };
-    const resetView = () => { zoom = 1; panX = panY = 0; };
     pv.onpointerdown = e => {
       if (e.target.closest('button')) return;
       pts.set(e.pointerId, {x: e.clientX, y: e.clientY}); pv.setPointerCapture(e.pointerId); startGesture();

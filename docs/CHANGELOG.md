@@ -4,6 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.48
+
+- **修复：关闭 / 重开兵工厂界面报 `ReferenceError: Can't find variable: resetView`**（红色错误条）。0.46 加双指缩放时把 `resetView` / `clampView` / `startGesture` 定义在 `build()` 里面，而 `close()` 在外面也要调 `resetView`，一关闭面板就报错。现在三者都在 `createArsenal` 外层定义。无头浏览器里补了「打开 → 选兵种 → ✕ 关闭 → 再打开」连做 3 轮的冒烟测试，无报错（`npm test` 不跑浏览器，这类运行时错误它抓不到，所以 0.46 / 0.47 没被拦住）
+- `src/battle/arsenal.js`；`index.html`：`GM_VERSION` `0.47` → `0.48`
+
 ## 0.47
 
 - **兵工厂界面左右边距一致**：两边都留 `max(5·sw, 56px)`（以灵动岛一侧为准），另一侧不再被屏幕圆角吃掉，也离手势区远一点；展示面板左右宽度相应缩小。去掉 0.46 的按灵动岛侧区分的 `side-r` 逻辑
