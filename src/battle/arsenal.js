@@ -1,4 +1,4 @@
-import {UNITS, UNIT_IDS} from '../rules/data.js';
+import {UNITS, UNIT_IDS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER} from '../rules/data.js';
 import {createTank} from '../game/units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
@@ -90,7 +90,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
         <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
           <div class="ars-tag"><b id="arsName"></b><button class="ars-sw" data-act="team">${TEAM_NAME[team]}</button></div>
           <button class="ars-x" data-act="close" aria-label="关闭">✕</button><small class="ars-hint">拖动旋转 · 双指缩放 · 双击复位</small></div>
-        <div class="ars-bar"><div class="ars-stats"></div><button class="ars-buy" data-act="buy"></button></div>
+        <div class="ars-bar"><div class="ars-top"><div class="ars-stats"></div><button class="ars-buy" data-act="buy"></button></div><div class="ars-wps"></div></div>
         <div class="ars-toast"></div>
       </div></div>`;
     host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv');
@@ -172,7 +172,12 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     });
     const u = UNITS[sel], lock = u.buildable === false, poor = !lock && u.cost > f, r = u.range;
     el.querySelector('#arsName').textContent = u.name;
-    el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${r[0] === r[1] ? r[0] : r.join('–')}</b>射程</div><div><b>${u.ammo || '—'}</b>弹药</div>`;
+    // 数据条：移动 / 射程 / 弹药 / 燃料（0.51；步兵类燃料是 Infinity，显示 ∞；射程里间接火力单位带「间接」）
+    const rg = r[0] === r[1] ? r[0] : r.join('–'), fuel = u.fuel === Infinity ? '∞' : u.fuel;
+    el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${rg}</b>射程${u.indirect ? '·间接' : ''}</div><div><b>${u.ammo || '—'}</b>弹药</div><div><b>${fuel}</b>燃料</div>`;
+    // 火力：主炮 / 副炮各一排 11 个目标章（字 = 目标兵种，数字 = 基础伤害 %）；强 / 中 / 弱三档颜色，打不了的灰掉
+    const wrow = (name, sub, tbl) => `<div class="ars-wp${tbl ? '' : ' off'}"><span class="ars-wl"><b>${name}</b><i>${sub}</i></span>${TARGET_ORDER.map(t => { const v = tbl ? tbl[t] : null; return `<span class="ars-tg ${v == null ? 'no' : v >= 85 ? 'hi' : v >= 40 ? 'mid' : 'lo'}"><em>${GLYPH[t]}</em>${v == null ? '–' : v}</span>`; }).join('')}</div>`;
+    el.querySelector('.ars-wps').innerHTML = wrow('主炮', u.primary ? '弹' + u.ammo : '无', u.primary ? DMG_PRIMARY[sel] || {} : null) + wrow('副炮', u.secondary ? '不耗弹' : '无', u.secondary ? DMG_SECONDARY[sel] || {} : null);
     const buy = el.querySelector('.ars-buy'); buy.disabled = lock || poor; buy.textContent = lock ? '暂不可生产' : poor ? '资金不足 · ' + u.cost : '生产 · ' + u.cost;
     showModel();
     const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）

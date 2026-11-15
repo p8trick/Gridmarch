@@ -21,11 +21,12 @@ export const STYLES = {
 export const DEFAULT_STYLE = 'balanced';
 
 // ── 陆军 11 种 ──
+// fuel：步兵类（步兵、反坦克兵）= Infinity（无限，界面显示 ∞，和高战2 的 99 / 70 区分；扣燃料、补给的算术对 Infinity 都成立）。
 // move 移动力；vision 视野（暂不用，雾战关着）；mt 移动类型；range [最近, 最远]；fuel / ammo 满值；
 // primary：有主武器（耗弹）；secondary：有副武器（机枪，不耗弹）；indirect：间接火力（不能移动后开火、不能被反击、不能打相邻）
 export const UNITS = {
-  inf:     {name: '步兵',     move: 3, vision: 2, mt: 'foot',  range: [1, 1], fuel: 99, ammo: 0, primary: false, secondary: true,  indirect: false, capture: true,  cost: 1000},
-  mech:    {name: '反坦克兵',   move: 2, vision: 2, mt: 'mech',  range: [1, 1], fuel: 70, ammo: 3, primary: true,  secondary: true,  indirect: false, capture: true,  cost: 3000},
+  inf:     {name: '步兵',     move: 3, vision: 2, mt: 'foot',  range: [1, 1], fuel: Infinity, ammo: 0, primary: false, secondary: true,  indirect: false, capture: true,  cost: 1000},
+  mech:    {name: '反坦克兵',   move: 2, vision: 2, mt: 'mech',  range: [1, 1], fuel: Infinity, ammo: 3, primary: true,  secondary: true,  indirect: false, capture: true,  cost: 3000},
   recon:   {name: '快速侦察车', move: 8, vision: 5, mt: 'wheel', range: [1, 1], fuel: 80, ammo: 0, primary: false, secondary: true,  indirect: false, capture: false, cost: 4000},
   apc:     {name: '装甲运输车', move: 6, vision: 1, mt: 'tread', range: [1, 1], fuel: 70, ammo: 0, primary: false, secondary: false, indirect: false, capture: false, cost: 4000},
   tank:    {name: '轻坦',     move: 6, vision: 3, mt: 'tread', range: [1, 1], fuel: 70, ammo: 9, primary: true,  secondary: true,  indirect: false, capture: false, cost: 7000},
