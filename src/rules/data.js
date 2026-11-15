@@ -25,7 +25,7 @@ export const DEFAULT_STYLE = 'balanced';
 // primary：有主武器（耗弹）；secondary：有副武器（机枪，不耗弹）；indirect：间接火力（不能移动后开火、不能被反击、不能打相邻）
 export const UNITS = {
   inf:     {name: '步兵',     move: 3, vision: 2, mt: 'foot',  range: [1, 1], fuel: 99, ammo: 0, primary: false, secondary: true,  indirect: false, capture: true,  cost: 1000},
-  mech:    {name: '机械兵',   move: 2, vision: 2, mt: 'mech',  range: [1, 1], fuel: 70, ammo: 3, primary: true,  secondary: true,  indirect: false, capture: true,  cost: 3000},
+  mech:    {name: '反坦克兵',   move: 2, vision: 2, mt: 'mech',  range: [1, 1], fuel: 70, ammo: 3, primary: true,  secondary: true,  indirect: false, capture: true,  cost: 3000},
   recon:   {name: '快速侦察车', move: 8, vision: 5, mt: 'wheel', range: [1, 1], fuel: 80, ammo: 0, primary: false, secondary: true,  indirect: false, capture: false, cost: 4000},
   apc:     {name: '装甲运输车', move: 6, vision: 1, mt: 'tread', range: [1, 1], fuel: 70, ammo: 0, primary: false, secondary: false, indirect: false, capture: false, cost: 4000},
   tank:    {name: '轻坦',     move: 6, vision: 3, mt: 'tread', range: [1, 1], fuel: 70, ammo: 9, primary: true,  secondary: true,  indirect: false, capture: false, cost: 7000},
@@ -39,7 +39,7 @@ export const UNITS = {
 export const UNIT_IDS = Object.keys(UNITS);
 
 // ── 地形：cost = 各移动类型的消耗（null 不可进入）；stars = 防御星（0–4）──
-// 收入（income）：高战2 里所有产出建筑都是 1000/回合；我们改成 总部 / 大城市 1500，其余 1000。
+// 收入（income）：高战2 里所有产出建筑都是 1000/回合；0.41 起：总部 / 大城市 / 兵工厂 / 机场 / 船坞 1000，小城市 700（钱不能来得太容易，前期抢城才有意义）。
 // 前 13 项取自高战2（晴天）。city_large / city_small 的防御星、占领点数先与原作的城市相同，收入与修理量等经济规则以后再分。
 const P = {foot: 1, mech: 1, tread: 1, wheel: 1};          // 全部消耗 1
 export const TERRAINS = {
@@ -51,9 +51,9 @@ export const TERRAINS = {
   shoal:      {name: '浅滩',   stars: 0, cost: {...P}},
   road:       {name: '公路',   stars: 0, cost: {...P}},
   bridge:     {name: '桥梁',   stars: 0, cost: {...P}},
-  hq:         {name: '总部',   stars: 4, cost: {...P}, income: 1500, property: true, capture: 20},
-  city_large: {name: '大城市', stars: 3, cost: {...P}, income: 1500, property: true, capture: 20},
-  city_small: {name: '小城市', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
+  hq:         {name: '总部',   stars: 4, cost: {...P}, income: 1000, property: true, capture: 20},
+  city_large: {name: '大城市', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
+  city_small: {name: '小城市', stars: 3, cost: {...P}, income: 700, property: true, capture: 20},
   factory:    {name: '兵工厂', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   airport:    {name: '机场',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   port:       {name: '船坞',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},

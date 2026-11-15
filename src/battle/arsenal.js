@@ -7,7 +7,7 @@ import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performanc
 // 兵工厂界面（0.42）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
-const GLYPH = {inf: '兵', mech: '机', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
+const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
 const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线版，不是战场上的批量性能版）；没有的 = 尚未建模
   inf: team => { const u = createInfantryBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
   mech: team => { const u = createAntiTankBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
@@ -23,19 +23,34 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   const cache = new Map();   // 'type|team' → {holder} | null（尚未建模）| 'error'
 
   // ── 预览场景（独立于战场）──
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#030405');
-  scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x39424f, 1.5));
-  const sun = new THREE.DirectionalLight(0xfff1d6, 2.6); sun.position.set(-4, 7, 5); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, {left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20}); sun.shadow.bias = -.0004; scene.add(sun);
+  const scene = new THREE.Scene();
+  // 背景：暖米色径向渐变 + 轻微暗角（和奶油白面板同色系，比面板略深，产品摄影棚的感觉）
+  const mk = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const bgTex = mk(256, 256, (x, w, h) => { const g = x.createRadialGradient(w * .5, h * .42, 8, w * .5, h * .5, w * .78); g.addColorStop(0, '#f6ead0'); g.addColorStop(.6, '#e2d0a8'); g.addColorStop(1, '#bba67c'); x.fillStyle = g; x.fillRect(0, 0, w, h); });
+  scene.background = bgTex;
+  // 三点布光：暖色主光（投影）+ 冷色补光 + 背后轮廓光（给模型边缘勾亮边，和背景分开）
+  scene.add(new THREE.HemisphereLight(0xfff4de, 0x9a8a6a, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff0d2, 2.7); sun.position.set(-4, 7, 5); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, {left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20}); sun.shadow.bias = -.0004; sun.shadow.radius = 5; sun.shadow.normalBias = .02; scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xa9c6ff, .9); fill.position.set(6, 3, 3); scene.add(fill);
+  const rimL = new THREE.DirectionalLight(0xffffff, 2.2); rimL.position.set(2, 5, -7); scene.add(rimL);
   const base = new THREE.Group(); scene.add(base);
-  // 展台 = 纯黑虚空，不画转盘：脚下一圈很淡的柔光（让人感觉脚踩着地）+ 只接收阴影的透明地面（阴影在柔光上才看得见）
-  const gc = document.createElement('canvas'); gc.width = gc.height = 256; { const x = gc.getContext('2d'), g = x.createRadialGradient(128, 128, 0, 128, 128, 128); g.addColorStop(0, 'rgba(120,150,180,.55)'); g.addColorStop(.55, 'rgba(70,95,125,.22)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 256, 256); }
-  const poolTex = new THREE.CanvasTexture(gc); poolTex.colorSpace = THREE.SRGBColorSpace;
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 48), new THREE.MeshBasicMaterial({map: poolTex, transparent: true, depthWrite: false}));
-  pool.rotation.x = -Math.PI / 2; pool.position.y = .002; base.add(pool);
-  const shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.ShadowMaterial({opacity: .7}));
-  shadowFloor.rotation.x = -Math.PI / 2; shadowFloor.position.y = .004; shadowFloor.receiveShadow = true; base.add(shadowFloor);
+  // 玩具底座：深蓝灰厚底 + 奶油白台面 + 军队色描边 + 一圈刻度（刻度随台面一起转，才看得出在转）
   const turn = new THREE.Group(); base.add(turn);
+  const std = (c, r = .6) => new THREE.MeshStandardMaterial({color: c, roughness: r, metalness: .05});
+  const rimMat = std('#3b82f6', .5);
+  const cyl = (r0, r1, h, y, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, 64), mat); m.position.y = y; m.castShadow = true; m.receiveShadow = true; turn.add(m); return m; };
+  cyl(2.32, 2.4, .2, -.46, std('#2d3e55', .7));   // 底座
+  cyl(2.2, 2.2, .06, -.33, rimMat);               // 军队色腰线
+  const top = cyl(2.1, 2.14, .2, -.1, std('#fff4d6', .55));   // 台面，顶面在 y=0
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.78, .018, 8, 96), rimMat); ring.rotation.x = Math.PI / 2; ring.position.y = .002; turn.add(ring);   // 台面细环
+  const tickMat = std('#2d3e55', .7);
+  for (let i = 0; i < 36; i++) { const big = i % 3 === 0, t = new THREE.Mesh(new THREE.BoxGeometry(big ? .05 : .03, .012, big ? .16 : .09), tickMat); const a = i / 36 * Math.PI * 2; t.position.set(Math.sin(a) * 1.96, .004, Math.cos(a) * 1.96); t.rotation.y = a; turn.add(t); }
+  // 底座下方的柔和落影（背景是平的，没有地面可投，靠这块渐隐的暗斑把底座"放"在空间里）
+  const blobTex = mk(128, 128, (x, w, h) => { const g = x.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); g.addColorStop(0, 'rgba(60,45,20,.55)'); g.addColorStop(1, 'rgba(60,45,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); });
+  const blob = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 7.4), new THREE.MeshBasicMaterial({map: blobTex, transparent: true, depthWrite: false}));
+  blob.rotation.x = -Math.PI / 2; blob.position.y = -.58; base.add(blob);
+  const ped = turn.children.filter(o => o.isMesh);   // 只含底座零件（模型之后才加进 turn）
   const cam = new THREE.PerspectiveCamera(28, 1.6, .1, 60);
   let current = null;
 
@@ -46,7 +61,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       if (MAKE[type]) {
         try {
           const model = MAKE[type](team), box = new THREE.Box3().setFromObject(model), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
-          const s = 4.0 / Math.hypot(size.x, size.y, size.z);   // 对角线统一缩放到 4.0：每个兵种都占满转台（战棋比例不用于特写）
+          const s = 3.5 / Math.hypot(size.x, size.y, size.z);   // 对角线统一缩放到 3.5：每个兵种都占满转台（战棋比例不用于特写）
           const holder = new THREE.Group(); holder.add(model); holder.scale.setScalar(s); holder.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
           model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
           v = {holder, h: size.y * s};
@@ -90,6 +105,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     refresh();
   }
   function refresh() {
+    rimMat.color.set(team === 'blue' ? '#3b82f6' : '#ef4444');
     const f = funds(); el.querySelector('#arsFund').textContent = f;
     el.querySelectorAll('.ars-card').forEach(c => {
       const id = c.dataset.u, u = UNITS[id], lock = u.buildable === false, poor = !lock && u.cost > f;
@@ -123,17 +139,18 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       bg.style.clipPath = `path(evenodd,'M0 0H${W}V${H}H0Z M${x} ${y}H${x + r.w}V${y + r.h}H${x}Z')`;
       el.querySelector('.ars-dim').style.clipPath = `path(evenodd,'M0 0H${host.offsetWidth}V${host.offsetHeight}H0Z M${r.x} ${r.y}H${r.x + r.w}V${r.y + r.h}H${r.x}Z')`;
     }
-    const asp = r.w / r.h, fov = 28, hh = current ? current.h : 1.5, ctr = Math.max(.9, hh / 2);
+    // 取景：纵向按「底座 + 模型」的总高度、横向按底座直径，取较大的那个距离，保证底座和模型都完整入镜
+    const asp = r.w / r.h, fov = 28, hh = current ? current.h : 1.5, half = (hh + .6) / 2 * 1.1 + .4, ty = (hh - .6) / 2 - .3;
     cam.aspect = asp; cam.fov = fov; cam.updateProjectionMatrix();
-    const fitV = 2.05 / Math.sin(fov * Math.PI / 360), fitH = 2.05 / Math.sin(Math.atan(Math.tan(fov * Math.PI / 360) * asp));
-    const d = Math.max(fitV, fitH) * 1.04, el20 = .36;
-    cam.position.set(0, ctr + d * Math.sin(el20), d * Math.cos(el20)); cam.lookAt(0, ctr * .85, 0);
+    const fitV = half / Math.sin(fov * Math.PI / 360), fitH = 2.75 / Math.sin(Math.atan(Math.tan(fov * Math.PI / 360) * asp));
+    const d = Math.max(fitV, fitH), el20 = .34;
+    cam.position.set(0, ty + d * Math.sin(el20), d * Math.cos(el20)); cam.lookAt(0, ty, 0);
     renderer.getViewport(v4); renderer.getScissor(s4); const st = renderer.getScissorTest(), ar = renderer.autoClear;
     const vy = stage.h - (r.y + r.h);
     renderer.setViewport(r.x, vy, r.w, r.h); renderer.setScissor(r.x, vy, r.w, r.h); renderer.setScissorTest(true); renderer.autoClear = true;
     renderer.render(scene, cam);
     renderer.setScissorTest(st); renderer.setViewport(v4); renderer.setScissor(s4); renderer.autoClear = ar;
   }
-  function dispose() { close(); pool.geometry.dispose(); pool.material.dispose(); poolTex.dispose(); shadowFloor.geometry.dispose(); shadowFloor.material.dispose(); if (sun.shadow.map) sun.shadow.map.dispose(); }
+  function dispose() { close(); bgTex.dispose(); blobTex.dispose(); blob.geometry.dispose(); blob.material.dispose(); ped.forEach(o => { o.geometry.dispose(); o.material.dispose(); }); if (sun.shadow.map) sun.shadow.map.dispose(); }
   return {open, close, renderPreview, dispose, get isOpen() { return !!el; }};
 }

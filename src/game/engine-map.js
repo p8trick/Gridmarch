@@ -17,7 +17,7 @@ export const MODEL_OF = {
   tank: {k: 'tank', type: 'light'}, mdtank: {k: 'tank', type: 'medium'}, neotank: {k: 'tank', type: 'heavy'},
   arty: {k: 'art'},
 };
-const NAME = {inf: '步兵', mech: '机械兵', tank: '轻坦', mdtank: '中坦', neotank: '重坦', arty: '自行火炮'};
+const NAME = {inf: '步兵', mech: '反坦克兵', tank: '轻坦', mdtank: '中坦', neotank: '重坦', arty: '自行火炮'};
 
 export function terrainGrid(preset) {
   const L = preset.layout, plan = planWater(preset), [x0, x1] = preset.x, [z0, z1] = preset.z;
