@@ -1,6 +1,6 @@
 # 兵工厂界面冒烟测试（不在 npm test 里，需要 Playwright + 无头 Chromium）：
 #   python3 -m http.server 8099 放后台（setsid nohup ... &），再 python3 tools/smoke-arsenal.py
-# 做的事：打开战场 → 点蓝方兵工厂 → 选兵种 → ✕ 关闭 → 再打开，连做 3 轮，打印页面报错。0.46 的 resetView 作用域 bug 就是它能抓到、npm test 抓不到的那类。
+# 做的事：打开战场 → 点蓝方兵工厂 → 选兵种 → 关闭按钮 → 再打开，连做 3 轮，打印页面报错。0.46 的 resetView 作用域 bug 就是它能抓到、npm test 抓不到的那类。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
@@ -15,8 +15,11 @@ with sync_playwright() as p:
       return [(v.x+1)/2*874,(1-v.y)/2*402]}''')
     for rnd in range(3):
         pg.mouse.click(pos[0],pos[1]); pg.wait_for_selector('.ars', state='attached', timeout=60000)
-        pg.evaluate('()=>document.querySelector(".ars-card[data-u=mdtank]").click()'); pg.wait_for_timeout(300)
-        pg.evaluate('()=>document.querySelector(".ars-x").click()'); pg.wait_for_timeout(300)
+        pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf]").click()'); pg.wait_for_timeout(300)
+        print(rnd, 'popup on:', pg.evaluate('()=>document.querySelector(".ars-pop").classList.contains("on")'), 'old X gone:', pg.evaluate('()=>!document.querySelector(".ars-x")'))
+        pg.evaluate('()=>document.querySelector(".ars-pop").click()'); pg.wait_for_timeout(200)
+        print(rnd, 'popup after buy:', pg.evaluate('()=>document.querySelector(".ars-pop").classList.contains("on")'))
+        pg.evaluate('()=>document.querySelector(".ars-close").click()'); pg.wait_for_timeout(300)
         print(rnd, 'open after close:', pg.evaluate('()=>!!document.querySelector(".ars")'))
     # open twice without closing (tap factory while open path)
     pg.mouse.click(pos[0],pos[1]); pg.wait_for_selector('.ars', state='attached'); 
