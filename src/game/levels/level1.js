@@ -16,6 +16,10 @@ function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = 
 
 export const LEVEL1 = {x: [-10, 9], z: [-6, 5]};
 
+// 开局设定（0.40，【暂定】随时改）：每方起始资金与起始部队（引擎兵种 id，见 rules/data.js）。
+// 资金：第 1 天蓝方还会再领一次收入（总部 + 2 兵工厂 = 3500）。起始部队只能用已有模型的兵种。
+export const START = {funds: 5000, army: ['inf', 'inf', 'mech', 'tank']};
+
 function build(seed, attempt) {
   const rnd = mulberry32(seed * 7919 + attempt * 104729 + 13);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1)), pick = arr => arr[Math.floor(rnd() * arr.length)];
@@ -189,6 +193,19 @@ function build(seed, attempt) {
   for (let n = 0; n < 5; n++) cluster(forest, 3 + Math.floor(rnd() * 5));
   for (let n = 0; n < 3; n++) { const c = pick(pool()); if (c) forestSingle.add(key(...c)); }   // 孤立的单格树林（2–3 棵树）
 
+  // ── 起始部队：蓝方在总部周围 2–4 格内（不占基地一圈、不压山 / 沙漠 / 沼泽 / 河 / 桥），红方镜像 ──
+  const hqCell = WEST[0].cell, startUnits = [];
+  {
+    const used = new Set(), bridgeBKeys = new Set((bridgeB ? bridgeB.cells : []).map(c => key(...c)));
+    const ok = (x, z) => x <= -2 && west(x, z) && !bld.has(key(x, z)) && !apron.has(key(x, z)) && !mountain.has(key(x, z)) && !desert.has(key(x, z)) && !swamp.has(key(x, z)) && !riverSet.has(key(x, z)) && key(x, z) !== bridgeKey && !bridgeBKeys.has(key(x, z));
+    const cand = board.filter(([x, z]) => { const d = Math.max(Math.abs(x - hqCell[0]), Math.abs(z - hqCell[1])); return d >= 2 && d <= 4 && ok(x, z); })
+      .map(c => [rnd(), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    for (const type of START.army) {
+      const c = cand.find(([x, z]) => !used.has(key(x, z)));
+      if (!c) throw Error('放不下起始部队'); used.add(key(...c)); startUnits.push({type, owner: 0, c});
+    }
+  }
+
   // ── 镜像到东半边，装配布局 ──
   const mirrorCells = set => [...set].flatMap(k => { const [x, z] = k.split(',').map(Number); return [[x, z], [mir(x), z]]; });
   const uniq = a => { const s = new Set(); return a.filter(c => !s.has(key(...c)) && s.add(key(...c))); };
@@ -199,6 +216,7 @@ function build(seed, attempt) {
     : [b, {...b, cell: [mir(b.cell[0]), b.cell[1]], owner: 'red', name: b.name.replace('蓝', '红')}]);
   if (river.length) { preset.river = uniq(mirrorCells(riverSet)); preset.bridges.push({type: 'A', cells: [bridgeA], rotation: 0}, {type: 'A', cells: [[mir(bridgeA[0]), bridgeA[1]]], rotation: 0}); }
   if (bridgeB) preset.bridges.push({type: 'B', cells: bridgeB.cells, rotation: 0});
+  preset.start = {funds: [START.funds, START.funds], units: [...startUnits, ...startUnits.map(u => ({type: u.type, owner: 1, c: [mir(u.c[0]), u.c[1]]}))]};
   preset.stats = {lake: lakeKind, roads: L.roads.length, mountain: L.mountain.length, desert: L.desert.length, swamp: L.swamp.length, forest: L.forestExtra.length, river: (preset.river || []).length, bridges: preset.bridges.length, buildings: L.buildings.length};
   if (L.mountain.length < 8 || L.forestExtra.length < 14 || desert.size < 4 || swamp.size < 4) throw Error('随机结果太稀疏，重试');
   validateLayout(preset);

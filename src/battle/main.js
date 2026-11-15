@@ -4,6 +4,9 @@ import {makeLevel1} from '../game/levels/level1.js';
 import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
+import {createGameFromPreset} from '../game/engine-map.js';
+import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
+import {dispHp, unitAt} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -40,6 +43,8 @@ export async function mountBattle(host, stage, opts = {}) {
 // ── 关卡：opts.seed 固定地图（网址 index.html?go=battle&seed=N）；不给就每次随机一个种子（左下角会显示，想复现就记下来）──
 const seed = Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 999999)));
 const preset = makeLevel1(seed);
+const {game, specs, toEngine} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
+preset.layout.units = specs;
 world = buildWorld({preset});
 const L = preset.layout;
 world.setShadowRadius(27);   // 视距 9 格时画面对角约 ±18：阴影范围放大到 ±27（2048 贴图下仍是每格 ~80 像素）
@@ -70,8 +75,12 @@ const WATER = {sea: '海', shoal: '浅滩', cliff: '断崖', river: '河'};
 function describe(c) {
   const k = key(c), b = world.bldMap.get(k), w = world.water.typeAt(c[0], c[1]);
   const t = b ? b.name : sets.bridge.has(k) ? '桥' : sets.mountain.has(k) ? '山地' : sets.desert.has(k) ? '沙漠' : sets.swamp.has(k) ? '沼泽' : sets.forest.has(k) ? '树林' : WATER[w] || (sets.road.has(k) ? '公路' : '平原');
-  return `(${c[0]}, ${c[1]}) ${t}`;
+  const OWN = ['蓝方', '红方'], bo = game.owners[toEngine(c).join(',')], eu = unitAt(game, ...toEngine(c));
+  let txt = `(${c[0]}, ${c[1]}) ${t}` + (b && RULE_TERRAINS[game.terrain[toEngine(c)[1]][toEngine(c)[0]]].property ? ` · ${bo === undefined ? '中立' : OWN[bo]}` : '');
+  if (eu) { const d = RULE_UNITS[eu.type]; txt += `\n${OWN[eu.owner]}${d.name} · 血量 ${dispHp(eu.hp)}/10 · 弹药 ${d.ammo ? eu.ammo + '/' + d.ammo : '—'}`; }
+  return txt;
 }
+const fundsTxt = () => `第 ${game.day} 天 · ${game.turn === 0 ? '蓝' : '红'}方回合 · 资金 蓝 ${game.funds[0]} / 红 ${game.funds[1]}`;
 const cursor = createCursor(THREE); world.scene.add(cursor.group);   // 格子光圈（见 cursor.js）
 let picked = null;
 const raycaster = new THREE.Raycaster();
@@ -90,7 +99,7 @@ let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
 function hud() {
   $('bZoom').textContent = '视距 ' + cellsTxt() + '格';
-  $('info').textContent = `${preset.name} · 种子 ${seed} · 视距 ${cellsTxt()}格` + (picked ? `\n${describe(picked)}` : '') +
+  $('info').textContent = `${fundsTxt()}\n${preset.name} · 种子 ${seed} · 视距 ${cellsTxt()}格` + (picked ? `\n${describe(picked)}` : '') +
     (debug ? `\n${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制` : '');
 }
 $('bRotL').onclick = () => { cam.rotate(-1); mark(); };
@@ -146,7 +155,7 @@ function loop(now) {
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 requestAnimationFrame(() => requestAnimationFrame(() => { const l = host.querySelector('#loading'); if (l) l.remove(); }));   // 第一帧画出来之后再撤掉加载提示
-window.battle = {world, cam, preset, THREE};   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game};   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
