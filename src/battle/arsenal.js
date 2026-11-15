@@ -1,10 +1,10 @@
-import {UNITS, UNIT_IDS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER} from '../rules/data.js';
+import {UNITS, UNIT_IDS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER, UNIT_CAT, CAT_ORDER, WEAPON_LIST_MIN} from '../rules/data.js';
 import {createTank} from '../game/units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
 import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
 
-// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
+// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
 const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
@@ -17,6 +17,8 @@ const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线�
   arty: team => createArtillery({faction: team, batch: true, paint: true}),
 };
 const TEAM_NAME = {blue: '蓝军', red: '红军'};
+const CAT = {foot: ['步兵', '#efd5b0'], veh: ['车辆', '#efd5b0'], heli: ['直升机', '#d9d3f5'], air: ['飞机', '#d9d3f5'], ship: ['船', '#bfeee6'], sub: ['潜艇', '#bfeee6']};   // 大类名 + 底色（沿用高战2：陆米色 / 空淡紫 / 海青绿）
+const WPN = {mech: '火箭筒', tank: '轻型火炮', mdtank: '中型火炮', neotank: '重型火炮', arty: '榴弹炮', rocket: '火箭炮', aa: '机关炮', missile: '防空导弹'};   // 主炮名（我自己起的，随便改）；副炮统一叫机枪
 
 export function createArsenal({THREE, renderer, host, stage, game}) {
   let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null;
@@ -86,11 +88,12 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
         <div class="ars-head"><b>兵工厂</b><span class="ars-fund">资金 <b id="arsFund"></b></span></div>
         <div class="ars-list"><i class="ars-more up">▲</i><i class="ars-more dn">▼</i><div class="ars-cards">${UNIT_IDS.map(id => `<button class="ars-card" data-u="${id}"><span class="ico">${GLYPH[id]}</span><span class="tx"><span class="nm">${UNITS[id].name}</span><span class="sub"></span></span><span class="pr"></span></button>`).join('')}</div></div>
       </div>
-      <div class="ars-box ars-show">
+      <div class="ars-box ars-show"><div class="ars-body">
         <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
           <div class="ars-tag"><b id="arsName"></b><button class="ars-sw" data-act="team">${TEAM_NAME[team]}</button></div>
           <button class="ars-x" data-act="close" aria-label="关闭">✕</button><small class="ars-hint">拖动旋转 · 双指缩放 · 双击复位</small></div>
-        <div class="ars-bar"><div class="ars-top"><div class="ars-stats"></div><button class="ars-buy" data-act="buy"></button></div><div class="ars-wps"></div></div>
+        <div class="ars-info"><div class="ars-stats"></div><div class="ars-wps"></div><button class="ars-buy" data-act="buy"></button></div>
+        </div>
         <div class="ars-toast"></div>
       </div></div>`;
     host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv');
@@ -172,12 +175,18 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     });
     const u = UNITS[sel], lock = u.buildable === false, poor = !lock && u.cost > f, r = u.range;
     el.querySelector('#arsName').textContent = u.name;
-    // 数据条：移动 / 射程 / 弹药 / 燃料（0.51；步兵类燃料是 Infinity，显示 ∞；射程里间接火力单位带「间接」）
-    const rg = r[0] === r[1] ? r[0] : r.join('–'), fuel = u.fuel === Infinity ? '∞' : u.fuel;
-    el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${rg}</b>射程${u.indirect ? '·间接' : ''}</div><div><b>${u.ammo || '—'}</b>弹药</div><div><b>${fuel}</b>燃料</div>`;
-    // 火力：主炮 / 副炮各一排 11 个目标章（字 = 目标兵种，数字 = 基础伤害 %）；强 / 中 / 弱三档颜色，打不了的灰掉
-    const wrow = (name, sub, tbl) => `<div class="ars-wp${tbl ? '' : ' off'}"><span class="ars-wl"><b>${name}</b><i>${sub}</i></span>${TARGET_ORDER.map(t => { const v = tbl ? tbl[t] : null; return `<span class="ars-tg ${v == null ? 'no' : v >= 85 ? 'hi' : v >= 40 ? 'mid' : 'lo'}"><em>${GLYPH[t]}</em>${v == null ? '–' : v}</span>`; }).join('')}</div>`;
-    el.querySelector('.ars-wps').innerHTML = wrow('主炮', u.primary ? '弹' + u.ammo : '无', u.primary ? DMG_PRIMARY[sel] || {} : null) + wrow('副炮', u.secondary ? '不耗弹' : '无', u.secondary ? DMG_SECONDARY[sel] || {} : null);
+    // 右列（0.52，仿高战2）：机动 / 视野 / 燃料三行，然后主炮、副炮各一块：武器名 + 弹药，下面是「能打的大类」小块（只列能打的，不列灰的）
+    const fuel = u.fuel === Infinity ? '∞' : u.fuel + '/' + u.fuel;
+    el.querySelector('.ars-stats').innerHTML = `<div>机动<b>${u.move}</b></div><div>视野<b>${u.vision}</b></div><div>燃料<b>${fuel}</b></div>`;
+    const cats = tbl => CAT_ORDER.filter(c => TARGET_ORDER.some(t => UNIT_CAT[t] === c && (tbl[t] || 0) >= WEAPON_LIST_MIN));   // 某大类里只要有一个目标的基础伤害够高，就算能打这一大类
+    const wp = (label, name, note, tbl) => {
+      if (!tbl) return `<div class="ars-wp off"><div class="ars-wh"><b>${name}</b></div><div class="ars-wr"><span class="ars-wn">无</span><span class="ars-wt">${label}</span></div></div>`;
+      const cs = cats(tbl);
+      return `<div class="ars-wp"><div class="ars-wh"><b>${name}</b><i>${note}</i></div><div class="ars-wr"><div class="ars-wc">${cs.length ? cs.map(c => `<span class="ars-cat" style="--cc:${CAT[c][1]}">${CAT[c][0]}</span>`).join('') : '<span class="ars-wn">暂无目标</span>'}</div><span class="ars-wt">${label}</span></div></div>`;
+    };
+    const rg = u.range[0] === u.range[1] ? '' : '射程' + u.range.join('–') + ' · ';
+    el.querySelector('.ars-wps').innerHTML = wp('主炮', u.primary ? WPN[sel] || '主炮' : '无主炮', u.primary ? rg + u.ammo + '/' + u.ammo : '', u.primary ? DMG_PRIMARY[sel] || {} : null)
+      + wp('副炮', u.secondary ? '机枪' : '无副炮', u.secondary && !u.primary ? rg.replace(/ · $/, '') : '', u.secondary ? DMG_SECONDARY[sel] || {} : null);
     const buy = el.querySelector('.ars-buy'); buy.disabled = lock || poor; buy.textContent = lock ? '暂不可生产' : poor ? '资金不足 · ' + u.cost : '生产 · ' + u.cost;
     showModel();
     const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）

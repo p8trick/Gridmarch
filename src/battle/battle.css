@@ -52,26 +52,25 @@
 #battle .ars-sw{height:26px;padding:0 9px;border-radius:9px;border:2px solid var(--line);background:#fff;color:var(--text);font:800 12px inherit;touch-action:manipulation}
 #battle .ars-x{position:absolute;right:8px;top:8px;z-index:1;width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:#ffd1c9;color:var(--text);font:800 14px inherit;box-shadow:0 2px 0 var(--line);touch-action:manipulation}
 #battle .ars-hint{position:absolute;left:0;right:0;bottom:7px;text-align:center;font-size:10px;color:#7a6a48;pointer-events:none}
-#battle .ars-bar{position:relative;z-index:1;flex:none;display:flex;flex-direction:column;gap:5px;padding-top:8px}
-#battle .ars-top{display:flex;align-items:center;gap:10px}
-#battle .ars-wps{display:flex;flex-direction:column;gap:4px}
-#battle .ars-wp{display:flex;align-items:center;gap:3px}
-#battle .ars-wl{flex:none;width:42px;display:flex;flex-direction:column;line-height:1.15}
-#battle .ars-wl b{font-size:12px}
-#battle .ars-wl i{font-style:normal;font-size:9px;color:var(--sub)}
-#battle .ars-wp.off .ars-wl{opacity:.5}
-#battle .ars-tg{flex:1;min-width:0;height:34px;border-radius:8px;border:2px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:800;line-height:1.1}   /* 目标章：上 = 目标兵种，下 = 基础伤害 % */
-#battle .ars-tg em{font-style:normal;font-size:12px}
-#battle .ars-tg.hi{background:var(--btn);color:#fff}
-#battle .ars-tg.mid{background:var(--chip);color:var(--chip-t)}
-#battle .ars-tg.lo{background:#fff;color:var(--text)}
-#battle .ars-tg.no{background:var(--dis);color:var(--sub);border-color:transparent;opacity:.5}
-#battle .ars-stats{flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-#battle .ars-stats div{padding:3px 0;border-radius:9px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
-#battle .ars-stats b{display:block;font-size:15px;color:var(--text)}
-#battle .ars-buy{flex:none;width:158px;height:46px;border-radius:13px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}
+#battle .ars-body{flex:1;min-height:0;display:flex;gap:10px}   /* 0.52：左 = 转台窗口，右 = 数据列（仿高战2） */
+#battle .ars-info{position:relative;z-index:1;flex:none;width:214px;display:flex;flex-direction:column;gap:6px;min-height:0}   /* z-index：盖住 .ars-pv 外扩的奶油色阴影 */
+#battle .ars-stats{display:flex;flex-direction:column;gap:3px}
+#battle .ars-stats div{display:flex;justify-content:space-between;align-items:baseline;padding:3px 10px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub);line-height:1.25}
+#battle .ars-stats b{font-size:15px;color:var(--text)}
+#battle .ars-wps{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
+#battle .ars-wp{flex:1;min-height:0;max-height:84px;display:flex;flex-direction:column;gap:3px;padding:5px 6px 6px 8px;border-radius:11px;background:rgba(255,255,255,.55)}
+#battle .ars-wh{display:flex;justify-content:space-between;align-items:baseline;gap:6px;white-space:nowrap}
+#battle .ars-wh b{font-size:13px}
+#battle .ars-wh i{font-style:normal;font-size:10px;font-weight:800;color:#2f7a3a}
+#battle .ars-wr{flex:1;min-height:0;display:flex;align-items:stretch;gap:4px}
+#battle .ars-wc{flex:1;min-width:0;display:flex;gap:4px}
+#battle .ars-cat{flex:1;max-width:58px;min-width:0;border-radius:8px;border:2px solid var(--line);background:var(--cc);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--text)}
+#battle .ars-wn{align-self:center;font-size:11px;color:var(--sub)}
+#battle .ars-wt{flex:none;width:18px;display:grid;place-items:center;writing-mode:vertical-rl;text-orientation:upright;font-size:14px;font-weight:800;color:var(--btn);letter-spacing:2px}   /* 竖排「主炮 / 副炮」 */
+#battle .ars-wp.off{opacity:.55}
+#battle .ars-buy{flex:none;width:100%;height:46px;border-radius:13px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}
 #battle .ars-buy:active{transform:skewX(-6deg) translateY(2px);box-shadow:none}
 #battle .ars-buy[disabled]{background:var(--dis);color:var(--sub);box-shadow:none}
-#battle .ars-toast{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:3}
+#battle .ars-toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:3}
 #battle .ars-toast.on{opacity:1}
 #battle.ars-open .grp{visibility:hidden}   /* 兵工厂打开时藏起右上角的旋转 / 视距 / 换图按钮，免得透到展示窗上 */

@@ -39,6 +39,11 @@ export const UNITS = {
 };
 export const UNIT_IDS = Object.keys(UNITS);
 
+// ── 兵种大类（0.52）：兵工厂界面像高战2 一样按「大类」写武器能打谁，不逐个兵种列。以后加直升机 / 飞机 / 船 / 潜艇，只要在这里给新单位标上大类、CAT_ORDER 里已有位置。──
+export const UNIT_CAT = {inf: 'foot', mech: 'foot', recon: 'veh', apc: 'veh', tank: 'veh', mdtank: 'veh', neotank: 'veh', arty: 'veh', rocket: 'veh', aa: 'veh', missile: 'veh'};
+export const CAT_ORDER = ['foot', 'veh', 'heli', 'air', 'ship', 'sub'];
+export const WEAPON_LIST_MIN = 30;   // 某武器对某一大类里「最高基础伤害」≥ 这个数才算「能打」并列进界面（按高战2 轻坦截图反推：主炮对步兵 25 不列，机枪对车辆 45 列；阈值是猜的，可调）
+
 // ── 地形：cost = 各移动类型的消耗（null 不可进入）；stars = 防御星（0–4）──
 // 收入（income）：高战2 里所有产出建筑都是 1000/回合；0.41 起：总部 / 大城市 / 兵工厂 / 机场 / 船坞 1000，小城市 700（钱不能来得太容易，前期抢城才有意义）。
 // 前 13 项取自高战2（晴天）。city_large / city_small 的防御星、占领点数先与原作的城市相同，收入与修理量等经济规则以后再分。
