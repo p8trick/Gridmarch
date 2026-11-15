@@ -27,7 +27,14 @@
 #battle .ars-head>b{font-size:17px;font-weight:800}
 #battle .ars-fund{padding:3px 11px;border-radius:10px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:13px;border:2px solid var(--line)}
 #battle .ars-fund b{font-size:14px}
-#battle .ars-cards{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 4px 14px 0;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}   /* 底部渐隐 = 还能往下滑 */
+#battle .ars-list{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+#battle .ars-cards{position:relative;flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 4px 14px 0;touch-action:none;overscroll-behavior:contain;--ft:0px;--fb:0px;-webkit-mask-image:linear-gradient(transparent,#000 var(--ft),#000 calc(100% - var(--fb)),transparent);mask-image:linear-gradient(transparent,#000 var(--ft),#000 calc(100% - var(--fb)),transparent)}   /* 滑动由 arsenal.js 自己处理（touch-action:none）；上 / 下还能滑时对应一侧渐隐 */
+#battle .ars-more{position:absolute;left:50%;margin-left:-14px;z-index:1;width:28px;height:18px;display:grid;place-items:center;border-radius:9px;border:2px solid var(--line);background:var(--chip);color:var(--chip-t);font:normal 8px/1 inherit;font-style:normal;opacity:0;pointer-events:none;transition:opacity .15s}   /* 「还能滑」小箭头 */
+#battle .ars-more.on{opacity:1}
+#battle .ars-more.up{top:0;animation:arsBobU 1.2s ease-in-out infinite}
+#battle .ars-more.dn{bottom:0;animation:arsBobD 1.2s ease-in-out infinite}
+@keyframes arsBobD{50%{transform:translateY(2px)}}
+@keyframes arsBobU{50%{transform:translateY(-2px)}}
 #battle .ars-cards::-webkit-scrollbar{display:none}
 #battle .ars-card{flex:none;display:flex;align-items:center;gap:9px;height:54px;padding:0 9px 0 7px;border-radius:14px;background:var(--card);border:2px solid transparent;color:inherit;font:inherit;text-align:left;touch-action:manipulation}
 #battle .ars-card.sel{background:var(--card-sel);border-color:var(--line);box-shadow:0 2px 0 var(--line)}

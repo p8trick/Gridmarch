@@ -4,7 +4,7 @@ import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
 import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
 
-// 兵工厂界面（0.42）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
+// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
 const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
@@ -19,7 +19,7 @@ const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线�
 const TEAM_NAME = {blue: '蓝军', red: '红军'};
 
 export function createArsenal({THREE, renderer, host, stage, game}) {
-  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0;
+  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null;
   const cache = new Map(), pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
    // 'type|team' → {holder} | null（尚未建模）| 'error'
 
@@ -84,7 +84,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     el.innerHTML = `<div class="ars-dim"></div><div class="ars-row">
       <div class="ars-box ars-menu">
         <div class="ars-head"><b>兵工厂</b><span class="ars-fund">资金 <b id="arsFund"></b></span></div>
-        <div class="ars-cards">${UNIT_IDS.map(id => `<button class="ars-card" data-u="${id}"><span class="ico">${GLYPH[id]}</span><span class="tx"><span class="nm">${UNITS[id].name}</span><span class="sub"></span></span><span class="pr"></span></button>`).join('')}</div>
+        <div class="ars-list"><i class="ars-more up">▲</i><i class="ars-more dn">▼</i><div class="ars-cards">${UNIT_IDS.map(id => `<button class="ars-card" data-u="${id}"><span class="ico">${GLYPH[id]}</span><span class="tx"><span class="nm">${UNITS[id].name}</span><span class="sub"></span></span><span class="pr"></span></button>`).join('')}</div></div>
       </div>
       <div class="ars-box ars-show">
         <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
@@ -94,6 +94,35 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
         <div class="ars-toast"></div>
       </div></div>`;
     host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv');
+    // 兵种列表的滑动（0.50）：不用浏览器原生滚动，自己按手指滑——舞台被旋转 90° 时，touch-action 按物理屏幕算，原生滚动要先「猜」手势方向，
+    // 第一下就会卡；自己滑则手指一动就跟（滑动量经 stage.vec 换算成舞台纵向），松手后带惯性。
+    listEl = el.querySelector('.ars-cards');
+    listEl.onpointerdown = e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      cancelAnimationFrame(fling); fling = 0;
+      ls = {id: e.pointerId, x: e.clientX, y: e.clientY, top: listEl.scrollTop, drag: false, lastT: performance.now(), lastTop: listEl.scrollTop, v: 0};
+    };
+    listEl.onpointermove = e => {
+      if (!ls || e.pointerId !== ls.id) return;
+      const dy = stage.vec(e.clientX - ls.x, e.clientY - ls.y).y;
+      if (!ls.drag) { if (Math.abs(dy) < 6) return; ls.drag = true; try { listEl.setPointerCapture(e.pointerId); } catch (_) {} }
+      const now = performance.now(); listEl.scrollTop = ls.top - dy;
+      const dt = now - ls.lastT; if (dt > 0) { ls.v = ls.v * .6 + (listEl.scrollTop - ls.lastTop) / dt * .4; ls.lastT = now; ls.lastTop = listEl.scrollTop; }
+    };
+    listEl.onpointerup = listEl.onpointercancel = e => {
+      if (!ls || e.pointerId !== ls.id) return;
+      const g = ls; ls = null;
+      if (!g.drag) return;
+      if (e.type === 'pointerup' && performance.now() - g.lastT < 80 && Math.abs(g.v) > .05) {   // 松手时还在动：惯性滑行
+        let v = g.v, t0 = performance.now();
+        const step = t => { const dt = Math.min(32, t - t0); t0 = t; listEl.scrollTop += v * dt; v *= Math.pow(.94, dt / 16); if (Math.abs(v) > .02 && listEl) fling = requestAnimationFrame(step); else fling = 0; };
+        fling = requestAnimationFrame(step);
+      }
+    };
+    listEl.addEventListener('click', e => { if (listEl.dataset.dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+    listEl.addEventListener('pointerup', () => { if (ls && ls.drag) { listEl.dataset.dragged = '1'; setTimeout(() => { if (listEl) delete listEl.dataset.dragged; }, 0); } }, true);
+    listEl.addEventListener('scroll', listHint, {passive: true});
+    if (typeof ResizeObserver !== 'undefined') { listRO = new ResizeObserver(listHint); listRO.observe(listEl); }
     // 手势：单指 = 转模型；双指 = 捏合缩放（1×–4.5×，超近距离看细节）+ 双指一起拖动平移；双击 = 复位；电脑上滚轮缩放。
     // 舞台被旋转时，手指向量要经 stage.vec 换算到逻辑坐标（横向滑动落在另一个轴上：两个分量都要交给 vec）
     pv.onpointerdown = e => {
@@ -126,6 +155,13 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     });
     refresh();
   }
+  // 上 / 下还有内容时：对应一侧渐隐 + 小箭头；滑到头箭头和渐隐就消失
+  function listHint() {
+    if (!listEl || !el) return;
+    const up = listEl.scrollTop > 2, dn = listEl.scrollTop < listEl.scrollHeight - listEl.clientHeight - 2;
+    listEl.style.setProperty('--ft', up ? '22px' : '0px'); listEl.style.setProperty('--fb', dn ? '22px' : '0px');
+    el.querySelector('.ars-more.up').classList.toggle('on', up); el.querySelector('.ars-more.dn').classList.toggle('on', dn);
+  }
   function refresh() {
     const f = funds(); el.querySelector('#arsFund').textContent = f;
     el.querySelectorAll('.ars-card').forEach(c => {
@@ -139,12 +175,14 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${r[0] === r[1] ? r[0] : r.join('–')}</b>射程</div><div><b>${u.ammo || '—'}</b>弹药</div>`;
     const buy = el.querySelector('.ars-buy'); buy.disabled = lock || poor; buy.textContent = lock ? '暂不可生产' : poor ? '资金不足 · ' + u.cost : '生产 · ' + u.cost;
     showModel();
-    const sc = el.querySelector('.ars-card.sel'); if (sc) sc.scrollIntoView({block: 'center'});
+    const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）
+    if (sc && listEl) { const t = sc.offsetTop, b = t + sc.offsetHeight; if (t < listEl.scrollTop || b > listEl.scrollTop + listEl.clientHeight) listEl.scrollTop = t - (listEl.clientHeight - sc.offsetHeight) / 2; }
+    listHint();
   }
   function toast(m) { const t = el.querySelector('.ars-toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1600); }
 
   function open(cell, owner) { if (el) close(); openCell = cell; team = TEAM_NAME[owner] ? owner : 'blue'; build(); }
-  function close() { if (!el) return; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; pts.clear(); gest = null; resetView(); if (current) { turn.remove(current.holder); current = null; } }
+  function close() { if (!el) return; cancelAnimationFrame(fling); fling = 0; ls = null; if (listRO) { listRO.disconnect(); listRO = null; } listEl = null; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; pts.clear(); gest = null; resetView(); if (current) { turn.remove(current.holder); current = null; } }
 
   // ── 每帧：把预览画进右侧留空矩形（舞台旋转时也成立：DOM 在舞台内，用 offset 链取逻辑坐标）──
   const v4 = new THREE.Vector4(), s4 = new THREE.Vector4();
