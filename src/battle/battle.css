@@ -12,40 +12,46 @@
 #battle #err{position:absolute;left:10px;right:10px;top:60px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px;z-index:5}
 #battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#0b1e36;font-size:18px;letter-spacing:.1em}
 
-/* 兵工厂界面（0.42，风格 B 玩具盒）：奶油底 + 深色粗边 + 军队色细条；右侧 .ars-pv 是透明留空区，战场 renderer 在这里画模型转台 */
-#battle .ars{position:absolute;inset:0;z-index:4;pointer-events:auto;touch-action:none;--bg:#fff6dc;--line:#2d3e55;--text:#2a3a52;--sub:#6b7a90;--card:#fff;--card-sel:#fff0a8;--chip:#ffcf3f;--chip-t:#4a3500;--btn:#ff8a3d;--dis:#d6dbe2;--shadow:0 4px 0 #2d3e55}
-#battle .ars-dim{position:absolute;inset:0;background:rgba(10,18,28,.45)}   /* 背景压暗；同样在预览位置挖洞，否则转台也会被压暗 */
+/* 兵工厂界面（0.45，风格 B 玩具盒）：左边「选兵种」盒 + 右边「展示」盒，两个悬浮的独立盒子。
+   右盒的 .ars-pv 是透明窗口：战场 renderer 在这里画模型；窗口外面用超大的奶油色外扩阴影盖住盒子其余部分（盒子 overflow:hidden 裁掉多余的），窗口圆角也由它造出来 */
+#battle .ars{position:absolute;inset:0;z-index:7;pointer-events:auto;touch-action:none;--bg:#fff6dc;--line:#2d3e55;--text:#2a3a52;--sub:#6b7a90;--card:#fff;--card-sel:#fff0a8;--chip:#ffcf3f;--chip-t:#4a3500;--btn:#ff8a3d;--dis:#d6dbe2;--shadow:0 4px 0 #2d3e55}
 #battle .ars.army-b{--army:#3b82f6}#battle .ars.army-r{--army:#ef4444}
 #battle .ars *{box-sizing:border-box}
-#battle .ars-panel{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:12px;top:8px;bottom:10px;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px 16px;color:var(--text);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;z-index:0}
-#battle .ars-bg{position:absolute;inset:0;z-index:-1;background:var(--bg);border:3px solid var(--line);border-radius:18px}   /* 底板：JS 用 clip-path 在右侧预览位置挖一个洞，战场画布才能透出来 */
-#battle .ars-panel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:7px;background:var(--army)}
-#battle .ars-head{display:flex;align-items:center;gap:8px;height:34px;flex:none}
-#battle .ars-head b{font-size:17px;font-weight:800}
-#battle .ars-sub{font-size:11px;color:var(--sub)}
-#battle .ars-fund{margin-left:auto;padding:3px 12px;border-radius:10px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:14px;border:2px solid var(--line)}
-#battle .ars-sw,#battle .ars-x{height:32px;padding:0 10px;border-radius:10px;border:2px solid var(--line);background:#fff;color:var(--text);font:800 13px inherit;touch-action:manipulation}
-#battle .ars-x{width:34px;padding:0;background:#ffd1c9}
-#battle .ars-body{flex:1;min-height:0;display:flex;gap:12px}
-#battle .ars-cards{flex:1.1;min-width:0;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start;padding:2px 4px 4px 0;touch-action:pan-y;-webkit-overflow-scrolling:touch}
-#battle .ars-card{display:flex;align-items:center;gap:7px;height:46px;padding:0 7px;border-radius:12px;background:var(--card);border:2px solid transparent;color:inherit;font:inherit;text-align:left;touch-action:manipulation}
-#battle .ars-card.sel{background:var(--card-sel);border-color:var(--line)}
-#battle .ars-card .ico{flex:none;width:32px;height:32px;border-radius:9px;background:var(--army);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;border:2px solid rgba(0,0,0,.25)}
-#battle .ars-card .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
-#battle .ars-card .nm{font-weight:800;font-size:13px;line-height:1.1;white-space:nowrap}
-#battle .ars-card .pr{align-self:flex-start;padding:0 7px;border-radius:7px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:11px;transform:skewX(-8deg)}
+#battle .ars-dim{position:absolute;inset:0;background:rgba(10,18,28,.4)}   /* 背景压暗；在预览窗位置挖洞，否则转台也会被压暗 */
+#battle .ars-row{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:12px;top:8px;bottom:10px;display:flex;gap:12px}
+#battle .ars-box{position:relative;background:var(--bg);color:var(--text);border:3px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+#battle .ars-box::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:var(--army);z-index:2}
+#battle .ars-menu{flex:none;width:236px;padding:12px 8px 8px 10px}
+#battle .ars-show{flex:1;min-width:0;padding:10px;background:transparent}   /* 右盒本身不画底色：奶油色全靠 .ars-pv 的外扩阴影，这样窗口才是透的 */
+#battle .ars-head{display:flex;align-items:center;justify-content:space-between;height:34px;flex:none;padding-right:2px}
+#battle .ars-head>b{font-size:17px;font-weight:800}
+#battle .ars-fund{padding:3px 11px;border-radius:10px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:13px;border:2px solid var(--line)}
+#battle .ars-fund b{font-size:14px}
+#battle .ars-cards{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 4px 14px 0;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}   /* 底部渐隐 = 还能往下滑 */
+#battle .ars-cards::-webkit-scrollbar{display:none}
+#battle .ars-card{flex:none;display:flex;align-items:center;gap:9px;height:54px;padding:0 9px 0 7px;border-radius:14px;background:var(--card);border:2px solid transparent;color:inherit;font:inherit;text-align:left;touch-action:manipulation}
+#battle .ars-card.sel{background:var(--card-sel);border-color:var(--line);box-shadow:0 2px 0 var(--line)}
+#battle .ars-card .ico{flex:none;width:38px;height:38px;border-radius:11px;background:var(--army);color:#fff;display:grid;place-items:center;font-weight:800;font-size:17px;border:2px solid rgba(0,0,0,.25)}
+#battle .ars-card .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#battle .ars-card .nm{font-weight:800;font-size:14px;line-height:1.1;white-space:nowrap}
+#battle .ars-card .sub{font-size:10.5px;color:var(--sub)}
+#battle .ars-card .pr{flex:none;padding:2px 8px;border-radius:8px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:12px;transform:skewX(-8deg)}
 #battle .ars-card.poor,#battle .ars-card.lock{opacity:.55}
 #battle .ars-card.poor .pr,#battle .ars-card.lock .pr{background:var(--dis);color:var(--sub)}
-#battle .ars-view{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-#battle .ars-name{display:flex;align-items:baseline;justify-content:space-between;font-size:16px}
-#battle .ars-name small{font-size:10px;color:var(--sub)}
-#battle .ars-pv{position:relative;flex:1;min-height:110px;border-radius:5px;border:3px solid var(--line);overflow:hidden;touch-action:none;background:transparent}
-#battle .ars-pv .nomodel{position:absolute;inset:0;display:none;place-items:center;text-align:center;font-weight:800;font-size:15px;color:#7a6a48;background:#e8d9b4}
-#battle .ars-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-#battle .ars-stats div{padding:3px 0;border-radius:8px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
-#battle .ars-stats b{display:block;font-size:14px;color:var(--text)}
-#battle .ars-buy{height:42px;border-radius:12px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}
+#battle .ars-pv{position:relative;flex:1;min-height:0;border-radius:15px;border:3px solid var(--line);box-shadow:0 0 0 600px var(--bg);touch-action:none;background:transparent}
+#battle .ars-pv .nomodel{position:absolute;inset:0;border-radius:12px;display:none;place-items:center;font-weight:800;font-size:16px;color:#7a6a48;background:#e8d9b4}
+#battle .ars-tag{position:absolute;left:10px;top:9px;display:flex;align-items:center;gap:8px;z-index:1}
+#battle .ars-tag b{padding:3px 12px;border-radius:10px;background:var(--bg);border:2px solid var(--line);font-size:16px;font-weight:800;box-shadow:0 2px 0 var(--line)}
+#battle .ars-sw{height:26px;padding:0 9px;border-radius:9px;border:2px solid var(--line);background:#fff;color:var(--text);font:800 12px inherit;touch-action:manipulation}
+#battle .ars-x{position:absolute;right:8px;top:8px;z-index:1;width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:#ffd1c9;color:var(--text);font:800 14px inherit;box-shadow:0 2px 0 var(--line);touch-action:manipulation}
+#battle .ars-hint{position:absolute;left:0;right:0;bottom:7px;text-align:center;font-size:10px;color:#7a6a48;pointer-events:none}
+#battle .ars-bar{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:10px;padding-top:9px}
+#battle .ars-stats{flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#battle .ars-stats div{padding:3px 0;border-radius:9px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
+#battle .ars-stats b{display:block;font-size:15px;color:var(--text)}
+#battle .ars-buy{flex:none;width:158px;height:46px;border-radius:13px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}
 #battle .ars-buy:active{transform:skewX(-6deg) translateY(2px);box-shadow:none}
 #battle .ars-buy[disabled]{background:var(--dis);color:var(--sub);box-shadow:none}
-#battle .ars-toast{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#battle .ars-toast{position:absolute;left:50%;bottom:66px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:3}
 #battle .ars-toast.on{opacity:1}
+#battle.ars-open .grp{visibility:hidden}   /* 兵工厂打开时藏起右上角的旋转 / 视距 / 换图按钮，免得透到展示窗上 */
