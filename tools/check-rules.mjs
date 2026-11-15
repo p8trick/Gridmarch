@@ -97,25 +97,30 @@ const econ = (o = {}) => {
   return createGame({terrain: m, owners: {'0,0': 0, '1,0': 0, '2,0': 0, '6,0': 1, '7,0': 1}, ...o});
 };
 
-t('收入：总部 1500 + 兵工厂 1000 + 大城市 1500；开局第一回合就领收入', () => {
-  const g = econ(); assert.equal(incomeOf(g, 0), 4000); assert.equal(incomeOf(g, 1), 2500);
-  assert.equal(g.funds[0], 4000); assert.equal(g.funds[1], 0);
-  endTurn(g); assert.equal(g.funds[1], 2500);                        // 1 号方轮到时领
-  assert.equal(econ({config: {incomeMul: 2}}).funds[0], 8000);        // 整体倍率
+t('收入：总部 1000 + 兵工厂 1000 + 大城市 1000（小城市 700）；开局第一回合就领收入', () => {
+  const g = econ(); assert.equal(incomeOf(g, 0), 3000); assert.equal(incomeOf(g, 1), 2000);
+  assert.equal(g.funds[0], 3000); assert.equal(g.funds[1], 0);
+  endTurn(g); assert.equal(g.funds[1], 2000);                        // 1 号方轮到时领
+  assert.equal(econ({config: {incomeMul: 2}}).funds[0], 6000);        // 整体倍率
+});
+
+t('小城市收入 700', () => {
+  const m = map(3, 1); [m[0][0], m[0][1]] = ['hq', 'city_small'];
+  assert.equal(incomeOf(createGame({terrain: m, owners: {'0,0': 0, '1,0': 0}}), 0), 1700);
 });
 
 t('生产：扣钱、新单位本回合不能动、每座兵工厂每回合 1 个', () => {
   const g = econ(); const r = produce(g, 1, 0, 'inf');
-  assert(r.ok); assert.equal(g.funds[0], 3000); assert(r.unit.moved && r.unit.acted);
+  assert(r.ok); assert.equal(g.funds[0], 2000); assert(r.unit.moved && r.unit.acted);
   assert(!produce(g, 1, 0, 'inf').ok);                                // 同一座本回合只能 1 个（也被占着）
   assert(!move(g, r.unit.id, 2, 0).ok);                               // 新单位不能动
-  endTurn(g); endTurn(g); assert.equal(g.funds[0], 3000 + 4000);       // 下一个自己的回合：再领 4000
+  endTurn(g); endTurn(g); assert.equal(g.funds[0], 2000 + 3000);       // 下一个自己的回合：再领 3000
   assert.equal(r.unit.moved, false);
 });
 
 t('生产限制：钱不够、中立 / 对方兵工厂、非兵工厂、防空导弹暂不可生产', () => {
   const g = econ();
-  assert.equal(produce(g, 1, 0, 'tank').err, '资金不足');             // 4000 < 7000
+  assert.equal(produce(g, 1, 0, 'tank').err, '资金不足');             // 3000 < 7000
   assert.equal(produce(g, 6, 0, 'inf').err, '这里不是你的兵工厂');      // 对方的
   assert.equal(produce(g, 2, 0, 'inf').err, '这里不是你的兵工厂');      // 大城市不能造
   g.funds[0] = 99999; assert.equal(produce(g, 1, 0, 'missile').err, '这个单位暂不可生产');

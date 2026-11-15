@@ -17,8 +17,8 @@ function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = 
 export const LEVEL1 = {x: [-10, 9], z: [-6, 5]};
 
 // 开局设定（0.40，【暂定】随时改）：每方起始资金与起始部队（引擎兵种 id，见 rules/data.js）。
-// 资金：第 1 天蓝方还会再领一次收入（总部 + 2 兵工厂 = 3500）。起始部队只能用已有模型的兵种。
-export const START = {funds: 5000, army: ['inf', 'inf', 'mech', 'tank']};
+// 资金：开局资金 0；第 1 天蓝方领一次收入（总部 + 2 兵工厂 = 3000）。起始部队只能用已有模型的兵种。
+export const START = {funds: 0, army: ['inf', 'inf', 'mech', 'tank']};
 
 function build(seed, attempt) {
   const rnd = mulberry32(seed * 7919 + attempt * 104729 + 13);

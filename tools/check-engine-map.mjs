@@ -23,7 +23,7 @@ t('建筑归属：红蓝各 1 总部 + 2 兵工厂，中立 2 大 + 6 小城市�
     for (const [k, o] of Object.entries(game.owners)) { const [x, y] = k.split(',').map(Number), id = game.terrain[y][x]; (cnt[o] ||= {})[id] = (cnt[o][id] || 0) + 1; }
     assert.deepEqual(cnt[0], {hq: 1, factory: 2}, 'blue ' + seed); assert.deepEqual(cnt[1], {hq: 1, factory: 2}, 'red ' + seed);
     const flat = game.terrain.flat(); assert.equal(flat.filter(i => i === 'city_large').length, 2); assert.equal(flat.filter(i => i === 'city_small').length, 6);
-    assert.equal(game.funds[0], p.start.funds[0] + 3500);   // 第 1 天蓝方多领一次收入
+    assert.equal(game.funds[0], p.start.funds[0] + 3000);   // 第 1 天蓝方领一次收入：总部 1000 + 2 兵工厂
     assert.equal(game.funds[1], p.start.funds[1]);
   }
 });
