@@ -4,6 +4,7 @@ import {makeLevel1} from '../game/levels/level1.js';
 import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
+import {createArsenal} from './arsenal.js';
 import {createGameFromPreset} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
 import {dispHp, unitAt} from '../rules/engine.js';
@@ -60,6 +61,7 @@ const cv = renderer.domElement;
 const bounds = {x0: preset.x[0] * 2 - 1, x1: preset.x[1] * 2 + 1, z0: preset.z[0] * 2 - 1, z1: preset.z[1] * 2 + 1};
 const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell;
 const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
+const ars = createArsenal({THREE, renderer, host, stage, game});   // 兵工厂界面（0.42）
 
 let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
@@ -90,6 +92,7 @@ function handleTap(px, py) {
   const inside = c && c[0] >= preset.x[0] && c[0] <= preset.x[1] && c[1] >= preset.z[0] && c[1] <= preset.z[1];
   picked = inside ? c : null;
   if (picked) cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz)); else cursor.hide();
+  if (picked) { const [ex, ey] = toEngine(picked); if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(picked, game.turn === 0 ? 'blue' : 'red'); }
   hud(); mark();
 }
 
@@ -147,9 +150,11 @@ function loop(now) {
   if (camChanged) { applyView(); hud(); dirty = true; }
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
   if (cursor.update(now / 1000) && now - lastCur > 30) { dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
+  if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
+    if (ars.isOpen) ars.renderPreview(dt);
   }
   if (now - t0 > 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now; if (debug) hud(); }
 }
@@ -160,6 +165,7 @@ window.battle = {world, cam, preset, THREE, game};   // 调试：控制台可直
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
   if (!alive) return; alive = false;
+  ars.dispose();
   cancelAnimationFrame(raf); clearTimeout(wheelTimer);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);

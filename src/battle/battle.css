@@ -11,3 +11,41 @@
 #battle #info{position:absolute;left:10px;bottom:8px;padding:4px 9px;border-radius:8px;background:rgba(18,30,46,.62);font-size:11px;line-height:1.5;white-space:pre;pointer-events:none}
 #battle #err{position:absolute;left:10px;right:10px;top:60px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px;z-index:5}
 #battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#0b1e36;font-size:18px;letter-spacing:.1em}
+
+/* 兵工厂界面（0.42，风格 B 玩具盒）：奶油底 + 深色粗边 + 军队色细条；右侧 .ars-pv 是透明留空区，战场 renderer 在这里画模型转台 */
+#battle .ars{position:absolute;inset:0;z-index:4;pointer-events:auto;touch-action:none;--bg:#fff6dc;--line:#2d3e55;--text:#2a3a52;--sub:#6b7a90;--card:#fff;--card-sel:#fff0a8;--chip:#ffcf3f;--chip-t:#4a3500;--btn:#ff8a3d;--dis:#d6dbe2;--shadow:0 4px 0 #2d3e55}
+#battle .ars-dim{position:absolute;inset:0;background:rgba(10,18,28,.45)}   /* 背景压暗；同样在预览位置挖洞，否则转台也会被压暗 */
+#battle .ars.army-b{--army:#3b82f6}#battle .ars.army-r{--army:#ef4444}
+#battle .ars *{box-sizing:border-box}
+#battle .ars-panel{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:12px;top:8px;bottom:10px;display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px 16px;color:var(--text);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;z-index:0}
+#battle .ars-bg{position:absolute;inset:0;z-index:-1;background:var(--bg);border:3px solid var(--line);border-radius:18px}   /* 底板：JS 用 clip-path 在右侧预览位置挖一个洞，战场画布才能透出来 */
+#battle .ars-panel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:7px;background:var(--army)}
+#battle .ars-head{display:flex;align-items:center;gap:8px;height:34px;flex:none}
+#battle .ars-head b{font-size:17px;font-weight:800}
+#battle .ars-sub{font-size:11px;color:var(--sub)}
+#battle .ars-fund{margin-left:auto;padding:3px 12px;border-radius:10px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:14px;border:2px solid var(--line)}
+#battle .ars-sw,#battle .ars-x{height:32px;padding:0 10px;border-radius:10px;border:2px solid var(--line);background:#fff;color:var(--text);font:800 13px inherit;touch-action:manipulation}
+#battle .ars-x{width:34px;padding:0;background:#ffd1c9}
+#battle .ars-body{flex:1;min-height:0;display:flex;gap:12px}
+#battle .ars-cards{flex:1.1;min-width:0;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start;padding:2px 4px 4px 0;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+#battle .ars-card{display:flex;align-items:center;gap:7px;height:46px;padding:0 7px;border-radius:12px;background:var(--card);border:2px solid transparent;color:inherit;font:inherit;text-align:left;touch-action:manipulation}
+#battle .ars-card.sel{background:var(--card-sel);border-color:var(--line)}
+#battle .ars-card .ico{flex:none;width:32px;height:32px;border-radius:9px;background:var(--army);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;border:2px solid rgba(0,0,0,.25)}
+#battle .ars-card .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+#battle .ars-card .nm{font-weight:800;font-size:13px;line-height:1.1;white-space:nowrap}
+#battle .ars-card .pr{align-self:flex-start;padding:0 7px;border-radius:7px;background:var(--chip);color:var(--chip-t);font-weight:800;font-size:11px;transform:skewX(-8deg)}
+#battle .ars-card.poor,#battle .ars-card.lock{opacity:.55}
+#battle .ars-card.poor .pr,#battle .ars-card.lock .pr{background:var(--dis);color:var(--sub)}
+#battle .ars-view{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#battle .ars-name{display:flex;align-items:baseline;justify-content:space-between;font-size:16px}
+#battle .ars-name small{font-size:10px;color:var(--sub)}
+#battle .ars-pv{position:relative;flex:1;min-height:110px;border-radius:5px;border:3px solid var(--line);overflow:hidden;touch-action:none;background:transparent}
+#battle .ars-pv .nomodel{position:absolute;inset:0;display:none;place-items:center;text-align:center;font-weight:800;font-size:15px;color:var(--sub);background:#dff0ff}
+#battle .ars-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+#battle .ars-stats div{padding:3px 0;border-radius:8px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
+#battle .ars-stats b{display:block;font-size:14px;color:var(--text)}
+#battle .ars-buy{height:42px;border-radius:12px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}
+#battle .ars-buy:active{transform:skewX(-6deg) translateY(2px);box-shadow:none}
+#battle .ars-buy[disabled]{background:var(--dis);color:var(--sub);box-shadow:none}
+#battle .ars-toast{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#battle .ars-toast.on{opacity:1}
