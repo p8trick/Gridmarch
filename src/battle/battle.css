@@ -18,10 +18,9 @@
 #battle .ars.army-b{--army:#3b82f6}#battle .ars.army-r{--army:#ef4444}
 #battle .ars *{box-sizing:border-box}
 #battle .ars-dim{position:absolute;inset:0;background:rgba(10,18,28,.4)}   /* 背景压暗；在预览窗位置挖洞，否则转台也会被压暗 */
-#battle .ars-row{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:12px;top:8px;bottom:10px;display:flex;gap:12px}
+#battle .ars-row{position:absolute;left:max(calc(var(--sw,1px) * 5),56px);right:max(calc(var(--sw,1px) * 5),56px);   /* 两边一样宽，以灵动岛一侧为准：另一侧不会被屏幕圆角吃掉，也离手势区远一点 */top:8px;bottom:10px;display:flex;gap:12px}
 #battle .ars-box{position:relative;background:var(--bg);color:var(--text);border:3px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
 #battle .ars-box::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:var(--army);z-index:2}
-#battle .ars.side-r .ars-row{left:12px;right:max(calc(var(--sw,1px) * 5),56px)}   /* 灵动岛在右边时，右边多留空，展示盒不被遮 */
 #battle .ars-menu{flex:none;width:224px;padding:12px 8px 8px 10px}
 #battle .ars-show{flex:1;min-width:0;padding:10px;background:transparent}   /* 右盒本身不画底色：奶油色全靠 .ars-pv 的外扩阴影，这样窗口才是透的 */
 #battle .ars-head{display:flex;align-items:center;justify-content:space-between;height:34px;flex:none;padding-right:2px}
@@ -47,7 +46,7 @@
 #battle .ars-x{position:absolute;right:8px;top:8px;z-index:1;width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:#ffd1c9;color:var(--text);font:800 14px inherit;box-shadow:0 2px 0 var(--line);touch-action:manipulation}
 #battle .ars-hint{position:absolute;left:0;right:0;bottom:7px;text-align:center;font-size:10px;color:#7a6a48;pointer-events:none}
 #battle .ars-bar{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:10px;padding-top:9px}
-#battle .ars-stats{flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#battle .ars-stats{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 #battle .ars-stats div{padding:3px 0;border-radius:9px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
 #battle .ars-stats b{display:block;font-size:15px;color:var(--text)}
 #battle .ars-buy{flex:none;width:158px;height:46px;border-radius:13px;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}

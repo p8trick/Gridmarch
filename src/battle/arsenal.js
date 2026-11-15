@@ -72,7 +72,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   // ── DOM ──
   const funds = () => game.funds[team === 'blue' ? 0 : 1];
   function build() {
-    el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r') + (stage.side === 'right' ? ' side-r' : ' side-l');   // 灵动岛在哪一边，那一边就多留出空来
+    el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r');
     el.innerHTML = `<div class="ars-dim"></div><div class="ars-row">
       <div class="ars-box ars-menu">
         <div class="ars-head"><b>兵工厂</b><span class="ars-fund">资金 <b id="arsFund"></b></span></div>
@@ -120,7 +120,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.u) { sel = b.dataset.u; spin = .5; resetView(); refresh(); }
       else if (b.dataset.act === 'close') close();
-      else if (b.dataset.act === 'team') { team = team === 'blue' ? 'red' : 'blue'; el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r') + (stage.side === 'right' ? ' side-r' : ' side-l'); b.textContent = TEAM_NAME[team]; refresh(); }   // 仅供验收美术：换军队色看模型
+      else if (b.dataset.act === 'team') { team = team === 'blue' ? 'red' : 'blue'; el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r'); b.textContent = TEAM_NAME[team]; refresh(); }   // 仅供验收美术：换军队色看模型
       else if (b.dataset.act === 'buy') toast('演示：生产还没接入引擎（不扣钱、不出兵）');
     });
     refresh();
@@ -135,7 +135,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     });
     const u = UNITS[sel], lock = u.buildable === false, poor = !lock && u.cost > f, r = u.range;
     el.querySelector('#arsName').textContent = u.name;
-    el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${r[0] === r[1] ? r[0] : r.join('–')}</b>射程</div><div><b>${u.ammo || '—'}</b>弹药</div><div><b>${u.vision}</b>视野</div>`;
+    el.querySelector('.ars-stats').innerHTML = `<div><b>${u.move}</b>移动</div><div><b>${r[0] === r[1] ? r[0] : r.join('–')}</b>射程</div><div><b>${u.ammo || '—'}</b>弹药</div>`;
     const buy = el.querySelector('.ars-buy'); buy.disabled = lock || poor; buy.textContent = lock ? '暂不可生产' : poor ? '资金不足 · ' + u.cost : '生产 · ' + u.cost;
     showModel();
     const sc = el.querySelector('.ars-card.sel'); if (sc) sc.scrollIntoView({block: 'center'});
