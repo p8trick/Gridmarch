@@ -40,7 +40,7 @@
 #battle .ars-name{display:flex;align-items:baseline;justify-content:space-between;font-size:16px}
 #battle .ars-name small{font-size:10px;color:var(--sub)}
 #battle .ars-pv{position:relative;flex:1;min-height:110px;border-radius:5px;border:3px solid var(--line);overflow:hidden;touch-action:none;background:transparent}
-#battle .ars-pv .nomodel{position:absolute;inset:0;display:none;place-items:center;text-align:center;font-weight:800;font-size:15px;color:var(--sub);background:#dff0ff}
+#battle .ars-pv .nomodel{position:absolute;inset:0;display:none;place-items:center;text-align:center;font-weight:800;font-size:15px;color:#8ea2bd;background:#030405}
 #battle .ars-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
 #battle .ars-stats div{padding:3px 0;border-radius:8px;background:var(--card);text-align:center;font-size:10px;color:var(--sub);line-height:1.25}
 #battle .ars-stats b{display:block;font-size:14px;color:var(--text)}

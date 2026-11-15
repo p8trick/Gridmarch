@@ -23,15 +23,18 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   const cache = new Map();   // 'type|team' → {holder} | null（尚未建模）| 'error'
 
   // ── 预览场景（独立于战场）──
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#dff0ff');
-  scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x6c7a4a, 1.5));
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#030405');
+  scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x39424f, 1.5));
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.6); sun.position.set(-4, 7, 5); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, {left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20}); sun.shadow.bias = -.0004; scene.add(sun);
   const base = new THREE.Group(); scene.add(base);
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.42, .16, 56), new THREE.MeshStandardMaterial({color: '#8cc63f', roughness: 1}));
-  disc.position.y = -.08; disc.receiveShadow = true; base.add(disc);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(2.36, .05, 8, 72), new THREE.MeshStandardMaterial({color: '#2d3e55', roughness: .8}));
-  rim.rotation.x = Math.PI / 2; rim.position.y = .0; base.add(rim);
+  // 展台 = 纯黑虚空，不画转盘：脚下一圈很淡的柔光（让人感觉脚踩着地）+ 只接收阴影的透明地面（阴影在柔光上才看得见）
+  const gc = document.createElement('canvas'); gc.width = gc.height = 256; { const x = gc.getContext('2d'), g = x.createRadialGradient(128, 128, 0, 128, 128, 128); g.addColorStop(0, 'rgba(120,150,180,.55)'); g.addColorStop(.55, 'rgba(70,95,125,.22)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 256, 256); }
+  const poolTex = new THREE.CanvasTexture(gc); poolTex.colorSpace = THREE.SRGBColorSpace;
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 48), new THREE.MeshBasicMaterial({map: poolTex, transparent: true, depthWrite: false}));
+  pool.rotation.x = -Math.PI / 2; pool.position.y = .002; base.add(pool);
+  const shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.ShadowMaterial({opacity: .7}));
+  shadowFloor.rotation.x = -Math.PI / 2; shadowFloor.position.y = .004; shadowFloor.receiveShadow = true; base.add(shadowFloor);
   const turn = new THREE.Group(); base.add(turn);
   const cam = new THREE.PerspectiveCamera(28, 1.6, .1, 60);
   let current = null;
@@ -74,8 +77,8 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
           <div class="ars-stats"></div><button class="ars-buy" data-act="buy"></button></div>
       </div><div class="ars-toast"></div></div>`;
     host.appendChild(el); pv = el.querySelector('#arsPv');
-    pv.onpointerdown = e => { drag = {x: e.clientX, spin}; pv.setPointerCapture(e.pointerId); };
-    pv.onpointermove = e => { if (drag) spin = drag.spin + stage.vec(e.clientX - drag.x, 0).x * .012; };
+    pv.onpointerdown = e => { drag = {x: e.clientX, y: e.clientY, spin}; pv.setPointerCapture(e.pointerId); };
+    pv.onpointermove = e => { if (drag) spin = drag.spin + stage.vec(e.clientX - drag.x, e.clientY - drag.y).x * .012; };   // 舞台被旋转时，手指横向滑动落在逻辑坐标的另一个轴上：必须两个分量都交给 vec 换算
     pv.onpointerup = pv.onpointercancel = () => { drag = null; };
     el.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -131,6 +134,6 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     renderer.render(scene, cam);
     renderer.setScissorTest(st); renderer.setViewport(v4); renderer.setScissor(s4); renderer.autoClear = ar;
   }
-  function dispose() { close(); disc.geometry.dispose(); disc.material.dispose(); rim.geometry.dispose(); rim.material.dispose(); if (sun.shadow.map) sun.shadow.map.dispose(); }
+  function dispose() { close(); pool.geometry.dispose(); pool.material.dispose(); poolTex.dispose(); shadowFloor.geometry.dispose(); shadowFloor.material.dispose(); if (sun.shadow.map) sun.shadow.map.dispose(); }
   return {open, close, renderPreview, dispose, get isOpen() { return !!el; }};
 }
