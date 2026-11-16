@@ -4,7 +4,7 @@ import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
 import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
 
-// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 点兵种卡在卡片旁弹出「生产」小弹窗，右下角生产按钮改成「关闭」，去掉右上 ✕）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
+// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 右下角改「关闭」、去掉右上 ✕；0.54 去掉蓝 / 红军切换，生产改成兵种卡价格签变「生产」按钮（取代 0.53 的弹窗））：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
 const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
@@ -21,7 +21,7 @@ const CAT = {foot: ['步兵', '#efd5b0'], veh: ['车辆', '#efd5b0'], heli: ['�
 const WPN = {mech: '火箭筒', tank: '轻型火炮', mdtank: '中型火炮', neotank: '重型火炮', arty: '榴弹炮', rocket: '火箭炮', aa: '机关炮', missile: '防空导弹'};   // 主炮名（我自己起的，随便改）；副炮统一叫机枪
 
 export function createArsenal({THREE, renderer, host, stage, game}) {
-  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null, popOn = false;
+  let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null, armed = null;
   const cache = new Map(), pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
    // 'type|team' → {holder} | null（尚未建模）| 'error'
 
@@ -90,13 +90,13 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       </div>
       <div class="ars-box ars-show"><div class="ars-body">
         <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
-          <div class="ars-tag"><b id="arsName"></b><button class="ars-sw" data-act="team">${TEAM_NAME[team]}</button></div>
+          <div class="ars-tag"><b id="arsName"></b></div>
           <small class="ars-hint">拖动旋转 · 双指缩放 · 双击复位</small></div>
         <div class="ars-info"><div class="ars-stats"></div><div class="ars-wps"></div><button class="ars-close" data-act="close">关闭</button></div>
         </div>
         <div class="ars-toast"></div>
-      </div><button class="ars-pop" data-act="buy"></button></div>`;
-    host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv'); popOn = false;
+      </div></div>`;
+    host.appendChild(el); host.classList.add('ars-open'); pv = el.querySelector('#arsPv'); armed = null;
     // 兵种列表的滑动（0.50）：不用浏览器原生滚动，自己按手指滑——舞台被旋转 90° 时，touch-action 按物理屏幕算，原生滚动要先「猜」手势方向，
     // 第一下就会卡；自己滑则手指一动就跟（滑动量经 stage.vec 换算成舞台纵向），松手后带惯性。
     listEl = el.querySelector('.ars-cards');
@@ -130,7 +130,6 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     // 舞台被旋转时，手指向量要经 stage.vec 换算到逻辑坐标（横向滑动落在另一个轴上：两个分量都要交给 vec）
     pv.onpointerdown = e => {
       if (e.target.closest('button')) return;
-      if (popOn) { popOn = false; popPlace(); }
       pts.set(e.pointerId, {x: e.clientX, y: e.clientY}); pv.setPointerCapture(e.pointerId); startGesture();
       tapDown = pts.size === 1 ? {x: e.clientX, y: e.clientY, t: performance.now()} : null;
     };
@@ -152,10 +151,16 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     pv.addEventListener('wheel', e => { e.preventDefault(); zoom *= e.deltaY < 0 ? 1.12 : 1 / 1.12; clampView(); }, {passive: false});
     el.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.u) { sel = b.dataset.u; spin = .5; resetView(); popOn = true; refresh(); }
+      if (b.dataset.u) {   // 0.54：点兵种卡 = 选中 + 把它的价格签变成「生产」按钮；再点「生产」才买；再点卡片其他地方 = 还原；点别的卡 = 直接换成那张的生产按钮
+        const id = b.dataset.u, u = UNITS[id];
+        if (armed === id && e.target.closest('.pr')) {
+          if (u.buildable === false || u.cost > funds()) return;   // 灰着的「生产」按钮点了没反应
+          toast('演示：生产还没接入引擎（不扣钱、不出兵）'); armed = null;
+        } else if (armed === id) armed = null;
+        else { sel = id; armed = id; spin = .5; resetView(); }
+        refresh();
+      }
       else if (b.dataset.act === 'close') close();
-      else if (b.dataset.act === 'team') { team = team === 'blue' ? 'red' : 'blue'; el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r'); b.textContent = TEAM_NAME[team]; refresh(); }   // 仅供验收美术：换军队色看模型
-      else if (b.dataset.act === 'buy') { toast('演示：生产还没接入引擎（不扣钱、不出兵）'); popOn = false; popPlace(); }
     });
     refresh();
   }
@@ -165,31 +170,15 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     const up = listEl.scrollTop > 2, dn = listEl.scrollTop < listEl.scrollHeight - listEl.clientHeight - 2;
     listEl.style.setProperty('--ft', up ? '22px' : '0px'); listEl.style.setProperty('--fb', dn ? '22px' : '0px');
     el.querySelector('.ars-more.up').classList.toggle('on', up); el.querySelector('.ars-more.dn').classList.toggle('on', dn);
-    popPlace();
-  }
-  // 生产弹窗（0.53）：点左边某张兵种卡，弹窗出现在这张卡右边（箭头指向它），点弹窗 = 生产；列表滑动时跟着卡片走，卡片滑出可见范围就隐藏；点展示窗 / 生产后收起
-  const offIn = (n, anc) => { let x = 0, y = 0; for (; n && n !== anc; n = n.offsetParent) { x += n.offsetLeft; y += n.offsetTop; } return {x, y}; };
-  function popPlace() {
-    if (!el || !listEl) return;
-    const pop = el.querySelector('.ars-pop'), row = el.querySelector('.ars-row'), card = el.querySelector('.ars-card.sel');
-    let on = popOn && !!card;
-    if (on) {
-      const ct = card.offsetTop - listEl.scrollTop, ch = card.offsetHeight;
-      on = ct + ch * .5 > 0 && ct + ch * .5 < listEl.clientHeight;   // 卡片中心滑出列表就隐藏
-      if (on) {
-        const lp = offIn(listEl, row), menu = el.querySelector('.ars-menu');
-        pop.style.left = menu.offsetLeft + menu.offsetWidth + 14 + 'px';
-        pop.style.top = Math.max(0, Math.min(row.offsetHeight - pop.offsetHeight, lp.y + ct + ch / 2 - pop.offsetHeight / 2)) + 'px';
-      }
-    }
-    pop.classList.toggle('on', on);
   }
   function refresh() {
     const f = funds(); el.querySelector('#arsFund').textContent = f;
     el.querySelectorAll('.ars-card').forEach(c => {
       const id = c.dataset.u, u = UNITS[id], lock = u.buildable === false, poor = !lock && u.cost > f;
       c.classList.toggle('sel', id === sel); c.classList.toggle('poor', poor); c.classList.toggle('lock', lock);
-      c.querySelector('.pr').textContent = lock ? '暂不可' : u.cost;
+      c.classList.toggle('arm', id === armed); const pr = c.querySelector('.pr');
+      if (id === armed) pr.innerHTML = lock ? '<b>暂不可</b><i>生产</i>' : poor ? '<b>资金不足</b><i>' + u.cost + '</i>' : '<b>生产</b><i>' + u.cost + '</i>';   // 价格签变成「生产 / 价格」按钮
+      else pr.textContent = lock ? '暂不可' : u.cost;
       c.querySelector('.sub').textContent = `移${u.move} · 射${u.range[0] === u.range[1] ? u.range[0] : u.range.join('–')}`;
     });
     const u = UNITS[sel], lock = u.buildable === false, poor = !lock && u.cost > f, r = u.range;
@@ -206,7 +195,6 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
     const rg = u.range[0] === u.range[1] ? '' : '射程' + u.range.join('–') + ' · ';
     el.querySelector('.ars-wps').innerHTML = wp('主炮', u.primary ? WPN[sel] || '主炮' : '无主炮', u.primary ? rg + u.ammo + '/' + u.ammo : '', u.primary ? DMG_PRIMARY[sel] || {} : null)
       + wp('副炮', u.secondary ? '机枪' : '无副炮', u.secondary && !u.primary ? rg.replace(/ · $/, '') : '', u.secondary ? DMG_SECONDARY[sel] || {} : null);
-    const buy = el.querySelector('.ars-pop'); buy.disabled = lock || poor; buy.textContent = lock ? '暂不可生产' : poor ? '资金不足 · ' + u.cost : '生产 · ' + u.cost;
     showModel();
     const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）
     if (sc && listEl) { const t = sc.offsetTop, b = t + sc.offsetHeight; if (t < listEl.scrollTop || b > listEl.scrollTop + listEl.clientHeight) listEl.scrollTop = t - (listEl.clientHeight - sc.offsetHeight) / 2; }
@@ -215,7 +203,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   function toast(m) { const t = el.querySelector('.ars-toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1600); }
 
   function open(cell, owner) { if (el) close(); openCell = cell; team = TEAM_NAME[owner] ? owner : 'blue'; build(); }
-  function close() { if (!el) return; popOn = false; cancelAnimationFrame(fling); fling = 0; ls = null; if (listRO) { listRO.disconnect(); listRO = null; } listEl = null; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; pts.clear(); gest = null; resetView(); if (current) { turn.remove(current.holder); current = null; } }
+  function close() { if (!el) return; armed = null; cancelAnimationFrame(fling); fling = 0; ls = null; if (listRO) { listRO.disconnect(); listRO = null; } listEl = null; host.classList.remove('ars-open'); el.remove(); el = pv = null; openCell = null; lastHole = ''; pts.clear(); gest = null; resetView(); if (current) { turn.remove(current.holder); current = null; } }
 
   // ── 每帧：把预览画进右侧留空矩形（舞台旋转时也成立：DOM 在舞台内，用 offset 链取逻辑坐标）──
   const v4 = new THREE.Vector4(), s4 = new THREE.Vector4();
