@@ -5,24 +5,25 @@
 #battle canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #battle #ui{position:absolute;inset:0;pointer-events:none}
 /* 0.55 战场界面：左上 = 第 N 天 · 回合方 · 金币；右上 = 旋转画面 + 暂停菜单（图标按钮）。样式沿用主页的斜切深蓝条（.item 同款）；左右两边都离短边 var(--pad-l)（= max(5sw, 56px)，倾斜后可见边缘约 52px），和兵工厂、主页一致 */
-#battle .hud{position:absolute;left:var(--pad-l);top:10px;height:44px;box-sizing:border-box;padding:0 18px;display:flex;align-items:center;gap:11px;border-radius:10px;color:#fff;font:800 15px/1 var(--font);letter-spacing:.06em;transform:skewX(-10deg);pointer-events:none}
+#battle .hud{position:absolute;left:var(--pad-l);top:10px;height:36px;box-sizing:border-box;padding:0 14px;display:flex;align-items:center;gap:9px;border-radius:9px;color:#fff;font:800 13px/1 var(--font);letter-spacing:.06em;transform:skewX(-10deg);pointer-events:none}
 #battle .hud::before,#battle .gbtn::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(20,48,86,.86),rgba(9,24,46,.92));box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55)}
 #battle .hud>*{position:relative;transform:skewX(10deg);white-space:nowrap}
-#battle .hud .sep{width:2px;height:20px;border-radius:1px;background:rgba(255,255,255,.22)}
-#battle .hud .team{display:flex;align-items:center;gap:7px}
-#battle .hud .dot{width:13px;height:13px;border-radius:50%;box-sizing:border-box;border:2px solid rgba(255,255,255,.9)}
+#battle .hud .sep{width:2px;height:16px;border-radius:1px;background:rgba(255,255,255,.22)}
+#battle .hud .team{display:flex;align-items:center;gap:6px}
+#battle .hud .dot{width:11px;height:11px;border-radius:50%;box-sizing:border-box;border:2px solid rgba(255,255,255,.9)}
 #battle .hud .dot.b{background:#3b82f6}
 #battle .hud .dot.r{background:#ef4444}
-#battle .hud .coin{width:19px;height:19px;border-radius:50%;box-sizing:border-box;background:radial-gradient(circle at 35% 30%,#ffe27a,#ffb81c 60%,#c77a0a);box-shadow:inset 0 0 0 2px #8a4a0e,0 1px 0 rgba(0,0,0,.45)}
-#battle .hud b{font-size:17px;color:#ffd45a;min-width:2.9em}
-#battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:12px;pointer-events:auto}
-#battle .gbtn{position:relative;width:50px;height:44px;padding:0;border:0;background:none;color:#fff;border-radius:10px;transform:skewX(-10deg);font:inherit;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
+#battle .hud .coin{width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:radial-gradient(circle at 35% 30%,#ffe27a,#ffb81c 60%,#c77a0a);box-shadow:inset 0 0 0 2px #8a4a0e,0 1px 0 rgba(0,0,0,.45)}
+#battle .hud b{font-size:14px;color:#ffd45a;min-width:2.8em}
+#battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:10px;pointer-events:auto}
+#battle .gbtn{position:relative;width:44px;height:36px;padding:0;border:0;background:none;color:#fff;border-radius:9px;transform:skewX(-10deg);font:inherit;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
 #battle .gbtn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown);opacity:0}
-#battle .gbtn>span{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;height:100%;transform:skewX(10deg);font-size:25px;line-height:1}
+#battle .gbtn>span{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;height:100%;transform:skewX(10deg);font-size:21px;line-height:1;transition:opacity .2s}
+#battle .gbtn>span.zoom{font:800 15px/1 var(--font);letter-spacing:0;color:#ffd45a}   /* 缩放时旋转按钮临时显示视距数字 */
 #battle .gbtn:active{transform:skewX(-10deg) translateY(2px);color:#2b1700}
 #battle .gbtn:active::after{opacity:1}
-#battle .burger{flex-direction:column;gap:5px}
-#battle .burger i{display:block;width:22px;height:3px;border-radius:2px;background:currentColor}
+#battle .burger{flex-direction:column;gap:4px}
+#battle .burger i{display:block;width:18px;height:2.5px;border-radius:2px;background:currentColor}
 #battle #dbg{position:absolute;left:10px;bottom:6px;font-size:10px;opacity:.7;white-space:pre}
 /* 暂停菜单：面板同主页设置面板，按钮直接用主页的 .item（斜切深蓝条，按下变金） */
 #battle .pmask{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:calc(var(--sh,1px)*3) calc(var(--sw,1px)*3);background:rgba(5,14,28,.6);pointer-events:auto}

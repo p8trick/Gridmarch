@@ -31,7 +31,6 @@ export async function mountBattle(host, stage, opts = {}) {
   <header class="phead"><h2>暂停</h2><em id="pInfo"></em></header>
   <ul class="pmenu">
     <li><button class="item" data-act="resume"><span class="txt"><span class="main">继续</span><span class="sub">RESUME</span></span></button></li>
-    <li><button class="item" id="mZoom" data-act="zoom"><span class="txt"><span class="main"></span><span class="sub">VIEW</span></span></button></li>
     <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
     <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图</span><span class="sub">NEW MAP</span></span></button></li>
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
@@ -113,17 +112,29 @@ function handleTap(px, py) {
 const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
-let hudSig = '';
+let hudSig = '', lastCells = null, zoomT = 0, zoomOn = false;
+// 视距提示（0.56）：缩放时右上「旋转」按钮临时变成当前视距（格数），随缩放实时变化；停手 2 秒后淡出，变回旋转图标（双指还按着就继续等）
+const rotSpan = $('bRot').firstElementChild;
+function showZoom() {
+  rotSpan.style.opacity = 1; rotSpan.textContent = cellsTxt(); rotSpan.classList.add('zoom'); zoomOn = true;
+  clearTimeout(zoomT); zoomT = setTimeout(hideZoom, 2000);
+}
+function hideZoom() {
+  if (!alive || !zoomOn) return;
+  if (pts.size > 1) { zoomT = setTimeout(hideZoom, 600); return; }
+  rotSpan.style.opacity = 0;
+  zoomT = setTimeout(() => { rotSpan.textContent = '⟳'; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; }, 200);
+}
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
   const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
   if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
-  $('mZoom').querySelector('.main').textContent = '视距 · ' + cellsTxt() + ' 格';
+  if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
-$('bRot').onclick = () => { cam.rotate(1); mark(); };
+$('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.textContent = '⟳'; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 $('bMenu').onclick = () => { pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
 pause.addEventListener('click', e => {
@@ -131,7 +142,6 @@ pause.addEventListener('click', e => {
   const b = e.target.closest('.item'); if (!b) return;
   const a = b.dataset.act;
   if (a === 'resume') pause.hidden = true;
-  else if (a === 'zoom') { cam.cycleZoom(); mark(); }
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
   else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }
@@ -164,7 +174,6 @@ stage.onChange(resize);   // 舞台尺寸 / 旋转变化时重设画布和相机
 const syncSide = () => { $('mSideLi').hidden = !stage.rot; };
 stage.onChange(syncSide); syncSide();
 onLongPress($('bSide'), () => stageDebug(stage));   // 长按「换边」0.8 秒：现场诊断（排查竖屏黑边用）
-$('bSide').onclick = () => stage.toggleSide();
 
 // ── 主循环（按需渲染：没有动画 / 没有操作时不出帧）──
 let lastT = performance.now();
@@ -192,7 +201,7 @@ window.battle = {world, cam, preset, THREE, game, describe};   // 调试：控�
 function destroy() {
   if (!alive) return; alive = false;
   ars.dispose();
-  cancelAnimationFrame(raf); clearTimeout(wheelTimer);
+  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
   if (stage.dbg) stage.dbg.close();
