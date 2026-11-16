@@ -62,21 +62,23 @@
 #battle .banner[hidden]{display:none}
 #battle .banner.b{--tc:#3b82f6}
 #battle .banner.r{--tc:#ef4444}
-#battle .banner .bb{position:absolute;left:-12%;right:-12%;top:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:30px;background:linear-gradient(180deg,rgba(20,48,86,.96),rgba(9,24,46,.97));box-shadow:inset 0 3px 0 var(--gold-hi),inset 0 -3px 0 var(--gold-hi),0 4px 0 rgba(2,10,22,.55);border-bottom:7px solid var(--tc);transform:translateX(-120%) skewX(-10deg);overflow:hidden}
-#battle .banner .bb::after{content:"";position:absolute;top:0;bottom:0;width:90px;left:-160px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent)}
-#battle .banner .bday{font:900 54px/1 var(--font);letter-spacing:.1em;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 3px 0 var(--brown));opacity:0}
-#battle .banner .bteam{display:flex;align-items:center;gap:9px;font:800 22px/1 var(--font);letter-spacing:.14em;color:#fff;opacity:0;transform:skewX(10deg)}
+#battle .banner .bb{position:absolute;left:-12%;right:-12%;top:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:30px;transform:translateX(-120%);will-change:transform;backface-visibility:hidden}   /* 0.59：动画只动这一层的 transform（原来斜切、边框、扫光的 left 一起动，iOS 上会闪、会跳） */
+#battle .banner .bs{position:absolute;inset:0;transform:skewX(-10deg);overflow:hidden;background:linear-gradient(180deg,#143056,#09182e);box-shadow:inset 0 3px 0 var(--gold-hi),inset 0 -3px 0 var(--gold-hi),0 4px 0 rgba(2,10,22,.55)}   /* 斜切带本体：静止不动 */
+#battle .banner .bline{position:absolute;left:0;right:0;bottom:3px;height:6px;background:var(--tc)}   /* 阵营色底边（单独一条，不用 border） */
+#battle .banner .bshine{position:absolute;top:0;bottom:0;left:0;width:90px;background:linear-gradient(90deg,transparent,rgba(255,236,180,.28),transparent);transform:translateX(-200%);will-change:transform}   /* 扫光：偏暖的金白色，只用 transform 移动 */
+#battle .banner .bday{position:relative;z-index:1;font:900 54px/1 var(--font);letter-spacing:.1em;color:#ffc93a;text-shadow:0 -2px 0 #ffe9a0,0 3px 0 var(--brown),0 0 16px rgba(255,190,50,.35);opacity:0;will-change:transform,opacity}
+#battle .banner .bteam{position:relative;z-index:1;display:flex;align-items:center;gap:9px;font:800 22px/1 var(--font);letter-spacing:.14em;color:#fff;opacity:0;will-change:transform,opacity}
 #battle .banner .bteam .dot{width:18px;height:18px;border-radius:50%;box-sizing:border-box;border:3px solid rgba(255,255,255,.9)}
 #battle .banner .bteam .dot.b{background:#3b82f6}
 #battle .banner .bteam .dot.r{background:#ef4444}
 #battle .banner.play .bb{animation:bandRun 1.7s cubic-bezier(.22,.8,.2,1) forwards}
-#battle .banner.play .bb::after{animation:bandShine 1.7s ease-in-out forwards}
+#battle .banner.play .bshine{animation:bandShine 1.7s ease-in-out forwards}
 #battle .banner.play .bday{animation:dayPop 1.7s cubic-bezier(.2,.9,.2,1) forwards}
 #battle .banner.play .bteam{animation:teamIn 1.7s ease-out forwards}
-@keyframes bandRun{0%{transform:translateX(-120%) skewX(-10deg)}15%{transform:translateX(0) skewX(-10deg)}86%{transform:translateX(0) skewX(-10deg)}100%{transform:translateX(120%) skewX(-10deg)}}
-@keyframes bandShine{0%,18%{left:-160px}48%,100%{left:120%}}
-@keyframes dayPop{0%,12%{opacity:0;transform:skewX(10deg) scale(1.6)}26%{opacity:1;transform:skewX(10deg) scale(.96)}32%{transform:skewX(10deg) scale(1.02)}38%,100%{opacity:1;transform:skewX(10deg) scale(1)}}
-@keyframes teamIn{0%,26%{opacity:0;transform:skewX(10deg) translateX(-24px)}40%,100%{opacity:1;transform:skewX(10deg) translateX(0)}}
+@keyframes bandRun{0%{transform:translateX(-120%)}15%{transform:translateX(0)}86%{transform:translateX(0)}100%{transform:translateX(120%)}}
+@keyframes bandShine{0%,18%{transform:translateX(-200%)}48%,100%{transform:translateX(1400%)}}
+@keyframes dayPop{0%,12%{opacity:0;transform:scale(1.6)}26%{opacity:1;transform:scale(.96)}32%{transform:scale(1.02)}38%,100%{opacity:1;transform:scale(1)}}
+@keyframes teamIn{0%,26%{opacity:0;transform:translateX(-24px)}40%,100%{opacity:1;transform:translateX(0)}}
 #battle #dbg{position:absolute;left:10px;bottom:6px;font-size:10px;opacity:.7;white-space:pre}
 /* 暂停菜单：面板同主页设置面板，按钮直接用主页的 .item（斜切深蓝条，按下变金） */
 #battle .pmask{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:calc(var(--sh,1px)*3) calc(var(--sw,1px)*3);background:rgba(5,14,28,.6);pointer-events:auto}
