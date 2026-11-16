@@ -14,6 +14,7 @@ import {dispHp, unitAt, produce as engineProduce} from '../rules/engine.js';
 // 整个游戏始终只有一个 html 文档，不发生页面跳转 —— 这样 iOS 的左 / 右边缘滑动（系统前进 / 后退手势）没有历史可翻，自然不会触发。
 // 舞台（虚拟横屏）由主页创建，全程共用同一个 Stage，这里只借用，不创建、不销毁。
 let current = null;   // 当前挂着的战场（同时只会有一个）
+const ROT_SVG = '<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.9-6.2"/><path d="M20.6 3.6v5.2h-5.2"/></svg>';   // 顺时针旋转图标（0.57：字符 ⟳ 比 ☰ 小，改成 SVG，大小可控）
 export function unmountBattle() { if (current) { current.destroy(); current = null; } }
 
 // host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit}
@@ -24,7 +25,8 @@ export async function mountBattle(host, stage, opts = {}) {
   current = handle;
   host.innerHTML = `<div id="ui">
   <div id="hudL" class="hud"><span id="hDay"></span><i class="sep"></i><span class="team"><i id="hDot" class="dot b"></i><span id="hTeam"></span></span><i class="sep"></i><span class="coin"></span><b id="hFunds"></b></div>
-  <div id="hudR"><button class="gbtn" id="bRot" aria-label="旋转画面"><span>⟳</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
+  <div id="hudR"><button class="gbtn" id="bRot" aria-label="旋转画面"><span>${ROT_SVG}</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
+  <div id="dp" class="dpanel r" hidden><div id="uCard" class="dcard" hidden></div><div id="tCard" class="dcard"></div></div>
   <div id="dbg"></div>
 </div>
 <div id="pause" class="pmask" hidden><div class="ppanel" role="dialog" aria-modal="true">
@@ -55,7 +57,7 @@ const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40
 preset.layout.units = specs;
 world = buildWorld({preset});
 const L = preset.layout;
-world.setShadowRadius(27);   // 视距 9 格时画面对角约 ±18：阴影范围放大到 ±27（2048 贴图下仍是每格 ~80 像素）
+world.setShadowRadius(33);   // 视距 11 格时画面对角约 ±22：阴影范围放大到 ±33（2048 贴图下约每格 62 像素；原 9 格 ±27 时是 80）
 
 renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -71,7 +73,7 @@ const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cel
 // 生产（0.55）：兵工厂界面点「生产」→ 引擎 produce（扣钱、标记本回合已造、单位本回合不能动）→ 战场里在这座兵工厂上摆出新单位
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
-  if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); hud(); mark(); }
+  if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); hud(); infoUpdate(); mark(); }
   return r;
 };
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
@@ -105,7 +107,33 @@ function handleTap(px, py) {
   picked = inside ? c : null;
   if (picked) cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz)); else cursor.hide();
   if (picked) { const [ex, ey] = toEngine(picked); if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(picked, game.turn === 0 ? 'blue' : 'red'); }
-  hud(); mark();
+  infoUpdate(); hud(); mark();
+}
+
+// ── 详细信息面板（0.57）：点格子后，面板出现在光圈所在位置的【另一侧】（光圈在左半屏 → 面板在右下，反之亦然；中间 46%–54% 不切换，免得抖）。
+//    单位卡（名字 / 血量 / 燃料 / 弹药）在上，地形卡（名字 / 防御星 / 归属）在下；数据全部来自引擎（rules/engine + data）。 ──
+const OWN = ['蓝军', '红军'];
+let infoSide = 'r';
+function infoUpdate() {
+  const dp = $('dp');
+  if (!picked) { dp.hidden = true; return; }
+  const [ex, ey] = toEngine(picked), T = RULE_TERRAINS[game.terrain[ey][ex]], eu = unitAt(game, ex, ey), o = game.owners[ex + ',' + ey];
+  $('uCard').hidden = !eu;
+  if (eu) {
+    const d = RULE_UNITS[eu.type], hp = dispHp(eu.hp);
+    $('uCard').innerHTML = `<h3><i class="dot ${eu.owner === 0 ? 'b' : 'r'}"></i>${d.name}</h3>` +
+      `<div class="drow"><span>血量</span><span class="hpbar"><i style="width:${hp * 10}%;background:${hp >= 7 ? '#6ee06e' : hp >= 4 ? '#ffd45a' : '#ff6b5e'}"></i></span><b>${hp}/10</b></div>` +
+      `<div class="drow"><span>燃料</span><b>${d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel}</b></div>` +
+      `<div class="drow"><span>弹药</span><b>${d.ammo ? eu.ammo + '/' + d.ammo : '—'}</b></div>`;
+  }
+  $('tCard').innerHTML = `<h3>${T.name}</h3><div class="drow"><span>防御</span><b class="stars">${T.stars ? '★'.repeat(T.stars) : '—'}</b></div>` + (T.property ? `<div class="drow"><span>归属</span><b>${o === undefined ? '中立' : OWN[o]}</b></div>` : '');
+  dp.hidden = false; infoPlace();
+}
+function infoPlace() {   // 相机移动 / 旋转后光圈在屏幕上的位置会变，面板跟着换边
+  const dp = $('dp'); if (!picked || dp.hidden) return;
+  const v = new THREE.Vector3(picked[0] * 2, world.surfaceY(picked[0], picked[1]), picked[1] * 2).project(cam.cam), sx = (v.x + 1) / 2 * stage.w;
+  if (sx < stage.w * .46) infoSide = 'r'; else if (sx > stage.w * .54) infoSide = 'l';
+  dp.className = 'dpanel ' + infoSide;
 }
 
 // ── HUD ──
@@ -123,18 +151,19 @@ function hideZoom() {
   if (!alive || !zoomOn) return;
   if (pts.size > 1) { zoomT = setTimeout(hideZoom, 600); return; }
   rotSpan.style.opacity = 0;
-  zoomT = setTimeout(() => { rotSpan.textContent = '⟳'; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; }, 200);
+  zoomT = setTimeout(() => { rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; }, 200);
 }
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
   const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
   if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
+  infoPlace();
   if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
-$('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.textContent = '⟳'; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
+$('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 $('bMenu').onclick = () => { pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
 pause.addEventListener('click', e => {
@@ -195,7 +224,7 @@ function loop(now) {
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 requestAnimationFrame(() => requestAnimationFrame(() => { const l = host.querySelector('#loading'); if (l) l.remove(); }));   // 第一帧画出来之后再撤掉加载提示
-window.battle = {world, cam, preset, THREE, game, describe};   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

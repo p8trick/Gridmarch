@@ -24,6 +24,20 @@
 #battle .gbtn:active::after{opacity:1}
 #battle .burger{flex-direction:column;gap:4px}
 #battle .burger i{display:block;width:18px;height:2.5px;border-radius:2px;background:currentColor}
+#battle .dpanel{position:absolute;bottom:12px;width:176px;display:flex;flex-direction:column;gap:8px;pointer-events:none;font-family:var(--font)}   /* 0.57 详细信息面板：左右由 infoPlace() 按光圈位置选（光圈的另一侧），边距同 --pad-l */
+#battle .dpanel.l{left:var(--pad-l)}
+#battle .dpanel.r{right:var(--pad-l)}
+#battle .dpanel[hidden],#battle .dcard[hidden]{display:none}
+#battle .dcard{box-sizing:border-box;padding:8px 12px 9px;border-radius:12px;background:rgba(15,39,68,.94);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 3px 0 rgba(2,10,22,.6);color:#fff}
+#battle .dcard h3{margin:0 0 4px;display:flex;align-items:center;gap:7px;font-size:15px;letter-spacing:.06em}
+#battle .dcard .dot{width:11px;height:11px;border-radius:50%;box-sizing:border-box;border:2px solid rgba(255,255,255,.9)}
+#battle .dcard .dot.b{background:#3b82f6}
+#battle .dcard .dot.r{background:#ef4444}
+#battle .drow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;line-height:1.75;color:rgba(255,255,255,.7)}
+#battle .drow b{color:#fff;font-size:13px}
+#battle .drow .stars{color:#ffd45a;letter-spacing:1px}
+#battle .hpbar{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden}
+#battle .hpbar i{display:block;height:100%}
 #battle #dbg{position:absolute;left:10px;bottom:6px;font-size:10px;opacity:.7;white-space:pre}
 /* 暂停菜单：面板同主页设置面板，按钮直接用主页的 .item（斜切深蓝条，按下变金） */
 #battle .pmask{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:calc(var(--sh,1px)*3) calc(var(--sw,1px)*3);background:rgba(5,14,28,.6);pointer-events:auto}

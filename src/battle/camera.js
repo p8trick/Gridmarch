@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 // 战术相机（正交）。规则沿用测试页：
-//  · 视距三档 5 / 7 / 9 格 = 屏幕【短边】方向（横屏时的上下）能看到的地面格数。俯角 55° 下地面在纵向被压缩，所以
+//  · 视距四档 5 / 7 / 9 / 11 格（0.57 加 11） = 屏幕【短边】方向（横屏时的上下）能看到的地面格数。俯角 55° 下地面在纵向被压缩，所以
 //    屏幕宽度（世界单位）= 格数 × 2 × 宽高比 × sin(俯角)；按格数记录视距，换设备 / 宽高比不同时"几格"不变。
 //    双指 / 滚轮可在 CELLS 范围内自由缩放，松手后吸附到最近的一档
 //  · 固定俯角 55°，90° 旋转（带过渡动画）
 //  · 旋转中心 = 屏幕正中心对应的地面点（target）：转的时候你正在看的东西留在原地，只有周围绕着它转。
 //    这是最不会"丢位置"的方式；以后若要"绕选中单位转"，只需要在旋转前先把 target 平移到那个单位上。
 export const CAMERA = {
-  ZOOMS: [5, 7, 9],            // 视距三档（短边格数）
+  ZOOMS: [5, 7, 9, 11],        // 视距四档（短边格数）
   CELLS: [3.5, 11],            // 自由缩放范围
   PITCH: 55,
   YAW_BIAS: 0.08 * Math.PI,    // 测试页的既定细节：相机相对格子轴向有一点点偏角（不是正对正北）
@@ -56,7 +56,7 @@ export class TacticalCamera {
   // 双指 / 滚轮：ratio = 上一次手指间距 / 现在的间距（>1 拉近视野变小）
   zoomBy(ratio) { this.cellsGoal = null; this.cells = clamp(this.cells * ratio, CAMERA.CELLS[0], CAMERA.CELLS[1]); this.applyFrustum(); }
   snap() { let b = CAMERA.ZOOMS[0]; for (const z of CAMERA.ZOOMS) if (Math.abs(z - this.cells) < Math.abs(b - this.cells)) b = z; this.cellsGoal = b; }
-  cycleZoom() {   // 按钮：5 → 7 → 9 → 5 格
+  cycleZoom() {   // 按钮：5 → 7 → 9 → 11 → 5 格（0.56 起界面上没有这个按钮了，保留给以后 / 调试）
     const Z = CAMERA.ZOOMS; let i = 0; for (let k = 1; k < Z.length; k++) if (Math.abs(Z[k] - this.cells) < Math.abs(Z[i] - this.cells)) i = k;
     this.cellsGoal = Z[(i + 1) % Z.length];
   }
