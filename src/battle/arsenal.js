@@ -1,10 +1,11 @@
+import {MODEL_OF} from '../game/engine-map.js';
 import {UNITS, UNIT_IDS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER, UNIT_CAT, CAT_ORDER, WEAPON_LIST_MIN} from '../rules/data.js';
 import {createTank} from '../game/units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
 import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
 
-// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 右下角改「关闭」、去掉右上 ✕；0.54 去掉蓝 / 红军切换，生产改成兵种卡价格签变「生产」按钮（取代 0.53 的弹窗））：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
+// 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 右下角改「关闭」、去掉右上 ✕；0.54 去掉蓝 / 红军切换，生产改成兵种卡价格签变「生产」按钮（取代 0.53 的弹窗）；0.55 点「生产」真的生产并关闭面板，没模型的兵种先不能买）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
 const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
@@ -20,7 +21,7 @@ const TEAM_NAME = {blue: '蓝军', red: '红军'};
 const CAT = {foot: ['步兵', '#efd5b0'], veh: ['车辆', '#efd5b0'], heli: ['直升机', '#d9d3f5'], air: ['飞机', '#d9d3f5'], ship: ['船', '#bfeee6'], sub: ['潜艇', '#bfeee6']};   // 大类名 + 底色（沿用高战2：陆米色 / 空淡紫 / 海青绿）
 const WPN = {mech: '火箭筒', tank: '轻型火炮', mdtank: '中型火炮', neotank: '重型火炮', arty: '榴弹炮', rocket: '火箭炮', aa: '机关炮', missile: '防空导弹'};   // 主炮名（我自己起的，随便改）；副炮统一叫机枪
 
-export function createArsenal({THREE, renderer, host, stage, game}) {
+export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
   let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null, armed = null;
   const cache = new Map(), pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
    // 'type|team' → {holder} | null（尚未建模）| 'error'
@@ -73,6 +74,7 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
 
   // ── DOM ──
   const funds = () => game.funds[team === 'blue' ? 0 : 1];
+  const locked = id => UNITS[id].buildable === false || !MODEL_OF[id];   // 0.55：引擎不让造的（防空导弹）+ 还没有模型的兵种（造出来看不见）都先不能买
   // 视图 / 手势辅助：必须在 build() 之外定义——close() 也要用 resetView（0.46 把它们放进了 build() 里，关闭面板时报 ReferenceError）
   const startGesture = () => {
     const a = [...pts.values()];
@@ -154,8 +156,10 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
       if (b.dataset.u) {   // 0.54：点兵种卡 = 选中 + 把它的价格签变成「生产」按钮；再点「生产」才买；再点卡片其他地方 = 还原；点别的卡 = 直接换成那张的生产按钮
         const id = b.dataset.u, u = UNITS[id];
         if (armed === id && e.target.closest('.pr')) {
-          if (u.buildable === false || u.cost > funds()) return;   // 灰着的「生产」按钮点了没反应
-          toast('演示：生产还没接入引擎（不扣钱、不出兵）'); armed = null;
+          if (locked(id) || u.cost > funds()) return;   // 灰着的「生产」按钮点了没反应
+          const r = onProduce ? onProduce(id, openCell) : {ok: true};   // 0.55：真生产（main.js 调引擎 produce + 往战场加单位）；成功就关掉整个面板回战场，失败（本回合已造过 / 兵工厂上有单位…）弹提示
+          if (!r.ok) { toast(r.err); armed = null; refresh(); return; }
+          close(); return;
         } else if (armed === id) armed = null;
         else { sel = id; armed = id; spin = .5; resetView(); }
         refresh();
@@ -174,14 +178,14 @@ export function createArsenal({THREE, renderer, host, stage, game}) {
   function refresh() {
     const f = funds(); el.querySelector('#arsFund').textContent = f;
     el.querySelectorAll('.ars-card').forEach(c => {
-      const id = c.dataset.u, u = UNITS[id], lock = u.buildable === false, poor = !lock && u.cost > f;
+      const id = c.dataset.u, u = UNITS[id], lock = locked(id), poor = !lock && u.cost > f;
       c.classList.toggle('sel', id === sel); c.classList.toggle('poor', poor); c.classList.toggle('lock', lock);
       c.classList.toggle('arm', id === armed); const pr = c.querySelector('.pr');
-      if (id === armed) pr.innerHTML = lock ? '<b>暂不可</b><i>生产</i>' : poor ? '<b>资金不足</b><i>' + u.cost + '</i>' : '<b>生产</b><i>' + u.cost + '</i>';   // 价格签变成「生产 / 价格」按钮
-      else pr.textContent = lock ? '暂不可' : u.cost;
+      if (id === armed) pr.innerHTML = lock ? (u.buildable === false ? '<b>暂不可</b><i>生产</i>' : '<b>未建模</b><i>暂不可</i>') : poor ? '<b>资金不足</b><i>' + u.cost + '</i>' : '<b>生产</b><i>' + u.cost + '</i>';   // 价格签变成「生产 / 价格」按钮
+      else pr.textContent = lock ? (u.buildable === false ? '暂不可' : '未建模') : u.cost;
       c.querySelector('.sub').textContent = `移${u.move} · 射${u.range[0] === u.range[1] ? u.range[0] : u.range.join('–')}`;
     });
-    const u = UNITS[sel], lock = u.buildable === false, poor = !lock && u.cost > f, r = u.range;
+    const u = UNITS[sel], lock = locked(sel), poor = !lock && u.cost > f;
     el.querySelector('#arsName').textContent = u.name;
     // 右列（0.52，仿高战2）：机动 / 视野 / 燃料三行，然后主炮、副炮各一块：武器名 + 弹药，下面是「能打的大类」小块（只列能打的，不列灰的）
     const fuel = u.fuel === Infinity ? '∞' : u.fuel + '/' + u.fuel;

@@ -49,12 +49,14 @@ export function createGameFromPreset(preset, opts = {}) {
   const units = start.units.map(u => { const [x, y] = toEngine(u.c); return {type: u.type, owner: u.owner, x, y}; });
   const game = createGame({terrain: terrainGrid(preset), units, owners, funds: opts.funds || start.funds, config: opts.config});
   const specs = [];
-  for (const u of game.units) {
-    const m = MODEL_OF[u.type]; if (!m) continue;
-    const team = TEAM_OF[u.owner];
-    specs.push({...m, id: u.id, team, c: toWorld([u.x, u.y]), face: team === 'blue' ? FACE_BLUE : FACE_RED, name: (team === 'blue' ? '蓝' : '红') + NAME[u.type]});
-  }
+  for (const u of game.units) { const s = specOfUnit(u, toWorld); if (s) specs.push(s); }
   return {game, specs, toEngine, toWorld};
+}
+// 引擎单位 → 渲染规格（开局单位和生产出的新单位共用；没有模型的兵种返回 null）
+export function specOfUnit(u, toWorld) {
+  const m = MODEL_OF[u.type]; if (!m) return null;
+  const team = TEAM_OF[u.owner];
+  return {...m, id: u.id, team, c: toWorld([u.x, u.y]), face: team === 'blue' ? FACE_BLUE : FACE_RED, name: (team === 'blue' ? '蓝' : '红') + NAME[u.type]};
 }
 // 朝向（world.js：holder.rotation.y = face；模型正前方 = +z，yaw θ 时朝 (sin θ, cos θ)）：蓝方在西面朝东 +x，红方在东面朝西 -x
 export const FACE_BLUE = Math.PI / 2, FACE_RED = -Math.PI / 2;

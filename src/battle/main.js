@@ -5,9 +5,9 @@ import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
 import {createArsenal} from './arsenal.js';
-import {createGameFromPreset} from '../game/engine-map.js';
+import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -23,12 +23,20 @@ export async function mountBattle(host, stage, opts = {}) {
   const handle = {destroy};
   current = handle;
   host.innerHTML = `<div id="ui">
-  <div id="top">
-    <div class="grp"><button class="btn" id="bBack">‹ 主页</button><button class="btn" id="bSide" style="display:none" aria-label="画面上下颠倒时点这里换边">换边</button></div>
-    <div class="grp"><button class="btn" id="bRotL" aria-label="向左转90度">⟲</button><button class="btn" id="bRotR" aria-label="向右转90度">⟳</button><button class="btn" id="bZoom">视距</button><button class="btn" id="bReroll">换图</button></div>
-  </div>
-  <div id="info"></div>
+  <div id="hudL" class="hud"><span id="hDay"></span><i class="sep"></i><span class="team"><i id="hDot" class="dot b"></i><span id="hTeam"></span></span><i class="sep"></i><span class="coin"></span><b id="hFunds"></b></div>
+  <div id="hudR"><button class="gbtn" id="bRot" aria-label="旋转画面"><span>⟳</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
+  <div id="dbg"></div>
 </div>
+<div id="pause" class="pmask" hidden><div class="ppanel" role="dialog" aria-modal="true">
+  <header class="phead"><h2>暂停</h2><em id="pInfo"></em></header>
+  <ul class="pmenu">
+    <li><button class="item" data-act="resume"><span class="txt"><span class="main">继续</span><span class="sub">RESUME</span></span></button></li>
+    <li><button class="item" id="mZoom" data-act="zoom"><span class="txt"><span class="main"></span><span class="sub">VIEW</span></span></button></li>
+    <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
+    <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图</span><span class="sub">NEW MAP</span></span></button></li>
+    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
+  </ul>
+</div></div>
 <div id="err"></div>
 <div id="loading">正在生成战场…</div>`;
   const $ = id => host.querySelector('#' + id);
@@ -44,7 +52,7 @@ export async function mountBattle(host, stage, opts = {}) {
 // ── 关卡：opts.seed 固定地图（网址 index.html?go=battle&seed=N）；不给就每次随机一个种子（左下角会显示，想复现就记下来）──
 const seed = Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 999999)));
 const preset = makeLevel1(seed);
-const {game, specs, toEngine} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
+const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
 preset.layout.units = specs;
 world = buildWorld({preset});
 const L = preset.layout;
@@ -61,7 +69,13 @@ const cv = renderer.domElement;
 const bounds = {x0: preset.x[0] * 2 - 1, x1: preset.x[1] * 2 + 1, z0: preset.z[0] * 2 - 1, z1: preset.z[1] * 2 + 1};
 const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell;
 const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
-const ars = createArsenal({THREE, renderer, host, stage, game});   // 兵工厂界面（0.42）
+// 生产（0.55）：兵工厂界面点「生产」→ 引擎 produce（扣钱、标记本回合已造、单位本回合不能动）→ 战场里在这座兵工厂上摆出新单位
+const produceHere = (type, cell) => {
+  const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
+  if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); hud(); mark(); }
+  return r;
+};
+const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
 
 let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
@@ -82,7 +96,6 @@ function describe(c) {
   if (eu) { const d = RULE_UNITS[eu.type]; txt += `\n${OWN[eu.owner]}${d.name} · 血量 ${dispHp(eu.hp)}/10 · 弹药 ${d.ammo ? eu.ammo + '/' + d.ammo : '—'}`; }
   return txt;
 }
-const fundsTxt = () => `第 ${game.day} 天 · ${game.turn === 0 ? '蓝' : '红'}方回合 · 资金 蓝 ${game.funds[0]} / 红 ${game.funds[1]}`;
 const cursor = createCursor(THREE); world.scene.add(cursor.group);   // 格子光圈（见 cursor.js）
 let picked = null;
 const raycaster = new THREE.Raycaster();
@@ -100,16 +113,29 @@ function handleTap(px, py) {
 const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
-function hud() {
-  $('bZoom').textContent = '视距 ' + cellsTxt() + '格';
-  $('info').textContent = `${fundsTxt()}\n${preset.name} · 种子 ${seed} · 视距 ${cellsTxt()}格` + (picked ? `\n${describe(picked)}` : '') +
-    (debug ? `\n${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制` : '');
+let hudSig = '';
+function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
+  const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
+  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
+  $('mZoom').querySelector('.main').textContent = '视距 · ' + cellsTxt() + ' 格';
+  if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
-$('bRotL').onclick = () => { cam.rotate(-1); mark(); };
-$('bRotR').onclick = () => { cam.rotate(1); mark(); };
-$('bZoom').onclick = () => { cam.cycleZoom(); mark(); };
-$('bReroll').onclick = () => mountBattle(host, stage, {...opts, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
-$('bBack').onclick = () => { unmountBattle(); if (opts.onExit) opts.onExit(); };
+// 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
+$('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
+const pause = $('pause');
+$('bRot').onclick = () => { cam.rotate(1); mark(); };
+$('bMenu').onclick = () => { pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); pause.hidden = false; };
+pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
+pause.addEventListener('click', e => {
+  if (e.target === pause) { pause.hidden = true; return; }   // 点面板外 = 继续
+  const b = e.target.closest('.item'); if (!b) return;
+  const a = b.dataset.act;
+  if (a === 'resume') pause.hidden = true;
+  else if (a === 'zoom') { cam.cycleZoom(); mark(); }
+  else if (a === 'side') stage.toggleSide();
+  else if (a === 'reroll') mountBattle(host, stage, {...opts, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
+  else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }
+});
 
 // ── 触控：单指平移，双指缩放（松手吸附最近一档），轻点选格 ──
 // clientX/Y 是物理屏幕坐标：舞台被旋转时要先用 stage.toLogical 换成舞台坐标，位移、间距都从换算后的坐标算
@@ -135,7 +161,7 @@ cv.onpointercancel = e => endPointer(e, false);
 cv.onwheel = e => { e.preventDefault(); cam.zoomBy(Math.exp(e.deltaY * .001)); hud(); mark(); clearTimeout(wheelTimer); wheelTimer = setTimeout(() => { if (alive) { cam.snap(); mark(); } }, 180); };
 stage.onChange(resize);   // 舞台尺寸 / 旋转变化时重设画布和相机宽高比
 // 「换边」按钮：只在舞台被旋转时出现；画面上下颠倒了就点一下（选择会记住）
-const syncSide = () => { $('bSide').style.display = stage.rot ? '' : 'none'; };
+const syncSide = () => { $('mSideLi').hidden = !stage.rot; };
 stage.onChange(syncSide); syncSide();
 onLongPress($('bSide'), () => stageDebug(stage));   // 长按「换边」0.8 秒：现场诊断（排查竖屏黑边用）
 $('bSide').onclick = () => stage.toggleSide();
@@ -160,7 +186,7 @@ function loop(now) {
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 requestAnimationFrame(() => requestAnimationFrame(() => { const l = host.querySelector('#loading'); if (l) l.remove(); }));   // 第一帧画出来之后再撤掉加载提示
-window.battle = {world, cam, preset, THREE, game};   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe};   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

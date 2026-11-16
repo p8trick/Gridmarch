@@ -384,7 +384,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 单位
   const unitsGroup = new THREE.Group(); scene.add(unitsGroup);
   const rings = new THREE.Group(); rings.visible = false; scene.add(rings);
-  const units = UNITS.map((spec, idx) => {
+  const makeUnit = (spec, idx) => {   // 0.55：从 map 回调拆成函数，生产时也能在运行时加单位（api.addUnit）
     const actors = spec.k === 'inf' ? [createInfantryActor(spec.team, spec.type)].map(a => { a.phase = (idx * .31) % 1; return a; }) : null;
     const model = actors ? actors[0].root : createUnitModel(spec, idx);
     const msz = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
@@ -396,7 +396,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     const label = BADGE[spec.k === 'tank' || spec.type === 'at' ? spec.type : spec.k];
     const badge = makeBadge(label, spec.team); if (badge) { badge.visible = false; scene.add(badge); }
     return {spec, holder, model, ring, badge, actors, msz, fw: 1, fl: 1, tbadge: null, phase: idx * 1.7, baseY: 0, baseScale: 1, cell: [...spec.c], yaw: spec.face, path: null, dist: 0, curY: 0, topOff: 1.5, x: spec.c[0] * 2, z: spec.c[1] * 2, tris: triCount(model)};
-  });
+  };
+  const units = UNITS.map(makeUnit);
 
   const ghostCache = new Map();
   const ghostOf = m => { let g = ghostCache.get(m); if (!g) { g = m.clone(); g.transparent = true; g.opacity = .5; g.depthWrite = false; ghostCache.set(m, g); } return g; };
@@ -749,6 +750,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
+    addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
     beforeRender() { syncInfantryBatches(); },   // 渲染前：把反坦克兵占位的世界变换同步给批量绘制
     apply(camAngle) { state.camA = camAngle; state.viewQuarter = (((Math.round((camAngle - .08 * Math.PI) / (Math.PI / 2))) % 4) + 4) % 4; if (state.sandbox !== lastSand || state.mtnK !== lastMtnK || state.floorTint !== lastTint) rebuildBoard(); syncMountains(); applyUnits(); rings.visible = state.rings && state.units; return refreshTrees(camAngle); },

@@ -4,11 +4,35 @@
 #battle[hidden]{display:none}
 #battle canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #battle #ui{position:absolute;inset:0;pointer-events:none}
-#battle #top{position:absolute;left:10px;right:10px;top:8px;display:flex;justify-content:space-between;align-items:flex-start}
-#battle #top .grp{display:flex;gap:8px;pointer-events:auto}
-#battle .btn{min-width:44px;height:44px;padding:0 12px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(18,30,46,.72);color:#fff;font:inherit;font-size:15px;text-decoration:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none}
-#battle .btn:active{background:rgba(60,90,130,.85)}
-#battle #info{position:absolute;left:10px;bottom:8px;padding:4px 9px;border-radius:8px;background:rgba(18,30,46,.62);font-size:11px;line-height:1.5;white-space:pre;pointer-events:none}
+/* 0.55 战场界面：左上 = 第 N 天 · 回合方 · 金币；右上 = 旋转画面 + 暂停菜单（图标按钮）。样式沿用主页的斜切深蓝条（.item 同款）；左右两边都离短边 var(--pad-l)（= max(5sw, 56px)，倾斜后可见边缘约 52px），和兵工厂、主页一致 */
+#battle .hud{position:absolute;left:var(--pad-l);top:10px;height:44px;box-sizing:border-box;padding:0 18px;display:flex;align-items:center;gap:11px;border-radius:10px;color:#fff;font:800 15px/1 var(--font);letter-spacing:.06em;transform:skewX(-10deg);pointer-events:none}
+#battle .hud::before,#battle .gbtn::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(20,48,86,.86),rgba(9,24,46,.92));box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55)}
+#battle .hud>*{position:relative;transform:skewX(10deg);white-space:nowrap}
+#battle .hud .sep{width:2px;height:20px;border-radius:1px;background:rgba(255,255,255,.22)}
+#battle .hud .team{display:flex;align-items:center;gap:7px}
+#battle .hud .dot{width:13px;height:13px;border-radius:50%;box-sizing:border-box;border:2px solid rgba(255,255,255,.9)}
+#battle .hud .dot.b{background:#3b82f6}
+#battle .hud .dot.r{background:#ef4444}
+#battle .hud .coin{width:19px;height:19px;border-radius:50%;box-sizing:border-box;background:radial-gradient(circle at 35% 30%,#ffe27a,#ffb81c 60%,#c77a0a);box-shadow:inset 0 0 0 2px #8a4a0e,0 1px 0 rgba(0,0,0,.45)}
+#battle .hud b{font-size:17px;color:#ffd45a;min-width:2.9em}
+#battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:12px;pointer-events:auto}
+#battle .gbtn{position:relative;width:50px;height:44px;padding:0;border:0;background:none;color:#fff;border-radius:10px;transform:skewX(-10deg);font:inherit;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
+#battle .gbtn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown);opacity:0}
+#battle .gbtn>span{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;height:100%;transform:skewX(10deg);font-size:25px;line-height:1}
+#battle .gbtn:active{transform:skewX(-10deg) translateY(2px);color:#2b1700}
+#battle .gbtn:active::after{opacity:1}
+#battle .burger{flex-direction:column;gap:5px}
+#battle .burger i{display:block;width:22px;height:3px;border-radius:2px;background:currentColor}
+#battle #dbg{position:absolute;left:10px;bottom:6px;font-size:10px;opacity:.7;white-space:pre}
+/* 暂停菜单：面板同主页设置面板，按钮直接用主页的 .item（斜切深蓝条，按下变金） */
+#battle .pmask{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:calc(var(--sh,1px)*3) calc(var(--sw,1px)*3);background:rgba(5,14,28,.6);pointer-events:auto}
+#battle .pmask[hidden]{display:none}
+#battle .ppanel{width:min(calc(var(--sw,1px)*36),320px);max-height:100%;overflow:auto;box-sizing:border-box;padding:6px 22px 18px;border-radius:16px;background:#0f2744;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 4px 0 rgba(2,10,22,.6);font-family:var(--font)}
+#battle .phead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-height:48px;padding-top:6px}
+#battle .phead h2{margin:0;font-size:18px;letter-spacing:.12em}
+#battle .phead em{font-style:normal;font-size:11px;opacity:.5;white-space:nowrap}
+#battle .pmenu{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:var(--item-gap)}
+#battle .pmenu li[hidden]{display:none}
 #battle #err{position:absolute;left:10px;right:10px;top:60px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px;z-index:5}
 #battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#0b1e36;font-size:18px;letter-spacing:.1em}
 
@@ -76,4 +100,4 @@
 #battle .ars-close:active{transform:skewX(-6deg) translateY(2px);box-shadow:none}
 #battle .ars-toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:3}
 #battle .ars-toast.on{opacity:1}
-#battle.ars-open .grp{visibility:hidden}   /* 兵工厂打开时藏起右上角的旋转 / 视距 / 换图按钮，免得透到展示窗上 */
+#battle.ars-open #ui{visibility:hidden}   /* 兵工厂打开时藏起右上角的旋转 / 视距 / 换图按钮，免得透到展示窗上 */

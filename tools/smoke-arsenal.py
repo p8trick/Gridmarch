@@ -22,8 +22,16 @@ with sync_playwright() as p:
         pg.evaluate('()=>document.querySelector(".ars-card[data-u=tank]").click()'); pg.wait_for_timeout(150)
         print(rnd, 'tap again disarms:', pg.evaluate('()=>document.querySelectorAll(".ars-card.arm").length===0'))
         pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf]").click()'); pg.wait_for_timeout(150)
-        pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf] .pr").click()'); pg.wait_for_timeout(200)
-        print(rnd, 'after buy disarmed:', pg.evaluate('()=>document.querySelectorAll(".ars-card.arm").length===0'))
+        before = pg.evaluate('()=>[window.battle.world.units.length, window.battle.game.funds[0], window.battle.game.units.length]')
+        pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf] .pr").click()'); pg.wait_for_timeout(400)
+        after = pg.evaluate('()=>[window.battle.world.units.length, window.battle.game.funds[0], window.battle.game.units.length, !!document.querySelector(".ars")]')
+        print(rnd, 'produce (world units, funds, engine units, panel open) before/after:', before, after)
+        if rnd == 0:   # 第 2 次同一座兵工厂：本回合已生产过 → 失败提示，面板不关
+            pg.mouse.click(pos[0],pos[1]); pg.wait_for_selector('.ars', state='attached', timeout=60000)
+            pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf]").click()'); pg.wait_for_timeout(150)
+            pg.evaluate('()=>document.querySelector(".ars-card[data-u=inf] .pr").click()'); pg.wait_for_timeout(300)
+            print(rnd, 'second build same turn -> panel still open:', pg.evaluate('()=>!!document.querySelector(".ars")'), 'toast:', pg.evaluate('()=>document.querySelector(".ars-toast").textContent'))
+        if not pg.evaluate('()=>!!document.querySelector(".ars")'): continue
         pg.evaluate('()=>document.querySelector(".ars-close").click()'); pg.wait_for_timeout(300)
         print(rnd, 'open after close:', pg.evaluate('()=>!!document.querySelector(".ars")'))
     # open twice without closing (tap factory while open path)
