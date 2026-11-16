@@ -8,6 +8,7 @@
 
 - **修：换回合横幅里「蓝色条纹跳动」**。推测原因（无头浏览器里复现不出，需真机确认）：① 扫光条用 `left` 做动画，`left` 会触发重排，iOS 上一格一格跳，而且半透明白条盖在深蓝底上看起来偏蓝；② 斜切、边框、内阴影和扫光全挂在同一个被动画的元素上，每帧重绘；③ 金字用了 `background-clip:text` + `filter`，WebKit 上带动画容易闪。现在：动画只动最外层的 `transform`（`will-change`）；斜切带本体（`.bs`）静止不动；扫光改成 `transform` 平移、颜色改成偏暖的金白；阵营色底边改成单独一条（不再用 border）；金字改成纯色 + 描边阴影，去掉 `background-clip` / `filter`
 - `src/battle/main.js`、`src/battle/battle.css`；`index.html`：`GM_VERSION` `0.58` → `0.59`
+- **窗口结束（0.50–0.59）**：`docs/HANDOFF.md` 按本窗口更新（兵工厂 / 战场界面 / 结束回合 / 教训 16–21）；`docs/manifests/` 只保留最近 10 个快照（0.49、0.51–0.59），其余删除；交付完整包 `Gridmarch_v0_59.zip`
 
 ## 0.58
 
