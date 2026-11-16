@@ -5,7 +5,7 @@
 #battle canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #battle #ui{position:absolute;inset:0;pointer-events:none}
 /* 0.55 战场界面：左上 = 第 N 天 · 回合方 · 金币；右上 = 旋转画面 + 暂停菜单（图标按钮）。样式沿用主页的斜切深蓝条（.item 同款）；左右两边都离短边 var(--pad-l)（= max(5sw, 56px)，倾斜后可见边缘约 52px），和兵工厂、主页一致 */
-#battle .hud{position:absolute;left:var(--pad-l);top:10px;height:36px;box-sizing:border-box;padding:0 14px;display:flex;align-items:center;gap:9px;border-radius:9px;color:#fff;font:800 13px/1 var(--font);letter-spacing:.06em;transform:skewX(-10deg);pointer-events:none}
+#battle .hud{position:absolute;left:var(--pad-l);top:10px;height:36px;box-sizing:border-box;padding:0 14px;display:flex;align-items:center;gap:9px;border-radius:9px;color:#fff;font:800 13px/1 var(--font);letter-spacing:.06em;transform:skewX(-10deg);pointer-events:auto;cursor:pointer;touch-action:manipulation}
 #battle .hud::before,#battle .gbtn::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(20,48,86,.86),rgba(9,24,46,.92));box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55)}
 #battle .hud>*{position:relative;transform:skewX(10deg);white-space:nowrap}
 #battle .hud .sep{width:2px;height:16px;border-radius:1px;background:rgba(255,255,255,.22)}
@@ -15,6 +15,13 @@
 #battle .hud .dot.r{background:#ef4444}
 #battle .hud .coin{width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:radial-gradient(circle at 35% 30%,#ffe27a,#ffb81c 60%,#c77a0a);box-shadow:inset 0 0 0 2px #8a4a0e,0 1px 0 rgba(0,0,0,.45)}
 #battle .hud b{font-size:14px;color:#ffd45a;min-width:2.8em}
+#battle .hud .endchip{width:18px;height:18px;border-radius:50%;box-sizing:border-box;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:0 2px 0 var(--brown);display:grid;place-items:center;margin-left:2px}   /* 状态条右端的小金标：提示「这里能点 = 结束回合」 */
+#battle .hud .endchip::before{content:"";width:0;height:0;border-style:solid;border-width:4.5px 0 4.5px 7px;border-color:transparent transparent transparent #2b1700;margin-left:2px}
+#battle .hud:active::before{background:linear-gradient(180deg,#27476f,#14304f)}
+#battle .hud.ready::before{animation:hudReady 1.1s ease-in-out infinite}   /* 本方单位都行动完了：状态条金光脉冲，小金标跳动，提醒可以结束回合 */
+#battle .hud.ready .endchip{animation:chipBob .55s ease-in-out infinite alternate}
+@keyframes hudReady{0%,100%{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55),0 0 0 0 rgba(255,200,60,0)}50%{box-shadow:inset 0 0 0 2px var(--gold-hi),inset 0 1px 0 rgba(255,255,255,.4),0 3px 0 rgba(2,10,22,.55),0 0 14px 3px rgba(255,200,60,.65)}}
+@keyframes chipBob{to{transform:translateX(4px)}}
 #battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:10px;pointer-events:auto}
 #battle .gbtn{position:relative;width:44px;height:36px;padding:0;border:0;background:none;color:#fff;border-radius:9px;transform:skewX(-10deg);font:inherit;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
 #battle .gbtn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown);opacity:0}
@@ -38,6 +45,38 @@
 #battle .drow .stars{color:#ffd45a;letter-spacing:1px}
 #battle .hpbar{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden}
 #battle .hpbar i{display:block;height:100%}
+/* 结束回合确认条：从状态条正下方弹出，小箭头指回状态条；外面一层透明遮罩，点外面 = 取消 */
+#battle .emask{position:absolute;inset:0;z-index:6;pointer-events:auto}
+#battle .emask[hidden]{display:none}
+#battle .endp{position:absolute;left:var(--pad-l);top:58px;width:232px;box-sizing:border-box;padding:12px 14px 12px;border-radius:12px;background:#0f2744;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 4px 0 rgba(2,10,22,.6);color:#fff;font-family:var(--font);animation:endIn .16s ease-out}
+#battle .endp::before{content:"";position:absolute;left:34px;top:-7px;width:12px;height:12px;background:#0f2744;transform:rotate(45deg);box-shadow:-1.5px -1.5px 0 rgba(255,255,255,.2)}
+#battle .endp .et{font-size:15px;font-weight:800;letter-spacing:.04em}
+#battle .endp .ee{margin-top:5px;font-size:12px;color:#ffd45a}
+#battle .endp .eb{display:flex;gap:10px;margin-top:11px}
+#battle .sbtn{position:relative;flex:1;height:34px;border:0;border-radius:9px;color:#fff;font:800 14px/1 var(--font);letter-spacing:.06em;background:linear-gradient(180deg,#27476f,#14304f);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 3px 0 rgba(2,10,22,.55);transform:skewX(-10deg);touch-action:manipulation}
+#battle .sbtn.gold{background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));color:#2b1700;box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown)}
+#battle .sbtn:active{transform:skewX(-10deg) translateY(2px);box-shadow:none}
+@keyframes endIn{from{opacity:0;transform:translateY(-6px)}}
+/* 换回合大横幅（仿高战的「第 N 天」，但用我们的美术：主页同款斜切深蓝带 + 金边 + 金色粗体字 + 一道扫光；阵营色在底边） */
+#battle .banner{position:absolute;left:0;right:0;top:50%;height:112px;margin-top:-56px;z-index:9;overflow:hidden;pointer-events:auto}
+#battle .banner[hidden]{display:none}
+#battle .banner.b{--tc:#3b82f6}
+#battle .banner.r{--tc:#ef4444}
+#battle .banner .bb{position:absolute;left:-12%;right:-12%;top:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:30px;background:linear-gradient(180deg,rgba(20,48,86,.96),rgba(9,24,46,.97));box-shadow:inset 0 3px 0 var(--gold-hi),inset 0 -3px 0 var(--gold-hi),0 4px 0 rgba(2,10,22,.55);border-bottom:7px solid var(--tc);transform:translateX(-120%) skewX(-10deg);overflow:hidden}
+#battle .banner .bb::after{content:"";position:absolute;top:0;bottom:0;width:90px;left:-160px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent)}
+#battle .banner .bday{font:900 54px/1 var(--font);letter-spacing:.1em;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 3px 0 var(--brown));opacity:0}
+#battle .banner .bteam{display:flex;align-items:center;gap:9px;font:800 22px/1 var(--font);letter-spacing:.14em;color:#fff;opacity:0;transform:skewX(10deg)}
+#battle .banner .bteam .dot{width:18px;height:18px;border-radius:50%;box-sizing:border-box;border:3px solid rgba(255,255,255,.9)}
+#battle .banner .bteam .dot.b{background:#3b82f6}
+#battle .banner .bteam .dot.r{background:#ef4444}
+#battle .banner.play .bb{animation:bandRun 1.7s cubic-bezier(.22,.8,.2,1) forwards}
+#battle .banner.play .bb::after{animation:bandShine 1.7s ease-in-out forwards}
+#battle .banner.play .bday{animation:dayPop 1.7s cubic-bezier(.2,.9,.2,1) forwards}
+#battle .banner.play .bteam{animation:teamIn 1.7s ease-out forwards}
+@keyframes bandRun{0%{transform:translateX(-120%) skewX(-10deg)}15%{transform:translateX(0) skewX(-10deg)}86%{transform:translateX(0) skewX(-10deg)}100%{transform:translateX(120%) skewX(-10deg)}}
+@keyframes bandShine{0%,18%{left:-160px}48%,100%{left:120%}}
+@keyframes dayPop{0%,12%{opacity:0;transform:skewX(10deg) scale(1.6)}26%{opacity:1;transform:skewX(10deg) scale(.96)}32%{transform:skewX(10deg) scale(1.02)}38%,100%{opacity:1;transform:skewX(10deg) scale(1)}}
+@keyframes teamIn{0%,26%{opacity:0;transform:skewX(10deg) translateX(-24px)}40%,100%{opacity:1;transform:skewX(10deg) translateX(0)}}
 #battle #dbg{position:absolute;left:10px;bottom:6px;font-size:10px;opacity:.7;white-space:pre}
 /* 暂停菜单：面板同主页设置面板，按钮直接用主页的 .item（斜切深蓝条，按下变金） */
 #battle .pmask{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:calc(var(--sh,1px)*3) calc(var(--sw,1px)*3);background:rgba(5,14,28,.6);pointer-events:auto}
