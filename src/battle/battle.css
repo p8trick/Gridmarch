@@ -157,3 +157,48 @@
 #battle .ars-toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:7px 14px;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:3}
 #battle .ars-toast.on{opacity:1}
 #battle.ars-open #ui{visibility:hidden}   /* 兵工厂打开时藏起右上角的旋转 / 视距 / 换图按钮，免得透到展示窗上 */
+
+/* 长按详细面板（0.60，风格 B 玩具盒，同兵工厂）：格上有单位 = 左「单位盒」+ 右「地形盒」；没有单位 = 只有「地形盒」居中。点任意位置关闭。
+   盒内的主副炮块直接用兵工厂的 .ars-wp 系列（unit-info.js 出 HTML），所以这里同样定义那几个颜色变量 */
+#battle .det{position:absolute;inset:0;z-index:7;pointer-events:auto;touch-action:none;--bg:#fff6dc;--line:#2d3e55;--text:#2a3a52;--sub:#6b7a90;--card:#fff;--card-sel:#fff0a8;--chip:#ffcf3f;--chip-t:#4a3500;--btn:#ff8a3d;--dis:#d6dbe2;--army:#9fb0c4;font-family:var(--font)}
+#battle .det *{box-sizing:border-box}
+#battle .det-dim{position:absolute;inset:0;background:rgba(10,18,28,.5)}
+#battle .det-row{position:absolute;left:var(--pad-l);right:var(--pad-l);top:8px;bottom:22px;display:flex;gap:12px;align-items:center;justify-content:center}
+#battle .det-hint{position:absolute;left:0;right:0;bottom:5px;text-align:center;font-size:11px;color:rgba(255,255,255,.6);pointer-events:none}
+#battle .dt-box{position:relative;flex:1 1 0;min-width:0;max-width:430px;max-height:100%;padding:16px 12px 10px;background:var(--bg);color:var(--text);border:3px solid var(--line);border-radius:20px;box-shadow:0 4px 0 var(--line);overflow:hidden;display:flex;flex-direction:column;gap:6px;animation:detIn .16s ease-out}
+#battle .dt-box::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:var(--army)}
+#battle .dt-box.army-b{--army:#3b82f6}#battle .dt-box.army-r{--army:#ef4444}
+@keyframes detIn{from{opacity:0;transform:scale(.96)}}
+#battle .dt-head{display:flex;align-items:center;gap:8px;min-height:34px}
+#battle .dt-ico{flex:none;width:34px;height:34px;border-radius:10px;background:var(--army);color:#fff;display:grid;place-items:center;font-weight:800;font-size:17px;border:2px solid rgba(0,0,0,.25)}
+#battle .dt-name{flex:1;min-width:0;font-size:20px;font-weight:800;letter-spacing:.04em;white-space:nowrap}
+#battle .dt-chips{flex:none;display:flex;gap:5px}
+#battle .dt-chip{font-style:normal;padding:2px 9px;border-radius:9px;border:2px solid var(--line);background:var(--card);color:var(--sub);font-size:12px;font-weight:800;white-space:nowrap}
+#battle .dt-chip.go{background:#dff5d8;color:#2f7a3a}
+#battle .dt-chip.army{background:var(--army);color:#fff;border-color:rgba(0,0,0,.3)}
+#battle .dt-hp{display:flex;align-items:center;gap:8px;padding:3px 10px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub)}
+#battle .dt-hp b{font-size:15px;color:var(--text);min-width:2.6em;text-align:right}
+#battle .dt-bar{flex:1;height:9px;border-radius:5px;background:#e5e0cf;overflow:hidden}
+#battle .dt-bar i{display:block;height:100%}
+#battle .dt-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 6px}
+#battle .dt-grid.one{grid-template-columns:1fr}
+#battle .dt-kv{display:flex;justify-content:space-between;align-items:baseline;padding:3px 10px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub);line-height:1.25}
+#battle .dt-kv b{font-size:15px;color:var(--text)}
+#battle .dt-wps{display:flex;flex-direction:column;gap:5px}
+#battle .dt-wps .ars-wp{flex:none;max-height:none;min-height:0}
+#battle .dt-wps .ars-wr{flex:none;min-height:40px}   /* 竖排「主炮 / 副炮」要两个字的高度，矮了会折成两列 */
+#battle .dt-note{font-size:11.5px;line-height:1.4;color:var(--sub)}
+#battle .dt-note.top{font-size:13px;color:var(--text);min-height:2.8em}
+#battle .dt-def{display:flex;align-items:center;justify-content:space-between;padding:3px 10px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub)}
+#battle .dt-stars{display:flex;gap:2px;font-size:19px;line-height:1}
+#battle .dt-st{color:#ddd4b8}#battle .dt-st.on{color:#f2a900;text-shadow:0 1px 0 #8a5a00}
+#battle .dt-none{font-size:15px;font-weight:800;color:var(--text)}
+#battle .dt-eff{font-size:12px;line-height:1.4;color:#8a5a00;min-height:1.4em}
+#battle .dt-sec{font-size:12px;font-weight:800;color:var(--sub);margin-top:1px}
+#battle .dt-cost{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+#battle .dt-c{display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 2px 5px;border-radius:10px;background:var(--card);border:2px solid transparent;font-size:11px;color:var(--sub);white-space:nowrap}
+#battle .dt-c b{font-size:18px;line-height:1.1;color:var(--text)}
+#battle .dt-c b.no{color:#c0443a}
+#battle .dt-c.me{background:var(--card-sel);border-color:var(--line);box-shadow:0 2px 0 var(--line)}
+#battle .dt-warn{padding:5px 10px;border-radius:9px;background:#ffe3d6;color:#a2391c;font-size:12px;font-weight:700;line-height:1.35}
+#battle.det-open #ui{visibility:hidden}

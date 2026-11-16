@@ -5,6 +5,7 @@ import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
 import {createArsenal} from './arsenal.js';
+import {createDetail} from './detail.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
 import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn} from '../rules/engine.js';
@@ -79,6 +80,7 @@ const produceHere = (type, cell) => {
   return r;
 };
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
+const detail = createDetail({host, game, toEngine});   // 长按详细面板（0.60）
 
 let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
@@ -102,14 +104,22 @@ function describe(c) {
 const cursor = createCursor(THREE); world.scene.add(cursor.group);   // 格子光圈（见 cursor.js）
 let picked = null;
 const raycaster = new THREE.Raycaster();
-function handleTap(px, py) {
+function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘外 = 取消选中。返回选中的格子（没有 = null）
   raycaster.setFromCamera(new THREE.Vector2(px / stage.w * 2 - 1, -(py / stage.h) * 2 + 1), cam.cam);
   const c = world.cellFromRay(raycaster.ray);
   const inside = c && c[0] >= preset.x[0] && c[0] <= preset.x[1] && c[1] >= preset.z[0] && c[1] <= preset.z[1];
   picked = inside ? c : null;
   if (picked) cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz)); else cursor.hide();
-  if (picked) { const [ex, ey] = toEngine(picked); if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(picked, game.turn === 0 ? 'blue' : 'red'); }
+  return picked;
+}
+function handleTap(px, py) {
+  if (selectAt(px, py)) { const [ex, ey] = toEngine(picked); if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(picked, game.turn === 0 ? 'blue' : 'red'); }
   infoUpdate(); hud(); mark();
+}
+function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，但出完整版详细面板（自己的兵工厂也是看详情，不开生产界面）
+  const c = selectAt(px, py);
+  infoUpdate(); hud(); mark();
+  if (c) detail.open(c);
 }
 
 // ── 详细信息面板（0.57）：点格子后，面板出现在光圈所在位置的【另一侧】（光圈在左半屏 → 面板在右下，反之亦然；中间 46%–54% 不切换，免得抖）。
@@ -159,7 +169,7 @@ function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 
   const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
   if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
   const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.length > 0 && mine.every(u => u.acted);   // 本方单位全部行动完 = 可以结束回合了
-  if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); if (ready && $('endm').hidden && $('pause').hidden && !ars.isOpen) openEnd(); }   // 刚好行动完的这一刻自动弹出结束确认；取消后状态条继续脉冲提醒
+  if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); if (ready && $('endm').hidden && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); }   // 刚好行动完的这一刻自动弹出结束确认；取消后状态条继续脉冲提醒
   infoPlace();
   if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
@@ -183,7 +193,7 @@ function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
-$('hudL').onclick = () => { if ($('pause').hidden && !ars.isOpen) openEnd(); };
+$('hudL').onclick = () => { if ($('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
@@ -209,18 +219,28 @@ pause.addEventListener('click', e => {
 // clientX/Y 是物理屏幕坐标：舞台被旋转时要先用 stage.toLogical 换成舞台坐标，位移、间距都从换算后的坐标算
 const P = e => stage.toLogical(e.clientX, e.clientY);
 const pts = new Map(); let prevD = 0, tap = null, pinched = false;
-cv.onpointerdown = e => { const p = P(e); pts.set(e.pointerId, [p.x, p.y]); cv.setPointerCapture(e.pointerId); prevD = 0; tap = pts.size === 1 ? {x: p.x, y: p.y, t: performance.now(), moved: 0} : null; };
+// 长按（0.60）：单指按住约 0.45 秒、手指没动（< 8px）→ 选中这一格并打开详细面板；触发后这次触摸不再平移 / 不算点按，抬手时也不会再点一次
+const LONG_MS = 450; let lpT = 0, lpFired = false;
+const lpClear = () => { clearTimeout(lpT); lpT = 0; };
+cv.onpointerdown = e => {
+  const p = P(e); pts.set(e.pointerId, [p.x, p.y]); cv.setPointerCapture(e.pointerId); prevD = 0; tap = pts.size === 1 ? {x: p.x, y: p.y, t: performance.now(), moved: 0} : null;
+  lpClear(); lpFired = false;
+  if (tap) lpT = setTimeout(() => { lpT = 0; if (!alive || !tap || tap.moved >= 8 || pts.size !== 1) return; lpFired = true; tap = null; handleLong(p.x, p.y); }, LONG_MS);
+};
 cv.onpointermove = e => {
   if (!pts.has(e.pointerId)) return;
   const p = P(e), old = pts.get(e.pointerId); pts.set(e.pointerId, [p.x, p.y]);
+  if (lpFired) return;   // 长按已经打开了详细面板：手指还按着时的移动不再拖动战场
   if (tap) { tap.moved = Math.max(tap.moved, Math.hypot(p.x - tap.x, p.y - tap.y)); if (pts.size > 1) tap = null; }
+  if (!tap) lpClear(); else if (tap.moved >= 8) lpClear();
   if (pts.size === 2) {
     const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
     pinched = true; if (prevD) cam.zoomBy(prevD / d); prevD = d; hud(); mark();
   } else { cam.pan(p.x - old[0], p.y - old[1], stage.w); mark(); }   // 位移 < 8px 且很快抬手算点按（见 endPointer）
 };
 const endPointer = (e, allowTap) => {
-  const t = tap; pts.delete(e.pointerId); prevD = 0; tap = null;
+  lpClear(); const t = tap; pts.delete(e.pointerId); prevD = 0; tap = null;
+  if (lpFired) { if (!pts.size) lpFired = false; return; }   // 长按触发过：这次抬手不算点按
   if (pinched && pts.size < 2) { pinched = false; cam.snap(); mark(); }
   if (allowTap && t && t.moved < 8 && performance.now() - t.t < 500) { const p = P(e); handleTap(p.x, p.y); }
 };
@@ -253,13 +273,13 @@ function loop(now) {
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 requestAnimationFrame(() => requestAnimationFrame(() => { const l = host.querySelector('#loading'); if (l) l.remove(); }));   // 第一帧画出来之后再撤掉加载提示
-window.battle = {world, cam, preset, THREE, game, describe};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
   if (!alive) return; alive = false;
-  ars.dispose();
-  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT);
+  ars.dispose(); detail.dispose();
+  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
   if (stage.dbg) stage.dbg.close();

@@ -1,5 +1,6 @@
 import {MODEL_OF} from '../game/engine-map.js';
-import {UNITS, UNIT_IDS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER, UNIT_CAT, CAT_ORDER, WEAPON_LIST_MIN} from '../rules/data.js';
+import {UNITS, UNIT_IDS} from '../rules/data.js';
+import {GLYPH, weaponHtml} from './unit-info.js';
 import {createTank} from '../game/units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
@@ -8,7 +9,6 @@ import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performanc
 // 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 右下角改「关闭」、去掉右上 ✕；0.54 去掉蓝 / 红军切换，生产改成兵种卡价格签变「生产」按钮（取代 0.53 的弹窗）；0.55 点「生产」真的生产并关闭面板，没模型的兵种先不能买）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
-const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
 const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线版，不是战场上的批量性能版）；没有的 = 尚未建模
   inf: team => { const u = createInfantryBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
   mech: team => { const u = createAntiTankBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
@@ -18,8 +18,6 @@ const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线�
   arty: team => createArtillery({faction: team, batch: true, paint: true}),
 };
 const TEAM_NAME = {blue: '蓝军', red: '红军'};
-const CAT = {foot: ['步兵', '#efd5b0'], veh: ['车辆', '#efd5b0'], heli: ['直升机', '#d9d3f5'], air: ['飞机', '#d9d3f5'], ship: ['船', '#bfeee6'], sub: ['潜艇', '#bfeee6']};   // 大类名 + 底色（沿用高战2：陆米色 / 空淡紫 / 海青绿）
-const WPN = {mech: '火箭筒', tank: '轻型火炮', mdtank: '中型火炮', neotank: '重型火炮', arty: '榴弹炮', rocket: '火箭炮', aa: '机关炮', missile: '防空导弹'};   // 主炮名（我自己起的，随便改）；副炮统一叫机枪
 
 export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
   let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null, armed = null;
@@ -190,15 +188,7 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
     // 右列（0.52，仿高战2）：机动 / 视野 / 燃料三行，然后主炮、副炮各一块：武器名 + 弹药，下面是「能打的大类」小块（只列能打的，不列灰的）
     const fuel = u.fuel === Infinity ? '∞' : u.fuel + '/' + u.fuel;
     el.querySelector('.ars-stats').innerHTML = `<div>机动<b>${u.move}</b></div><div>视野<b>${u.vision}</b></div><div>燃料<b>${fuel}</b></div>`;
-    const cats = tbl => CAT_ORDER.filter(c => TARGET_ORDER.some(t => UNIT_CAT[t] === c && (tbl[t] || 0) >= WEAPON_LIST_MIN));   // 某大类里只要有一个目标的基础伤害够高，就算能打这一大类
-    const wp = (label, name, note, tbl) => {
-      if (!tbl) return `<div class="ars-wp off"><div class="ars-wh"><b>${name}</b></div><div class="ars-wr"><span class="ars-wn">无</span><span class="ars-wt">${label}</span></div></div>`;
-      const cs = cats(tbl);
-      return `<div class="ars-wp"><div class="ars-wh"><b>${name}</b><i>${note}</i></div><div class="ars-wr"><div class="ars-wc">${cs.length ? cs.map(c => `<span class="ars-cat" style="--cc:${CAT[c][1]}">${CAT[c][0]}</span>`).join('') : '<span class="ars-wn">暂无目标</span>'}</div><span class="ars-wt">${label}</span></div></div>`;
-    };
-    const rg = u.range[0] === u.range[1] ? '' : '射程' + u.range.join('–') + ' · ';
-    el.querySelector('.ars-wps').innerHTML = wp('主炮', u.primary ? WPN[sel] || '主炮' : '无主炮', u.primary ? rg + u.ammo + '/' + u.ammo : '', u.primary ? DMG_PRIMARY[sel] || {} : null)
-      + wp('副炮', u.secondary ? '机枪' : '无副炮', u.secondary && !u.primary ? rg.replace(/ · $/, '') : '', u.secondary ? DMG_SECONDARY[sel] || {} : null);
+    el.querySelector('.ars-wps').innerHTML = weaponHtml(sel);   // 0.60：主副炮块抽到 unit-info.js，和战场长按详细面板共用
     showModel();
     const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）
     if (sc && listEl) { const t = sc.offsetTop, b = t + sc.offsetHeight; if (t < listEl.scrollTop || b > listEl.scrollTop + listEl.clientHeight) listEl.scrollTop = t - (listEl.clientHeight - sc.offsetHeight) / 2; }

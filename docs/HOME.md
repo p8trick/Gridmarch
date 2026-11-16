@@ -15,8 +15,8 @@ assets/
   home/    home-bg.webp（iPhone，2622×1206）  home-bg-ipad.webp（iPad，2360×1640）
   title/   title-zh.webp  title-en.webp（游戏内使用，宽 1400）
   icons/   apple-touch-icon.png(180)  icon-192.png  icon-512.png
-  splash/  ipad-2360x1640-landscape.png（需自己放入，仅 iPad）
-  _src/    PNG 美术母版：home-bg / title-zh / title-en / icon-master（游戏不引用）
+  splash/  （0.60 起不在仓库：和 _src/ 一起打成 素材备份_src与splash.zip，放在 .github/workflows/；恢复 = 解压到仓库根目录 + 加回 index.html 里注释掉的 link）
+  _src/    （同上，已暂存）PNG 美术母版：home-bg / title-zh / title-en / icon-master（游戏不引用）
 ```
 - 素材一律放文件夹，不内嵌进代码；游戏内用 webp，PNG 母版放 `_src/`。
 
