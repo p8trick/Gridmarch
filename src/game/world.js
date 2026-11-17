@@ -152,16 +152,7 @@ function makeBoard(sandbox, sampleH, floorTint, water) {
         if (water.typeAt(cx, cz) === 'land') landWall(sd, si, c);   // 水 / 海岸 / 河格的棋盘外缘由水域组件自己的切面负责
       }
     }
-    // 底座：一圈略外扩的深色基台 + 顶面台阶
-    const E = .2, XA = X0 - E, XB = X1 + E, ZA = Z0 - E, ZB = Z1 + E, DARK = 0x353a42, LEDGE = 0x4a505a, BY = BASE_Y - .3;
-    quad([XA, BASE_Y, ZA], [XB, BASE_Y, ZA], [XB, BASE_Y, Z0], [XA, BASE_Y, Z0], LEDGE, UP);
-    quad([XA, BASE_Y, Z1], [XB, BASE_Y, Z1], [XB, BASE_Y, ZB], [XA, BASE_Y, ZB], LEDGE, UP);
-    quad([XA, BASE_Y, Z0], [X0, BASE_Y, Z0], [X0, BASE_Y, Z1], [XA, BASE_Y, Z1], LEDGE, UP);
-    quad([X1, BASE_Y, Z0], [XB, BASE_Y, Z0], [XB, BASE_Y, Z1], [X1, BASE_Y, Z1], LEDGE, UP);
-    quad([XA, BASE_Y, ZA], [XB, BASE_Y, ZA], [XB, BY, ZA], [XA, BY, ZA], DARK, [0, 0, -1]);
-    quad([XA, BASE_Y, ZB], [XB, BASE_Y, ZB], [XB, BY, ZB], [XA, BY, ZB], DARK, [0, 0, 1]);
-    quad([XA, BASE_Y, ZA], [XA, BASE_Y, ZB], [XA, BY, ZB], [XA, BY, ZA], DARK, [-1, 0, 0]);
-    quad([XB, BASE_Y, ZA], [XB, BASE_Y, ZB], [XB, BY, ZB], [XB, BY, ZA], DARK, [1, 0, 0]);
+    // 0.62：去掉了原来比棋盘大一圈的底座（外扩 0.2 的台阶 + 深色裙边）——棋盘四周的地层侧壁 / 深海切面直接落到 BASE_Y，像沙盘切出来的一块
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -266,13 +257,22 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const bldMap = new Map(BUILD_LIST.map(b => [b.cell.join(','), b]));
   const rc = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0);
   const sampleH = (x, z) => { rc.set(new THREE.Vector3(x, 5, z), down); const h = rc.intersectObject(mountain, true)[0]; return h ? Math.max(0, h.point.y) : 0; };
-  let ground = null, lastMtnK = -1, lastSand = null, lastTint = false;
+  let ground = null, boardShadow = null, lastMtnK = -1, lastSand = null, lastTint = false;
   function rebuildBoard() {
     if (ground) { scene.remove(ground); ground.geometry.dispose(); }
     applyMountainHeights();
     ground = makeBoard(state.sandbox, sampleH, state.floorTint, water); scene.add(ground); lastTint = state.floorTint; water.setCutaway(state.sandbox);
     scene.background.set(state.sandbox ? '#1b2227' : '#26333c');
     lastMtnK = state.mtnK; lastSand = state.sandbox;
+    // 0.62：去掉底座后，在棋盘底下垫一层很淡的软阴影（深色背景上让这块「切出来的沙盘」不至于悬空）
+    if (boardShadow) { scene.remove(boardShadow); boardShadow.geometry.dispose(); boardShadow.material.map.dispose(); boardShadow.material.dispose(); boardShadow = null; }
+    if (state.sandbox && typeof document !== 'undefined') {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128; const x = cv.getContext('2d'), gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(0,0,0,.6)'); gr.addColorStop(.62, 'rgba(0,0,0,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(cv), bw = (MAP.x[1] - MAP.x[0] + 1) * 2, bh = (MAP.z[1] - MAP.z[0] + 1) * 2;
+      boardShadow = new THREE.Mesh(new THREE.PlaneGeometry(bw * 1.55 + 3, bh * 1.55 + 3), new THREE.MeshBasicMaterial({map: tex, transparent: true, depthWrite: false}));
+      boardShadow.rotation.x = -Math.PI / 2; boardShadow.position.set((MAP.x[0] + MAP.x[1]), BASE_Y - .03, (MAP.z[0] + MAP.z[1])); boardShadow.renderOrder = -1; boardShadow.name = 'board_shadow'; scene.add(boardShadow);
+    }
   }
   rebuildBoard();
   // 浅滩/断崖格：格内一部分是水，单位站在格心会悬在水面上。把站位从"水侧"推向陆侧 COAST_SHIFT，高度取该处真实地表

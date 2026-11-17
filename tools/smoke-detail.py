@@ -1,4 +1,4 @@
-# 长按详细面板冒烟测试（0.60；0.61 加：展示窗里真的画了东西 / 点一项看说明 / 关闭按钮 / 拖动展示窗转视角；同 smoke-arsenal.py：不在 npm test 里，需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
+# 长按详细面板冒烟测试（0.60；0.62 起小窗是纯模型（单位模型 / 厚地块）、没有关闭按钮；0.61 加：展示窗里真的画了东西 / 点一项看说明 / 关闭按钮 / 拖动展示窗转视角；同 smoke-arsenal.py：不在 npm test 里，需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
 #   长按有单位的格子 → 出两个盒（单位盒 + 地形盒）、不超出屏幕、手指没抬时不拖动战场、抬手后面板还在 → 点外面关闭；
 #   长按空地 → 只有地形盒；长按自己的兵工厂 → 出详细面板而不是生产界面；普通点按仍然只出简要面板；
 #   压力：每个兵种 × 每种地形各开一次，所有盒子都不能被截断 / 超出舞台。出错直接 assert。
@@ -56,10 +56,10 @@ with sync_playwright() as p:
     assert win_px(0)[0] != a0, '拖动后展示窗画面没变'
     pg.screenshot(path='/tmp/det_unit.png')
     pg.mouse.click(20, H // 2); pg.wait_for_timeout(400); assert st()['det'] == 0, '点外面没关闭'
-    log('关闭按钮')
-    # 0.61：右上角「关闭」按钮
+    log('再开一次（关闭靠点空白处，没有关闭按钮）')
     pg.mouse.move(*pos); pg.mouse.down(); pg.wait_for_selector('.det', state='attached', timeout=30000); pg.mouse.up(); pg.wait_for_timeout(400)
-    pg.click('.det-x'); pg.wait_for_timeout(300); assert st()['det'] == 0, '关闭按钮没关'
+    assert pg.locator('.det-x').count() == 0, '关闭按钮应已去掉'
+    pg.mouse.click(W - 20, H // 2); pg.wait_for_timeout(300); assert st()['det'] == 0, '点右边空白没关'
     log('普通点按+空地')
     # 2 普通点按：只出简要面板
     pg.mouse.click(*pos); pg.wait_for_timeout(300); s = st(); assert s['det'] == 0 and s['dp'], ('点按应只出简要面板', s)

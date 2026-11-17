@@ -1,27 +1,16 @@
 import {MODEL_OF} from '../game/engine-map.js';
 import {UNITS, UNIT_IDS} from '../rules/data.js';
 import {GLYPH, weaponHtml} from './unit-info.js';
-import {createTank} from '../game/units/tank-family.js';
-import {createArtillery} from '../art/units/artillery-v2_0.js';
-import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
-import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
+import {getUnitModel} from './unit-models.js';   // 0.62：兵种 → 高精度模型的表和缓存抽到 unit-models.js，和战场详细面板的小窗共用
 
 // 兵工厂界面（0.42；0.50 列表改为自己处理滑动 + 上下「还能滑」提示；0.52 右边改成仿高战2：转台在左，机动 / 视野 / 燃料 + 主副炮（按大类）在右；0.53 右下角改「关闭」、去掉右上 ✕；0.54 去掉蓝 / 红军切换，生产改成兵种卡价格签变「生产」按钮（取代 0.53 的弹窗）；0.55 点「生产」真的生产并关闭面板，没模型的兵种先不能买）：左边兵种卡片、右边选中单位的高精度模型转台 + 数据 + 生产按钮。界面风格取「B 玩具盒」（奶油底 + 深色粗边 + 军队色细条）。
 // 转台不开第二个画布：用战场同一个 renderer，在右侧留空区域对应的屏幕矩形里（viewport + scissor）再画一个独立小场景。
 // 目前「生产」只是演示（不扣钱、不出兵），等你对界面和模型特写满意了再接引擎的 produce()。
-const MAKE = {   // 引擎兵种 → 高精度模型（预览用原版 / 基线版，不是战场上的批量性能版）；没有的 = 尚未建模
-  inf: team => { const u = createInfantryBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
-  mech: team => { const u = createAntiTankBaseline(); u.setFaction(team); u.setPose('idle'); return u; },
-  tank: team => createTank('light', {faction: team}),
-  mdtank: team => createTank('medium', {faction: team}),
-  neotank: team => createTank('heavy', {faction: team}),
-  arty: team => createArtillery({faction: team, batch: true, paint: true}),
-};
 const TEAM_NAME = {blue: '蓝军', red: '红军'};
 
 export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
   let lastHole = '', openCell = null, team = 'blue', sel = 'tank', spin = .5, gest = null, zoom = 1, panX = 0, panY = 0, pxW = .01, lastTap = 0, tapDown = null, el = null, pv = null, toastT = 0, listEl = null, ls = null, fling = 0, listRO = null, armed = null;
-  const cache = new Map(), pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
+  const pts = new Map();   // pts：当前按在展示窗上的手指（pointerId → 位置）
    // 'type|team' → {holder} | null（尚未建模）| 'error'
 
   // ── 预览场景（独立于战场）──
@@ -46,23 +35,7 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
   const cam = new THREE.PerspectiveCamera(28, 1.6, .1, 60);
   let current = null;
 
-  function modelFor(type) {
-    const k = type + '|' + team;
-    if (!cache.has(k)) {
-      let v = null;
-      if (MAKE[type]) {
-        try {
-          const model = MAKE[type](team), box = new THREE.Box3().setFromObject(model), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
-          const s = 3.3 / Math.hypot(size.x, size.y, size.z);   // 对角线统一缩放到 3.3：每个兵种都占满转台（战棋比例不用于特写）
-          const holder = new THREE.Group(); holder.add(model); holder.scale.setScalar(s); holder.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
-          model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-          v = {holder, h: size.y * s};
-        } catch (e) { console.error(e); v = 'error'; }
-      }
-      cache.set(k, v);
-    }
-    return cache.get(k);
-  }
+  const modelFor = type => getUnitModel(THREE, type, team);   // 'inf|blue' → {holder, h} | null（尚未建模）| 'error'；缓存在 unit-models.js
   function showModel() {
     if (current) turn.remove(current.holder); current = null;
     const m = modelFor(sel);

@@ -166,8 +166,6 @@
 #battle .det-dim{position:absolute;inset:0;background:rgba(10,18,28,.5)}
 #battle .det-row{position:absolute;left:var(--pad-l);right:var(--pad-l);top:8px;bottom:22px;display:flex;gap:12px;align-items:center;justify-content:center}
 #battle .det-hint{position:absolute;left:0;right:0;bottom:5px;text-align:center;font-size:11px;color:rgba(255,255,255,.6);pointer-events:none}
-#battle .det-x{position:absolute;right:calc(var(--pad-l) / 2 - 22px);top:10px;width:44px;height:44px;border-radius:50%;border:3px solid var(--line);background:var(--btn);color:#fff;font:800 13px var(--font);box-shadow:0 3px 0 var(--line);padding:0;display:grid;place-items:center}
-#battle .det-x:active{transform:translateY(2px);box-shadow:0 1px 0 var(--line)}
 #battle .dt-box{position:relative;flex:1 1 0;min-width:0;max-width:430px;max-height:100%;padding:15px 11px 7px;background:transparent;color:var(--text);border:3px solid var(--line);border-radius:20px;box-shadow:0 4px 0 var(--line);overflow:hidden;display:flex;flex-direction:column;gap:4px}
 #battle .dt-box::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:var(--army);z-index:2}
 #battle .dt-box.army-b{--army:#3b82f6}#battle .dt-box.army-r{--army:#ef4444}
@@ -205,6 +203,11 @@
 #battle .dt-warn{padding:5px 9px;border-radius:9px;background:#ffe3d6;color:#a2391c;font-size:12px;font-weight:700;line-height:1.35}
 #battle .dt-exp{flex:none;height:56px;padding:5px 9px;border-radius:11px;background:#fff;border:2px dashed #cdbf9a;font-size:12px;line-height:1.4;color:var(--text);overflow:hidden}   /* 固定三行高：换文字时盒子高度不变，展示窗位置才不会跳 */
 #battle .dt-exp b{color:#b45309;margin-right:6px}
-#battle .det [data-k]{cursor:pointer}
+/* 可点的项目 = 微微凸起的小按键：下面一道深色细边，按下去陷进去；选中是橙色描边（0.62） */
+#battle .det [data-k]{cursor:pointer;box-shadow:0 2px 0 rgba(45,62,85,.28);transition:transform .05s,box-shadow .05s}
+#battle .det [data-k]:active{transform:translateY(2px);box-shadow:none}
+#battle .dt-c.me[data-k]{box-shadow:0 2px 0 var(--line)}
+#battle .dt-view{overflow:hidden}
+#battle .dt-nomodel{position:absolute;inset:0;display:grid;place-items:center;font-size:14px;font-weight:800;color:#a89972;letter-spacing:.1em;pointer-events:none}
 #battle .det [data-k].sel{outline:3px solid var(--btn);outline-offset:1px}
 #battle.det-open #ui{visibility:hidden}

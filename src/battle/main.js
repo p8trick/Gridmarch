@@ -82,7 +82,7 @@ const produceHere = (type, cell) => {
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
 const showCursor = c => cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz));
 // 长按详细面板（0.60；0.61 加展示窗：面板开着时光圈先藏起来——光圈有动画会让战场每秒重画 30 次，展示窗不需要）
-const detail = createDetail({THREE, renderer, host, stage, game, world, toEngine, getYaw: () => cam.camA,
+const detail = createDetail({THREE, renderer, host, stage, game, toEngine,
   onOpen: () => cursor.hide(), onClose: () => { if (picked) showCursor(picked); mark(); }});
 
 let dirty = true, lastQuarter = -1, lastCur = 0;

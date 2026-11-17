@@ -2,20 +2,27 @@ import {UNITS, TERRAINS} from '../rules/data.js';
 import {dispHp} from '../rules/engine.js';
 import {GLYPH, MT_NAME, weaponHtml} from './unit-info.js';
 import {terrainNote, unitTip, terrainTip, unitDefault, terrainDefault} from './explain.js';
+import {createStudio} from './showcase.js';
+import {getUnitModel} from './unit-models.js';
+import {getTileBlock} from './tile-block.js';
 
 // 长按详细面板（0.60 做出，0.61 加了展示窗 + 点一项看说明；风格同兵工厂的「B 玩具盒」）：
 //   格上有单位 → 左「单位盒」+ 右「地形盒」；没有单位 → 只有「地形盒」居中。
-//   每个盒子左上是一个「展示窗」：不开新画布、不用新模型——用战场同一个 renderer 和同一个场景，换一台近景相机，在窗口对应的屏幕矩形里
-//   （viewport + scissor）再画一遍这一格（单位盒 = 单位近景，地形盒 = 地形俯视带周围）。手指在窗口上拖动可以转视角。
+//   每个盒子左上是一个「展示窗」（0.62 起不再是战场快照，而是纯模型展示）：单位盒 = 这个兵种的高精度模型（和兵工厂转台同一份），
+//   地形盒 = 一块带厚度的地块模型（顶面 + 摆件复用游戏现有美术，侧面是地层截面 / 你的深海切面，见 tile-block.js）。
+//   窗口不开新画布：用战场同一个 renderer，在窗口对应的屏幕矩形里（viewport + scissor）画各自独立的小场景（showcase.js 的「摄影棚」）。
+//   固定一个 3/4 角度，手指在窗口上拖动转模型（左右转 / 上下改俯仰）。没有模型的兵种显示「尚未建模」。
 //   窗口是透明的洞：盒子本身不画底色，奶油色靠 .dt-view 的外扩阴影（同兵工厂 .ars-pv 的做法），压暗层在窗口位置挖洞。
 //   点一项（血量 / 机动 / 主炮 / 防御星 / 某类移动消耗…）→ 该项高亮，盒子底部说明栏换成这一项的解释（文字全在 explain.js）；再点一次取消。
-//   点盒子外面的暗处，或右上角「关闭」关掉面板。
+//   点盒子外面的暗处关掉面板（没有关闭按钮）；点盒子里的空白处不关。
 // 数据全部来自规则引擎（data.js + game 状态），打开时取一次快照（面板打开期间战场不会变）。
 const OWN = ['蓝军', '红军'];
 const MTS = ['foot', 'mech', 'tread', 'wheel'];
 
-export function createDetail({THREE, renderer, host, stage, game, world, toEngine, getYaw, onOpen, onClose}) {
+export function createDetail({THREE, renderer, host, stage, game, toEngine, onOpen, onClose}) {
   let el = null, openedAt = 0, sawDown = false, wins = [], frames = 0, cell = null;
+  const studios = {};   // 'unit' / 'tile' → 摄影棚（场景很轻，建一次一直用）
+  const studioOf = k => studios[k] || (studios[k] = createStudio(THREE, k));
 
   const stars = n => '<span class="dt-st on">★</span>'.repeat(n) + '<span class="dt-st">★</span>'.repeat(Math.max(0, 4 - n));
   const kv = (k, key, v) => `<div class="dt-kv" data-k="${key}"><span>${k}</span><b>${v}</b></div>`;
@@ -74,9 +81,9 @@ export function createDetail({THREE, renderer, host, stage, game, world, toEngin
     if (el) close(true);
     const [ex, ey] = toEngine(c), tid = game.terrain[ey] && game.terrain[ey][ex]; if (!tid) return false;
     const eu = game.units.find(u => u.x === ex && u.y === ey) || null;
-    cell = {c, ex, ey, eu};
+    cell = {c, ex, ey, eu, tid};
     el = document.createElement('div'); el.className = 'det';
-    el.innerHTML = `<div class="det-dim"></div><div class="det-row">${eu ? unitBox(eu) : ''}${terrainBox(tid, game.owners[ex + ',' + ey], eu)}</div><button class="det-x" type="button">关闭</button><div class="det-hint">点一项看说明　·　拖动小窗转视角</div>`;
+    el.innerHTML = `<div class="det-dim"></div><div class="det-row">${eu ? unitBox(eu) : ''}${terrainBox(tid, game.owners[ex + ',' + ey], eu)}</div><div class="det-hint">点一项看说明　·　拖动小窗转模型　·　点空白处关闭</div>`;
     el.querySelectorAll('.dt-box').forEach(b => explain(b, null));
     // 关闭只认「在面板上按下 + 抬起」：长按时手指还没抬起，抬起产生的那次 click 不能把刚打开的面板关掉
     el.addEventListener('pointerdown', () => { sawDown = true; });
@@ -89,12 +96,16 @@ export function createDetail({THREE, renderer, host, stage, game, world, toEngin
     });
     host.appendChild(el); host.classList.add('det-open'); openedAt = performance.now(); sawDown = false; frames = 0;
     wins = [...el.querySelectorAll('.dt-view')].map(v => {
-      const kind = v.dataset.w, w = {el: v, kind, cam: new THREE.PerspectiveCamera(30, 1.3, .1, 150), yaw: getYaw(), pitch: kind === 'unit' ? 26 : 58, d: kind === 'unit' ? 4.6 : 9.5, drag: null};
+      const kind = v.dataset.w === 'unit' ? 'unit' : 'tile', studio = studioOf(kind), w = {el: v, kind, studio, yaw: studio.defaults.yaw, pitch: studio.defaults.pitch, drag: null};
+      if (kind === 'unit') {
+        const m = getUnitModel(THREE, cell.eu.type, cell.eu.owner === 0 ? 'blue' : 'red');
+        if (m && m !== 'error') studio.setContent(m.holder); else { studio.setContent(null); v.innerHTML = `<div class="dt-nomodel">${m === 'error' ? '模型加载失败' : '尚未建模'}</div>`; }
+      } else studio.setContent(getTileBlock(cell.tid, game.owners[cell.ex + ',' + cell.ey]));
       v.addEventListener('pointerdown', e => { w.drag = {x: e.clientX, y: e.clientY, yaw: w.yaw, pitch: w.pitch, id: e.pointerId}; v.setPointerCapture(e.pointerId); e.stopPropagation(); sawDown = false; });
       v.addEventListener('pointermove', e => {
         if (!w.drag || w.drag.id !== e.pointerId) return;
         const v2 = stage.vec(e.clientX - w.drag.x, e.clientY - w.drag.y);   // 舞台旋转时把屏幕位移换成舞台方向
-        w.yaw = w.drag.yaw - v2.x * .012; w.pitch = Math.max(8, Math.min(80, w.drag.pitch + v2.y * .3)); frames = 0;
+        w.yaw = w.drag.yaw + v2.x * .012; w.pitch = Math.max(6, Math.min(70, w.drag.pitch + v2.y * .3)); frames = 0;
       });
       const end = e => { if (w.drag && w.drag.id === e.pointerId) w.drag = null; };
       v.addEventListener('pointerup', end); v.addEventListener('pointercancel', end);
@@ -117,21 +128,15 @@ export function createDetail({THREE, renderer, host, stage, game, world, toEngin
     if (!el) return; frames++;
     const holes = [];
     renderer.getViewport(v4); renderer.getScissor(s4);
-    const st = renderer.getScissorTest(), ar = renderer.autoClear, sh = renderer.shadowMap.autoUpdate;
-    renderer.shadowMap.autoUpdate = false;   // 阴影图和相机无关（太阳视角），沿用刚画战场时的那张，省掉一遍阴影渲染
+    const st = renderer.getScissorTest(), ar = renderer.autoClear;
     for (const w of wins) {
       const r = rectOf(w.el); if (r.w < 8 || r.h < 8) continue;
       holes.push(`M${r.x} ${r.y}H${r.x + r.w}V${r.y + r.h}H${r.x}Z`);
-      const [cx, cz] = [cell.c[0] * 2, cell.c[1] * 2], gy = world.surfaceY(cell.c[0], cell.c[1]);
-      const ty = gy + (w.kind === 'unit' ? .55 : .1), p = w.pitch * Math.PI / 180, cam = w.cam;
-      cam.aspect = r.w / r.h; cam.updateProjectionMatrix();
-      cam.position.set(cx + Math.sin(w.yaw) * Math.cos(p) * w.d, ty + Math.sin(p) * w.d, cz + Math.cos(w.yaw) * Math.cos(p) * w.d); cam.lookAt(cx, ty, cz);
-      world.cull(cam);
       const vy = stage.h - (r.y + r.h);
       renderer.setViewport(r.x, vy, r.w, r.h); renderer.setScissor(r.x, vy, r.w, r.h); renderer.setScissorTest(true); renderer.autoClear = true;
-      renderer.render(world.scene, cam);
+      w.studio.draw(renderer, r.w / r.h, w.yaw, w.pitch);
     }
-    renderer.shadowMap.autoUpdate = sh; renderer.setScissorTest(st); renderer.setViewport(v4); renderer.setScissor(s4); renderer.autoClear = ar;
+    renderer.setScissorTest(st); renderer.setViewport(v4); renderer.setScissor(s4); renderer.autoClear = ar;
     const dim = el.querySelector('.det-dim');   // 压暗层在窗口位置挖洞（evenodd：外框 + 每个窗口一个洞），窗口里才不会被压暗
     const hole = `path(evenodd,'M0 0H${host.offsetWidth}V${host.offsetHeight}H0Z ${holes.join(' ')}')`;
     if (dim.dataset.h !== hole) { dim.dataset.h = hole; dim.style.clipPath = hole; frames = Math.min(frames, 3); }   // 窗口位置变了（刚排版好 / 屏幕尺寸变）→ 再多画几帧
