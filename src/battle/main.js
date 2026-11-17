@@ -80,7 +80,10 @@ const produceHere = (type, cell) => {
   return r;
 };
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
-const detail = createDetail({host, game, toEngine});   // 长按详细面板（0.60）
+const showCursor = c => cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz));
+// 长按详细面板（0.60；0.61 加展示窗：面板开着时光圈先藏起来——光圈有动画会让战场每秒重画 30 次，展示窗不需要）
+const detail = createDetail({THREE, renderer, host, stage, game, world, toEngine, getYaw: () => cam.camA,
+  onOpen: () => cursor.hide(), onClose: () => { if (picked) showCursor(picked); mark(); }});
 
 let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
@@ -109,7 +112,7 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
   const c = world.cellFromRay(raycaster.ray);
   const inside = c && c[0] >= preset.x[0] && c[0] <= preset.x[1] && c[1] >= preset.z[0] && c[1] <= preset.z[1];
   picked = inside ? c : null;
-  if (picked) cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz)); else cursor.hide();
+  if (picked) showCursor(c); else cursor.hide();
   return picked;
 }
 function handleTap(px, py) {
@@ -264,10 +267,12 @@ function loop(now) {
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
   if (cursor.update(now / 1000) && now - lastCur > 30) { dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
   if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
+  if (detail.needsFrame()) dirty = true;   // 详细面板的展示窗：刚打开 / 拖动后画几帧，静止时不出帧
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
     if (ars.isOpen) ars.renderPreview(dt);
+    if (detail.isOpen) detail.renderPreview();   // 战场画完后，把详细面板的展示窗（同一个场景换近景相机）画进各自的矩形
   }
   if (now - t0 > 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now; if (debug) hud(); }
 }

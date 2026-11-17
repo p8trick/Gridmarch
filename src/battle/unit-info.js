@@ -10,9 +10,10 @@ export const MT_NAME = {foot: '步兵', mech: '反坦克兵', tread: '履带', w
 // 某武器「能打哪些大类」：某大类里只要有一个目标的基础伤害 ≥ WEAPON_LIST_MIN 就算能打
 const cats = tbl => CAT_ORDER.filter(c => TARGET_ORDER.some(t => UNIT_CAT[t] === c && (tbl[t] || 0) >= WEAPON_LIST_MIN));
 const wp = (label, name, note, tbl) => {
-  if (!tbl) return `<div class="ars-wp off"><div class="ars-wh"><b>${name}</b></div><div class="ars-wr"><span class="ars-wn">无</span><span class="ars-wt">${label}</span></div></div>`;
+  const k = label === '主炮' ? 'primary' : 'secondary';   // 0.61：data-k 给战场详细面板「点一项看说明」用，兵工厂里没有任何效果
+  if (!tbl) return `<div class="ars-wp off" data-k="${k}"><div class="ars-wh"><b>${name}</b></div><div class="ars-wr"><span class="ars-wn">无</span><span class="ars-wt">${label}</span></div></div>`;
   const cs = cats(tbl);
-  return `<div class="ars-wp"><div class="ars-wh"><b>${name}</b><i>${note}</i></div><div class="ars-wr"><div class="ars-wc">${cs.length ? cs.map(c => `<span class="ars-cat" style="--cc:${CAT[c][1]}">${CAT[c][0]}</span>`).join('') : '<span class="ars-wn">暂无目标</span>'}</div><span class="ars-wt">${label}</span></div></div>`;
+  return `<div class="ars-wp" data-k="${k}"><div class="ars-wh"><b>${name}</b><i>${note}</i></div><div class="ars-wr"><div class="ars-wc">${cs.length ? cs.map(c => `<span class="ars-cat" data-k="cat:${c}" style="--cc:${CAT[c][1]}">${CAT[c][0]}</span>`).join('') : '<span class="ars-wn">暂无目标</span>'}</div><span class="ars-wt">${label}</span></div></div>`;
 };
 // 主炮块 + 副炮块的 HTML。ammoNow：给了就显示「当前 / 满值」（战场上的单位），不给显示满值（兵工厂里的新兵种）。
 export function weaponHtml(id, ammoNow) {

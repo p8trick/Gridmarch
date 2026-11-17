@@ -1,8 +1,10 @@
-# 长按详细面板冒烟测试（0.60；同 smoke-arsenal.py：不在 npm test 里，需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
+# 长按详细面板冒烟测试（0.60；0.61 加：展示窗里真的画了东西 / 点一项看说明 / 关闭按钮 / 拖动展示窗转视角；同 smoke-arsenal.py：不在 npm test 里，需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
 #   长按有单位的格子 → 出两个盒（单位盒 + 地形盒）、不超出屏幕、手指没抬时不拖动战场、抬手后面板还在 → 点外面关闭；
 #   长按空地 → 只有地形盒；长按自己的兵工厂 → 出详细面板而不是生产界面；普通点按仍然只出简要面板；
 #   压力：每个兵种 × 每种地形各开一次，所有盒子都不能被截断 / 超出舞台。出错直接 assert。
-import sys
+import sys, time
+T0 = time.time()
+def log(m): print(f'[{time.time()-T0:5.0f}s] {m}', flush=True)
 from playwright.sync_api import sync_playwright
 W, H = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) > 2 else (874, 402)
 with sync_playwright() as p:
@@ -27,8 +29,38 @@ with sync_playwright() as p:
     assert s['det'] == 1 and s['boxes'] == 2, ('长按有单位的格子没出两个盒', s)
     assert s['cam'] == cam0, ('长按后手指移动把战场拖动了', cam0, s['cam'])
     pg.mouse.up(); pg.wait_for_timeout(500); assert st()['det'] == 1, '抬手后面板被关掉了'
+    # 0.61：展示窗（两个，单位 + 地形）里画出来的不能是奶油底色，也不能是被压暗的战场（软件渲染很慢，多等一会儿）
+    pg.wait_for_timeout(4000); assert pg.evaluate('()=>document.querySelectorAll(".dt-view").length') == 2, '应有两个展示窗'
+    log('展示窗像素')
+    from PIL import Image; import io
+    def win_px(i):
+        r = pg.evaluate('(i)=>{const r=document.querySelectorAll(".dt-view")[i].getBoundingClientRect();return [r.x,r.y,r.width,r.height]}', i)
+        im = Image.open(io.BytesIO(pg.screenshot(clip={'x':r[0]+8,'y':r[1]+8,'width':r[2]-16,'height':r[3]-16}))).convert('RGB').resize((16,12))
+        px = list(im.get_flattened_data()); n = len(px); avg = tuple(sum(c[k] for c in px)/n for k in range(3))
+        var = sum(sum((c[k]-avg[k])**2 for k in range(3)) for c in px)/n
+        return avg, var
+    for i in (0, 1):
+        avg, var = win_px(i)
+        assert abs(avg[0]-255)+abs(avg[1]-246)+abs(avg[2]-220) > 40 and var > 150, ('展示窗里没画出战场内容（还是奶油底？）', i, avg, var)
+    log('点选解释')
+    # 0.61：点一项看说明：高亮 + 说明栏换字；再点取消；点盒子空白处不关闭
+    pg.click('.dt-box[data-box=unit] [data-k=move]'); t = pg.inner_text('.dt-box[data-box=unit] .dt-exp'); assert t.startswith('机动') and pg.locator('.dt-box[data-box=unit] [data-k=move].sel').count() == 1, ('点机动没出说明', t)
+    pg.click('.dt-box[data-box=terrain] [data-k="cost:wheel"]'); t = pg.inner_text('.dt-box[data-box=terrain] .dt-exp'); assert '轮式' in t, ('点轮式没出说明', t)
+    pg.click('.dt-box[data-box=unit] [data-k=move]'); assert pg.locator('.dt-box[data-box=unit] .sel').count() == 0, '再点一次没取消高亮'
+    pg.click('.dt-box[data-box=unit] .dt-exp'); assert st()['det'] == 1, '点盒子里的空白处不该关闭'
+    log('拖动')
+    # 0.61：拖动展示窗转视角：窗口画面变化、相机没被带动、面板还在
+    cam1 = st()['cam']; r = pg.evaluate('()=>{const r=document.querySelectorAll(".dt-view")[0].getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]}')
+    a0 = win_px(0)[0]; pg.mouse.move(*r); pg.mouse.down(); pg.mouse.move(r[0]+40, r[1], steps=5); pg.mouse.up(); pg.wait_for_timeout(3500)
+    assert st()['det'] == 1 and st()['cam'] == cam1, ('拖展示窗不该关面板 / 拖动战场', st())
+    assert win_px(0)[0] != a0, '拖动后展示窗画面没变'
     pg.screenshot(path='/tmp/det_unit.png')
     pg.mouse.click(20, H // 2); pg.wait_for_timeout(400); assert st()['det'] == 0, '点外面没关闭'
+    log('关闭按钮')
+    # 0.61：右上角「关闭」按钮
+    pg.mouse.move(*pos); pg.mouse.down(); pg.wait_for_selector('.det', state='attached', timeout=30000); pg.mouse.up(); pg.wait_for_timeout(400)
+    pg.click('.det-x'); pg.wait_for_timeout(300); assert st()['det'] == 0, '关闭按钮没关'
+    log('普通点按+空地')
     # 2 普通点按：只出简要面板
     pg.mouse.click(*pos); pg.wait_for_timeout(300); s = st(); assert s['det'] == 0 and s['dp'], ('点按应只出简要面板', s)
     # 3 空地：长按 → 只有地形盒
@@ -39,20 +71,27 @@ with sync_playwright() as p:
     assert empty, '画面里找不到空的平原格'
     pos2 = scr(cellOf(*empty)); hold(pos2); s = st(); assert s['det'] == 1 and s['boxes'] == 1, ('长按空地应只有地形盒', s)
     pg.mouse.up(); pg.wait_for_timeout(300); pg.screenshot(path='/tmp/det_plain.png'); pg.mouse.click(20, H // 2); pg.wait_for_timeout(300)
+    log('兵工厂')
     # 4 自己的兵工厂（本回合一方）：长按 → 详细面板，不是生产界面
     f = pg.evaluate('()=>{const b=window.battle,g=b.game;for(const k in g.owners){const [x,y]=k.split(",").map(Number);if(g.terrain[y][x]==="factory"&&g.owners[k]===g.turn)return [x,y]}}')
     pos3 = scr(cellOf(*f)); hold(pos3); s = st(); assert s['det'] == 1 and s['ars'] == 0, ('长按己方兵工厂应出详细面板而不是生产界面', s)
     pg.mouse.up(); pg.wait_for_timeout(300); pg.mouse.click(20, H // 2); pg.wait_for_timeout(300)
     pg.mouse.click(*pos3); pg.wait_for_timeout(500); s = st(); assert s['ars'] == 1 and s['det'] == 0, ('点按己方兵工厂应仍是生产界面', s)
     pg.evaluate('()=>document.querySelector(".ars-close").click()'); pg.wait_for_timeout(300)
+    log('压力')
     # 5 压力：每个兵种 × 每种地形（把这个单位的格子临时改成该地形），所有盒子不能被截断、不能超出舞台
-    res = pg.evaluate('''async()=>{const b=window.battle,g=b.game,eu=g.units.find(u=>u.owner===0),cell=[eu.x+b.preset.x[0],eu.y+b.preset.z[0]];
-      const types=["inf","mech","recon","apc","tank","mdtank","neotank","arty","rocket","aa","missile"], terr=["plain","forest","mountain","river","sea","shoal","road","bridge","hq","city_large","city_small","factory","airport","port","cliff","desert","swamp"];
-      const old=g.terrain[eu.y][eu.x], bad=[], S=document.querySelector("#stage").getBoundingClientRect();let n=0;
-      for(const t of types){eu.type=t;eu.hp=47;for(const tr of terr){g.terrain[eu.y][eu.x]=tr;b.detail.open(cell);await new Promise(r=>requestAnimationFrame(r));
-        document.querySelectorAll(".dt-box").forEach(x=>{const r=x.getBoundingClientRect();n++;if(x.scrollHeight>x.clientHeight+1||r.height<20)bad.push([t,tr,"overflow",x.scrollHeight,x.clientHeight]);});
-        b.detail.close();}}
-      g.terrain[eu.y][eu.x]=old;return {n,bad:bad.slice(0,8),nbad:bad.length}}''')
+    # 按兵种分 11 次执行（每次 17 种地形）：哪一步卡住 / 出错能立刻看出来
+    res = {'n': 0, 'nbad': 0, 'bad': []}
+    for t in ["inf","mech","recon","apc","tank","mdtank","neotank","arty","rocket","aa","missile"]:
+        r = pg.evaluate('''(t)=>{const b=window.battle,g=b.game,eu=g.units.find(u=>u.owner===0),cell=[eu.x+b.preset.x[0],eu.y+b.preset.z[0]];
+          const terr=["plain","forest","mountain","river","sea","shoal","road","bridge","hq","city_large","city_small","factory","airport","port","cliff","desert","swamp"];
+          const old=g.terrain[eu.y][eu.x], oldT=eu.type, oldH=eu.hp, bad=[];let n=0;
+          eu.type=t;eu.hp=47;
+          for(const tr of terr){g.terrain[eu.y][eu.x]=tr;b.detail.open(cell);
+            document.querySelectorAll(".dt-box").forEach(x=>{n++;if(x.scrollHeight>x.clientHeight+1)bad.push([t,tr,x.scrollHeight,x.clientHeight]);});b.detail.close();}
+          g.terrain[eu.y][eu.x]=old;eu.type=oldT;eu.hp=oldH;return {n,bad}}''', t)
+        res['n'] += r['n']; res['nbad'] += len(r['bad']); res['bad'] += r['bad'][:4]
+        log('压力 ' + t)
     print('压力测试 盒子数', res['n'], '被截断', res['nbad'], res['bad'])
     assert res['nbad'] == 0, ('有盒子内容被截断', res)
     print('长按详细面板冒烟测试通过', 'errors:', errs[:5]); b.close()
