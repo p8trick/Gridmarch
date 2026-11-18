@@ -20,7 +20,7 @@ export function createStudio(THREE, kind) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.ShadowMaterial({opacity: .38}));
   floor.rotation.x = -Math.PI / 2; floor.position.y = .006; floor.receiveShadow = true; base.add(floor);
   const cam = new THREE.PerspectiveCamera(28, 1.4, .1, 60);
-  const cfg = kind === 'tile' ? {ty: -.3, d: 9.4, pitch: 28, yaw: .72} : {ty: .8, d: 6.6, pitch: 18, yaw: .5};
+  const cfg = kind === 'tile' ? {ty: -.05, d: 8.6, pitch: 28, yaw: .72} : {ty: .8, d: 6.6, pitch: 18, yaw: .5};
   function setContent(obj) { turn.clear(); if (obj) turn.add(obj); }
   // 画进当前 renderer 的一个矩形（调用方已设好 viewport / scissor）
   function draw(renderer, aspect, yaw, pitch) {

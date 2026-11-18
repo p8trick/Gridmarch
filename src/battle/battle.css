@@ -90,7 +90,13 @@
 #battle .pmenu{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:var(--item-gap)}
 #battle .pmenu li[hidden]{display:none}
 #battle #err{position:absolute;left:10px;right:10px;top:60px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px;z-index:5}
-#battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:#0b1e36;font-size:18px;letter-spacing:.1em}
+#battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 42%,#16335a 0%,#0b1e36 70%);color:#fff6dc;transition:opacity .25s}
+#battle #loading.out{opacity:0}
+#battle .ld-box{width:min(72%,420px);display:flex;flex-direction:column;align-items:center;gap:14px}
+#battle .ld-title{font-size:26px;font-weight:800;letter-spacing:.3em;text-indent:.3em;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+#battle .ld-bar{position:relative;width:100%;height:20px;border-radius:12px;border:3px solid #fff6dc;background:rgba(255,246,220,.12);overflow:hidden;box-shadow:0 3px 0 rgba(0,0,0,.35)}
+#battle .ld-fill{position:absolute;inset:0;border-radius:9px;background:linear-gradient(#ffd75a,#ff9a3d);will-change:transform;box-shadow:inset 0 3px 0 rgba(255,255,255,.45)}
+#battle .ld-label{font-size:14px;letter-spacing:.14em;opacity:.8}
 
 /* 兵工厂界面（0.45，风格 B 玩具盒）：左边「选兵种」盒 + 右边「展示」盒，两个悬浮的独立盒子。
    右盒的 .ars-pv 是透明窗口：战场 renderer 在这里画模型；窗口外面用超大的奶油色外扩阴影盖住盒子其余部分（盒子 overflow:hidden 裁掉多余的），窗口圆角也由它造出来 */

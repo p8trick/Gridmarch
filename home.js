@@ -162,9 +162,16 @@
     if (battleOn) return;
     battleOn = true;
     homeEl.hidden = true; battleEl.hidden = false;
-    battleEl.innerHTML = '<div id="loading">正在载入…</div>';
-    Promise.all([stageP, import('./src/battle/main.js')]).then(function (r) {
-      return r[1].mountBattle(battleEl, r[0], { seed: seed, debug: PARAMS.has('debug'), onExit: exitBattle });
+    battleEl.innerHTML = '';
+    // 0.63：进度条。先把战场用到的模块文件逐个预载（按已下载个数推进前 40%），再 import（命中缓存）；生成战场那段由 mountBattle 接着走
+    var ldP = import('./src/battle/loading.js').then(function (L) {
+      var ld = L.createLoading('正在载入…').attach(battleEl); ld.to(4, 300);
+      var urls = [];
+      try { var im = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports; for (var k in im) if (/\.js(\?|$)/.test(im[k])) urls.push(im[k]); } catch (e) { /* 读不到清单就不预载，直接 import */ }
+      return L.preload(urls, function (p) { ld.to(4 + p * 36, 150); }).then(function () { return ld; });
+    }).catch(function () { return null; });   // 进度条本身出问题：不影响进入战场，mountBattle 会自己建一个
+    ldP.then(function (ld) { return Promise.all([stageP, import('./src/battle/main.js')]).then(function (r) { return [r[0], r[1], ld]; }); }).then(function (r) {
+      return r[1].mountBattle(battleEl, r[0], { seed: seed, debug: PARAMS.has('debug'), onExit: exitBattle, loading: r[2] });
     }).catch(function (e) {
       exitBattle(); toast('载入战场失败：' + (e && e.message || e));
     });

@@ -6,6 +6,7 @@ import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
 import {createArsenal} from './arsenal.js';
 import {createDetail} from './detail.js';
+import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
 import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn} from '../rules/engine.js';
@@ -18,9 +19,10 @@ let current = null;   // 当前挂着的战场（同时只会有一个）
 const ROT_SVG = '<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.9-6.2"/><path d="M20.6 3.6v5.2h-5.2"/></svg>';   // 顺时针旋转图标（0.57：字符 ⟳ 比 ☰ 小，改成 SVG，大小可控）
 export function unmountBattle() { if (current) { current.destroy(); current = null; } }
 
-// host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit}
+// host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit, loading（home.js 已经开始显示的进度条，没有就自己建）}
 export async function mountBattle(host, stage, opts = {}) {
   unmountBattle();
+  const ld = opts.loading || createLoading('正在生成战场…');   // 0.63：进度条；换图时没有现成的，自己建（模块已下载好，从 0 开始只剩生成这一段）
   let alive = true, raf = 0, wheelTimer = 0, renderer = null, world = null;
   const handle = {destroy};
   current = handle;
@@ -42,7 +44,8 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="loading">正在生成战场…</div>`;
+`;
+ld.attach(host).label('正在生成战场…');
   const $ = id => host.querySelector('#' + id);
   const err = $('err');
   const showErr = m => { err.style.display = 'block'; err.textContent = '出错：' + m; };
@@ -50,6 +53,8 @@ export async function mountBattle(host, stage, opts = {}) {
   addEventListener('error', onErr); addEventListener('unhandledrejection', onRej);
 
   // 建世界要同步算 2–3 秒（水域最重）：先让"正在生成战场…"画到屏幕上，再开始算
+  // 生成战场占进度条的 40%–92%（下载模块占前 40%）：下面这段是一大段同步计算，页面卡住时进度条靠合成器缓动继续走
+  const buildT0 = performance.now(); ld.to(92, lastBuildMs());
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));
   if (!alive) return handle;
 
@@ -214,7 +219,7 @@ pause.addEventListener('click', e => {
   const a = b.dataset.act;
   if (a === 'resume') pause.hidden = true;
   else if (a === 'side') stage.toggleSide();
-  else if (a === 'reroll') mountBattle(host, stage, {...opts, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
+  else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
   else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }
 });
 
@@ -277,7 +282,8 @@ function loop(now) {
   if (now - t0 > 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now; if (debug) hud(); }
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
-requestAnimationFrame(() => requestAnimationFrame(() => { const l = host.querySelector('#loading'); if (l) l.remove(); }));   // 第一帧画出来之后再撤掉加载提示
+saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
+requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
 window.battle = {world, cam, preset, THREE, game, describe, detail};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
