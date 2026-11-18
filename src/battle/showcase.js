@@ -21,11 +21,23 @@ export function createStudio(THREE, kind) {
   floor.rotation.x = -Math.PI / 2; floor.position.y = .006; floor.receiveShadow = true; base.add(floor);
   const cam = new THREE.PerspectiveCamera(28, 1.4, .1, 60);
   const cfg = kind === 'tile' ? {ty: -.05, d: 8.6, pitch: 28, yaw: .72} : {ty: .8, d: 6.6, pitch: 18, yaw: .5};
-  function setContent(obj) { turn.clear(); if (obj) turn.add(obj); }
+  // 取景自动适配（0.64）：按模型包围盒定相机注视点和距离，高个子（步兵、树林）不再被窗口上沿截掉头；矮的模型保持原来的基准距离，各地块大小才不会忽大忽小
+  let fit = {ty: cfg.ty, r: 0};
+  function setContent(obj) {
+    turn.clear(); fit = {ty: cfg.ty, r: 0}; if (!obj) return;
+    turn.add(obj); turn.rotation.y = 0; obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj); if (box.isEmpty()) return;
+    const ctr = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    fit = {ty: kind === 'tile' ? (box.min.y + box.max.y) / 2 : Math.max(cfg.ty, box.max.y * .5), r: Math.hypot(sz.x, sz.z) / 2, h: box.max.y - box.min.y, top: box.max.y, bot: box.min.y};
+  }
   // 画进当前 renderer 的一个矩形（调用方已设好 viewport / scissor）
   function draw(renderer, aspect, yaw, pitch) {
     cam.aspect = aspect; cam.updateProjectionMatrix();
-    const p = pitch * Math.PI / 180; cam.position.set(0, cfg.ty + Math.sin(p) * cfg.d, Math.cos(p) * cfg.d); cam.lookAt(0, cfg.ty, 0);
+    const p = pitch * Math.PI / 180, ty = fit.ty;
+    // 距离：至少是基准距离；模型的上下范围（以注视点为中心的半高，加一点边距）和转到任意角度时的水平半径都要装进视野
+    const half = Math.max(fit.top - ty, ty - fit.bot, 0) * 1.12 + .12, vf = cam.fov * Math.PI / 360, hf = Math.atan(Math.tan(vf) * aspect);
+    const d = Math.max(cfg.d, half / Math.sin(vf) / Math.cos(p * .5) * .92, (fit.r * 1.08) / Math.sin(hf));
+    cam.position.set(0, ty + Math.sin(p) * d, Math.cos(p) * d); cam.lookAt(0, ty, 0);
     turn.rotation.y = yaw; renderer.render(scene, cam);
   }
   return {scene, setContent, draw, defaults: {yaw: cfg.yaw, pitch: cfg.pitch}};
