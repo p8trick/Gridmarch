@@ -43,4 +43,58 @@
   <button id="bRing">站位圈</button><button id="bUnits" class="on">显示单位</button><button id="bSand" class="on">沙盘边缘</button><button id="bTree">树木:挤开</button><button id="bOri">横屏测试</button><button id="bMire">沼泽停留 0 回合</button><button id="bSize">尺寸:原始</button><button id="bFloor">地块底色</button><button id="bMap">地图：海湾</button><button id="bPitch">俯角 55°</button><button id="bTerrBadge">地形角标</button><button id="bAnnex" class="on">附楼挤开</button><button id="bBldFollow" class="on">建筑跟随视角</button><button id="bCull" class="on">视锥剔除</button><button id="bBadge">兵种标识</button><button id="bIdle">待机动画</button><button id="bOnDemand" class="on">按需渲染</button><button id="bInfPose">步兵:站立</button><button id="bInfGait">步态:跑</button><button id="bFire1">开火×1</button><button id="bFire3">开火×3</button><button id="bReset">复位</button>
  </div>
 </div>
+<!-- iOS PWA blur experiment V1 -->
+<style>
+#gm-ios27-blur-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 90%;
+  height: 100%;
+  z-index: 2147483647;
+  background: rgba(255,255,255,0.01);
+  pointer-events: none;
+  transform: translateX(110%);
+  transition: transform 300ms ease;
+}
+</style>
+
+<script>
+(function () {
+  var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  var isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    navigator.standalone === true;
+
+  if (!isIOS || !isStandalone) return;
+
+  function start() {
+    if (document.getElementById('gm-ios27-blur-panel')) return;
+
+    var panel = document.createElement('div');
+    panel.id = 'gm-ios27-blur-panel';
+    panel.setAttribute('aria-hidden', 'true');
+
+    document.body.appendChild(panel);
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        panel.style.transform = 'translateX(0)';
+
+        setTimeout(function () {
+          panel.style.transform = 'translateX(110%)';
+        }, 500);
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, {once:true});
+  } else {
+    start();
+  }
+})();
+</script>
+<!-- iOS PWA blur experiment V1 END -->
 </body></html>
