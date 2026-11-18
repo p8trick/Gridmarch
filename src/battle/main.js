@@ -33,17 +33,24 @@ export async function mountBattle(host, stage, opts = {}) {
   <div id="dbg"></div>
 </div>
 <div id="pause" class="pmask" hidden><div class="ppanel" role="dialog" aria-modal="true">
-  <header class="phead"><h2>暂停</h2><em id="pInfo"></em></header>
-  <ul class="pmenu">
+  <header class="phead"><h2 id="pTitle">暂停</h2><em id="pInfo"></em></header>
+  <ul class="pmenu" id="pMain">
     <li><button class="item" data-act="resume"><span class="txt"><span class="main">继续</span><span class="sub">RESUME</span></span></button></li>
+    <li><button class="item" data-act="quality"><span class="txt"><span class="main">画质</span><span class="sub">GRAPHICS</span></span></button></li>
     <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
     <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图</span><span class="sub">NEW MAP</span></span></button></li>
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
+  </ul>
+  <ul class="pmenu" id="pQual" hidden>
+    <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
+    <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
+    <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
   </ul>
 </div></div>
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
+<div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
   const $ = id => host.querySelector('#' + id);
@@ -213,13 +220,36 @@ $('endm').addEventListener('click', e => {
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
 $('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
-$('bMenu').onclick = () => { pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); pause.hidden = false; };
+// 画质（0.66）：暂停菜单第二页；目前只有「帧率显示」开关（存 localStorage gridmarch.showFps）
+const FPS_KEY = 'gridmarch.showFps';
+let fpsOn = false; try { fpsOn = localStorage.getItem(FPS_KEY) === '1'; } catch (e) {}
+const fpsEl = $('fpsb'), fpsNum = fpsEl.firstElementChild;
+let fpsSum = 0, fpsN = 0, fpsPrev = 0, fpsT = 0, fpsLast = null, fpsChain = false;   // 采样：只统计「连续出帧」的相邻帧间隔；光圈 30 帧/秒是设计值，不计入
+function fpsRender() {
+  fpsEl.hidden = !fpsOn; $('pFpsSt').textContent = fpsOn ? '开' : '关'; $('pFpsSt').classList.toggle('on', fpsOn);
+  if (!fpsOn) return;
+  const v = fpsLast, lv = v === null ? 'n' : v >= 50 ? 'g' : v >= 40 ? 'y' : v >= 30 ? 'o' : 'r';
+  fpsNum.textContent = v === null ? '--' : Math.min(999, Math.round(v)); fpsEl.className = 'fpsb lv-' + lv + (fpsStale ? ' idle' : '');
+}
+let fpsStale = true;
+function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算；攒不够且 1 秒没有新样本 = 画面静止（显示上一次的数字并变灰）
+  if (now - fpsT < 500) return; fpsT = now;
+  if (fpsN >= 3) { fpsLast = 1000 / (fpsSum / fpsN); fpsStale = false; fpsSum = 0; fpsN = 0; }
+  else if (now - fpsPrev > 1000) { fpsStale = true; fpsSum = 0; fpsN = 0; }
+  if (fpsOn) fpsRender();
+}
+function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
+fpsRender();
+$('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
 pause.addEventListener('click', e => {
   if (e.target === pause) { pause.hidden = true; return; }   // 点面板外 = 继续
   const b = e.target.closest('.item'); if (!b) return;
   const a = b.dataset.act;
   if (a === 'resume') pause.hidden = true;
+  else if (a === 'quality') setPage(true);
+  else if (a === 'back') setPage(false);
+  else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
   else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }
@@ -272,15 +302,18 @@ function loop(now) {
   const camChanged = cam.update(dt);
   if (camChanged) { applyView(); hud(); dirty = true; }
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
-  if (cursor.update(now / 1000) && now - lastCur > 30) { dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
+  let cursorOnly = false;
+  if (cursor.update(now / 1000) && now - lastCur > 30) { cursorOnly = !dirty; dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
   if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
   if (detail.needsFrame()) dirty = true;   // 详细面板的展示窗：刚打开 / 拖动后画几帧，静止时不出帧
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
+    if (cursorOnly) fpsChain = false; else { if (fpsChain) { fpsSum += now - fpsPrev; fpsN++; } fpsPrev = now; fpsChain = true; }   // 0.66 帧率采样：连续两个 rAF 都出帧才算一个样本（再慢也算，不会漏掉卡顿）
     if (ars.isOpen) ars.renderPreview(dt);
     if (detail.isOpen) detail.renderPreview();   // 战场画完后，把详细面板的展示窗（同一个场景换近景相机）画进各自的矩形
-  }
+  } else fpsChain = false;
+  fpsTick(now);
   if (now - t0 > 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now; if (debug) hud(); }
 }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);

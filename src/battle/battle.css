@@ -88,7 +88,7 @@
 #battle .phead h2{margin:0;font-size:18px;letter-spacing:.12em}
 #battle .phead em{font-style:normal;font-size:11px;opacity:.5;white-space:nowrap}
 #battle .pmenu{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:var(--item-gap)}
-#battle .pmenu li[hidden]{display:none}
+#battle .pmenu[hidden],#battle .pmenu li[hidden]{display:none}
 #battle #err{position:absolute;left:10px;right:10px;top:60px;background:#7a2b2b;padding:10px;border-radius:8px;display:none;white-space:pre-wrap;font-size:12px;z-index:5}
 #battle #loading{position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 42%,#16335a 0%,#0b1e36 70%);color:#fff6dc;transition:opacity .25s}
 #battle #loading.out{opacity:0}
@@ -217,3 +217,18 @@
 #battle .dt-nomodel{position:absolute;inset:0;display:grid;place-items:center;font-size:14px;font-weight:800;color:#a89972;letter-spacing:.1em;pointer-events:none}
 #battle .det [data-k].sel{outline:3px solid var(--btn);outline-offset:1px}
 #battle.det-open #ui{visibility:hidden}
+
+/* 0.66 画质页 + 右上角帧率小标：小标挂在菜单按钮右侧（离屏幕右缘 24px，避开圆角；不在 #ui 里，所以兵工厂 / 详细面板 / 暂停菜单打开时也看得见） */
+#battle .pst{font-size:13px;font-weight:800;letter-spacing:.1em;padding:3px 11px;border-radius:8px;background:rgba(255,255,255,.14)}
+#battle .pst.on{background:#5ef08a;color:#0b2a16}
+#battle .pnote{list-style:none;margin:2px 0 4px;padding:0 4px;font-size:11px;line-height:1.7;opacity:.85}
+#battle .pnote i{font-style:normal;font-weight:800;margin-right:8px;white-space:nowrap}
+#battle .pnote .g,#battle .fpsb.lv-g b{color:#5ef08a}
+#battle .pnote .y,#battle .fpsb.lv-y b{color:#ffe14d}
+#battle .pnote .o,#battle .fpsb.lv-o b{color:#ff9f3a}
+#battle .pnote .r,#battle .fpsb.lv-r b{color:#ff5a4d}
+#battle .pnote .n,#battle .fpsb.lv-n b{color:#cfd8e3}
+#battle .fpsb{position:absolute;top:16px;right:24px;z-index:40;height:24px;min-width:22px;padding:0 5px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:7px;transform:skewX(-10deg);pointer-events:none;background:linear-gradient(180deg,rgba(20,48,86,.88),rgba(9,24,46,.94));box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),0 2px 0 rgba(2,10,22,.55);transition:opacity .2s}
+#battle .fpsb[hidden]{display:none}
+#battle .fpsb.idle{opacity:.55}
+#battle .fpsb b{transform:skewX(10deg);font:800 12px/1 var(--font);font-variant-numeric:tabular-nums}

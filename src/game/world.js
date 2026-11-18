@@ -491,7 +491,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (u.badge) u.badge.position.set(u.x, y + u.topOff + .45, u.z);
     if (state.selected === u) selRing.position.set(u.x, y + .07, u.z);
     syncTerrainBadge(u, y);
-    if (u.abadge) u.abadge.position.set(u.x, y + u.topOff + .25, u.z);
+    if (u.amark) u.amark.position.set(u.x, y + .06, u.z);
   }
   const TLABEL = {forest: '林', desert: '漠', swamp: '沼', mountain: '山', building: '城', shoal: '滩', cliff: '崖', river: '河', bridge: '桥'}, tbTex = {};
   function terrainBadgeSprite(label) {
@@ -511,24 +511,15 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);
     u.tbadge.visible = true; u.tbadge.position.set(u.x + rx * .95 + cx * .35, y + .3, u.z + rz * .95 + cz * .35);
   }
-  // 0.65：「已行动」标记。批量绘制的步兵共用材质，不能直接改色，所以在单位头顶挂一个小灰牌（引擎 acted → setActed）；脚下站位圈同时变灰
-  let actedTex = null;
-  function actedSprite() {
-    if (typeof document === 'undefined') return null;
-    if (!actedTex) {
-      const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d');
-      x.fillStyle = 'rgba(70,78,88,.92)'; x.strokeStyle = '#cfd6de'; x.lineWidth = 5; x.beginPath(); x.roundRect(8, 8, 80, 80, 18); x.fill(); x.stroke();
-      x.fillStyle = '#e8edf2'; x.font = 'bold 50px -apple-system,PingFang SC,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('休', 48, 52);
-      actedTex = new THREE.CanvasTexture(c); actedTex.colorSpace = THREE.SRGBColorSpace;
-    }
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: actedTex, depthTest: false, transparent: true})); sp.scale.set(.4, .4, 1); sp.renderOrder = 20; return sp;
-  }
+  // 0.66：「已行动」标记 = 脚下一圈深灰环（0.65 的头顶「休」牌你不喜欢，已去掉）。引擎 acted → setActed(id, on)
+  const actedGeo = new THREE.RingGeometry(STAND_R - .12, STAND_R + .02, 48).rotateX(-Math.PI / 2);
+  const actedMat = new THREE.MeshBasicMaterial({color: 0x26303c, transparent: true, opacity: .78, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2});
   function setActed(id, on) {
     const u = units.find(o => o.spec.id === id); if (!u) return false;
     on = !!on; if (!!u.acted === on) return true;
-    u.acted = on; u.ring.material.color.setHex(on ? 0x9aa3ad : 0xffeed0);
-    if (on && !u.abadge) { u.abadge = actedSprite(); if (u.abadge) scene.add(u.abadge); }
-    if (u.abadge) u.abadge.visible = on && state.units;
+    u.acted = on;
+    if (on && !u.amark) { u.amark = new THREE.Mesh(actedGeo, actedMat); u.amark.renderOrder = 4; scene.add(u.amark); }
+    if (u.amark) u.amark.visible = on && state.units;
     syncUnit(u); return true;
   }
   function applyUnits() {
@@ -544,7 +535,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       u.topOff = new THREE.Box3().setFromObject(u.holder).max.y - u.baseY;
       syncUnit(u);
       if (u.badge) u.badge.visible = state.badges && state.units;
-      if (u.abadge) u.abadge.visible = !!u.acted && state.units;
+      if (u.amark) u.amark.visible = !!u.acted && state.units;
     }
     unitsGroup.visible = state.units;
     refreshBuildings();

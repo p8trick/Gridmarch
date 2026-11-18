@@ -1,5 +1,5 @@
-# 「已行动」标记冒烟测试（0.65；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# 蓝军在兵工厂生产 → 新单位头顶出现「休」标记 → 结束回合（红军）→ 蓝军单位仍标记 → 红军结束 → 回到蓝军，标记全部消失。出错直接 assert。
+# 「已行动」标记冒烟测试（0.65 起，0.66 改为脚下深灰环；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
+# 蓝军在兵工厂生产 → 新单位脚下出现深灰环 → 结束回合（红军）→ 蓝军单位仍标记 → 红军结束 → 回到蓝军，标记全部消失。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
@@ -9,7 +9,7 @@ with sync_playwright() as p:
     pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
-    marks = lambda: pg.evaluate('()=>window.battle.world.units.filter(u=>u.acted&&u.abadge&&u.abadge.visible).length')
+    marks = lambda: pg.evaluate('()=>window.battle.world.units.filter(u=>u.acted&&u.amark&&u.amark.visible).length')
     eng = lambda: pg.evaluate('()=>window.battle.game.units.filter(u=>u.acted).length')
     assert marks() == 0 and eng() == 0, '开局不该有已行动单位'
     # 直接调引擎+同步（等价于兵工厂点「生产」）：用 UI 路径太依赖点击位置，这里走 main.js 暴露的 produce 回调
