@@ -44,113 +44,24 @@
  </div>
 </div>
 
-<!-- iOS 27 PWA 顶部状态栏合成实验 V4 -->
+<!-- iOS 27 PWA 顶部模糊测试 V5 -->
 <style>
-  #gm-ios27-blur-cover {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483646;
-    background: rgba(255, 255, 255, 0.01);
-    pointer-events: none;
-    display: none;
-  }
-
-  #gm-ios27-blur-panel {
+@media (display-mode: standalone) {
+  #gm-ios27-top-sample {
     position: fixed;
     top: 0;
-    right: 0;
-    bottom: 0;
-    width: 90%;
-    height: 100%;
+    left: 0;
+    width: 100%;
+    height: 11px;
     z-index: 2147483647;
-    background: rgba(255, 255, 255, 0.01);
     pointer-events: none;
-    transform: translateX(110%);
-    transition: transform 300ms ease;
+    background: #ff3b30;
   }
-
-  #gm-ios27-blur-test {
-    position: fixed;
-    right: 12px;
-    bottom: 24px;
-    z-index: 2147483645;
-    padding: 12px 16px;
-    border: 1px solid #888;
-    border-radius: 10px;
-    background: #222;
-    color: #fff;
-    font-size: 14px;
-  }
+}
 </style>
 
-<button id="gm-ios27-blur-test" type="button"
-  
-  V4 顶部效果测试
-</button>
-
-<script>
-(function () {
-  var isIOS =
-    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' &&
-     navigator.maxTouchPoints > 1);
-
-  var isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    navigator.standalone === true;
-
-  if (!isIOS || !isStandalone) return;
-
-  function init() {
-    if (document.getElementById('gm-ios27-blur-panel')) return;
-
-    var cover = document.createElement('div');
-    cover.id = 'gm-ios27-blur-cover';
-    cover.setAttribute('aria-hidden', 'true');
-
-    var panel = document.createElement('div');
-    panel.id = 'gm-ios27-blur-panel';
-    panel.setAttribute('aria-hidden', 'true');
-
-    document.body.append(cover, panel);
-
-    var busy = false;
-    var button = document.getElementById('gm-ios27-blur-test');
-
-    button.addEventListener('click', function () {
-      if (busy) return;
-      busy = true;
-      button.disabled = true;
-
-      cover.style.display = 'block';
-
-      // 确保 cover 初始状态完成绘制
-      void cover.offsetWidth;
-
-      requestAnimationFrame(function () {
-        panel.style.transform = 'translateX(0)';
-
-        // 保持 1500ms，观察顶部状态栏
-        setTimeout(function () {
-          panel.style.transform = 'translateX(110%)';
-
-          setTimeout(function () {
-            cover.style.display = 'none';
-            button.disabled = false;
-            busy = false;
-          }, 350);
-        }, 1500);
-      });
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
-})();
-</script>
-<!-- iOS 27 PWA 顶部状态栏合成实验 V4 END -->
+<div id="gm-ios27-top-sample"
+     aria-hidden="true"></div>
+<!-- V5 END -->
 
 </body></html>
