@@ -4,14 +4,11 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
-## 0.65
+## 0.65 尝试（已回滚，代码回到 0.64）
 
-- **加载画面的跑步步兵**：进度条上方有一个蓝军步兵，脚踩在进度条上沿，站在填充端上跟着进度前进（进入战斗 / 换图都有）。步兵和跑步循环就是游戏里原有的模型和动作（`soldier-rig.js` 的 `sampleCycle('run')`），用 `tools/make-runner-frames.py` 把一个循环等分成 12 帧拍成透明底 WebP（`assets/loading/runner-00…11.webp`，共约 80KB，侧面正交相机、面朝右、脚底对齐）；改了步兵美术就重跑一遍
-  - 不用实时 3D：加载画面出现时 three.js 和步兵模块还没下载好，而且生成战场那 2–3 秒主线程被卡住，实时动画会定格
-  - 12 张图叠放，用 CSS opacity 关键帧逐帧切换（0.72 秒一个循环）；位置用和进度条填充同一个 translateX 缓动。opacity / transform 动画走合成器线程，主线程卡住时也能继续动（iOS Safari 需要真机确认，最坏情况是定格在某一帧，进度条照常走）
-  - `home.js` 在主页稳定后（1.5 秒）预载这 12 帧；`prefers-reduced-motion` 下只显示第一帧
-- `src/battle/loading.js`、`battle.css`、`home.js`、`tools/smoke-loading.py`（加：12 帧都加载成功）
-- `index.html`：`GM_VERSION` `0.64` → `0.65`
+- 试过在加载画面进度条上放一个跑步步兵：把步兵 run 循环拍成 12 帧透明 WebP，叠放后用 CSS opacity 关键帧逐帧切换，位置跟着进度条填充端走。**真机效果不理想**：动画断断续续、大半帧丢失，进游戏后用菜单「换图」（帧图理应早已加载）也一样，后段还出现消失 → 决定不再修补，回退到 0.64
+- 教训：用「12 个叠放元素各自跑 opacity 动画」做帧动画在 iOS 真机上不可靠（桌面 Chromium 里测试一切正常，所以冒烟测试发现不了）。以后如果还想做加载画面的角色动画，换思路：一张精灵图 + 单个元素的 transform steps()，或 canvas 逐帧画，并且一开始就在真机上先验证动画能否流畅，再接进流程
+- 回退时删除了：`assets/loading/runner-00…11.webp`、`tools/make-runner-frames.py`；`home.js`、`battle.css`、`loading.js`、`smoke-loading.py`、`index.html` 恢复成 0.64 的内容
 
 ## 0.64
 

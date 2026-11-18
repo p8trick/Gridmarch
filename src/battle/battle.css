@@ -94,12 +94,6 @@
 #battle #loading.out{opacity:0}
 #battle .ld-box{width:min(72%,420px);display:flex;flex-direction:column;align-items:center;gap:14px}
 #battle .ld-title{font-size:26px;font-weight:800;letter-spacing:.3em;text-indent:.3em;text-shadow:0 3px 0 rgba(0,0,0,.35)}
-#battle .ld-lane{position:relative;width:100%;height:72px;margin-bottom:-12px}   /* 步兵的跑道：和进度条同宽，脚踩在进度条上沿 */
-#battle .ld-slide{position:absolute;left:0;right:0;bottom:0;height:0;will-change:transform}   /* 和 .ld-fill 同一个 translateX：右端 = 填充端 */
-#battle .ld-runner{position:absolute;right:0;bottom:-8px;width:62px;height:77px;transform:translateX(50%)}
-#battle .ld-runner img{position:absolute;inset:0;width:100%;height:100%;opacity:0;animation:ldRun .72s linear infinite;pointer-events:none}
-@keyframes ldRun{0%,8.3%{opacity:1}8.4%,100%{opacity:0}}
-@media (prefers-reduced-motion:reduce){#battle .ld-runner img{animation:none}#battle .ld-runner img:first-child{opacity:1}}
 #battle .ld-bar{position:relative;width:100%;height:20px;border-radius:12px;border:3px solid #fff6dc;background:rgba(255,246,220,.12);overflow:hidden;box-shadow:0 3px 0 rgba(0,0,0,.35)}
 #battle .ld-fill{position:absolute;inset:0;border-radius:9px;background:linear-gradient(#ffd75a,#ff9a3d);will-change:transform;box-shadow:inset 0 3px 0 rgba(255,255,255,.45)}
 #battle .ld-label{font-size:14px;letter-spacing:.14em;opacity:.8}
