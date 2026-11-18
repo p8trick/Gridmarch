@@ -191,4 +191,6 @@
   if (PARAMS.get('go') === 'battle') enterBattle(PARAMS.get('seed'));   // 开发直达
   // 预载另一种语言的标题，切换时无延迟
   setTimeout(function () { new Image().src = TITLE[lang === 'zh' ? 'en' : 'zh'].src; }, 800);
+  // 预载加载画面里跑步步兵的 12 帧（共约 80KB），点开始时进度条上的步兵立刻就能显示
+  setTimeout(function () { for (var i = 0; i < 12; i++) new Image().src = 'assets/loading/runner-' + (i < 10 ? '0' : '') + i + '.webp'; }, 1500);
 })();
