@@ -1,5 +1,5 @@
 # 选中 / 移动 / 待命冒烟测试（0.67；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# 点蓝军没动过的单位 → 出蓝格（引擎算的范围）→ 点一个蓝格 → 走过去 → 单位旁出「待命」浮条（走完前不出）→ 浮条期间点战场不响应 → 点待命 → 单位已行动（脚下灰环）→ 已行动的单位点了不再选中。
+# 点蓝军没动过的单位 → 出蓝格（引擎算的范围）→ 点一个蓝格 → 走过去 → 单位旁出「待命」浮条（走完前不出）→ 浮条期间点战场不响应 → 拖镜头浮条跟着单位 → 点空白处撤销（退回原格、蓝格重现）→ 重新走 → 点待命 → 单位已行动（脚下灰环）→ 已行动的单位点了不再选中。
 # 另：点自己脚下 = 原地待命；点空地 = 取消选中。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
@@ -21,6 +21,10 @@ with sync_playwright() as p:
     tap(info['x'], info['y'])
     assert st()['sel'] == info['id'], ('点单位应选中', st())
     n = rng(); assert n >= 3, ('应出蓝格', n)
+    ops = []   # 蓝格呼吸（0.68）：透明度应该在 .22–.48 之间来回摆
+    for _ in range(8):
+        ops.append(pg.evaluate("()=>{let o=null;window.battle.world.scene.traverse(m=>{if(m.material&&m.material.color&&m.material.color.getHex()===0x72c6ff&&m.material.transparent)o=m.material.opacity});return o}")); pg.wait_for_timeout(170)
+    assert all(o is not None and .2 < o < .5 for o in ops) and max(ops) - min(ops) > .03, ('蓝格应该在呼吸', ops)
     # 目的地：从引擎范围里找一个离起点 2 格以上、屏幕上在画面内的格子
     dest = pg.evaluate('''([id])=>{const B=window.battle,g=B.game,u=g.units.find(o=>o.id===id);const w=B.world.unitById(id);
         const c=w.rangeCells.map(c=>B.toEngine(c)).filter(([x,y])=>Math.abs(x-u.x)+Math.abs(y-u.y)>=2);return c[0]}''', [info['id']])
@@ -33,8 +37,30 @@ with sync_playwright() as p:
     assert pg.is_visible('#abar') and st()['acting'] == info['id'], '走完应出浮条'
     assert rng() == 0, '走完蓝格应消失'
     pg.screenshot(path='/tmp/move_bar.png')
-    # 浮条期间点别处不响应
-    tap(info['x'], info['y']); assert st()['sel'] is None and pg.is_visible('#abar'), '浮条期间点战场不该选中别的'
+    # 拖镜头：浮条要跟着单位走（0.68 修的 bug：以前只在镜头动画时重新定位，直接拖动时浮条留在原地）
+    def gap():
+        r = pg.evaluate('()=>{const b=document.querySelector("#abar").getBoundingClientRect();return [b.left,b.right,(b.top+b.bottom)/2]}')
+        sx, sy = scr(dest[0], dest[1]); return r, sx, sy
+    T = lambda: pg.evaluate('()=>{const t=window.battle.cam.target;return [+t.x.toFixed(2),+t.z.toFixed(2)]}')
+    t0 = T(); r0, sx0, sy0 = gap(); assert min(abs(r0[0] - sx0), abs(r0[1] - sx0)) < 60, ('浮条应贴着单位', r0, sx0)
+    pg.wait_for_timeout(300)
+    # 在页面里一次性派发「按下 → 12 次移动 → 抬起」：软件渲染（无头浏览器）每帧很慢，Playwright 一步步拖会超过 0.45 秒变成长按
+    pg.evaluate("""([dx,dy])=>{const cv=document.querySelector('#battle canvas');cv.setPointerCapture=()=>{};const mk=(t,x,y)=>new PointerEvent(t,{pointerId:7,pointerType:'touch',clientX:x,clientY:y,bubbles:true});
+        cv.dispatchEvent(mk('pointerdown',300,220));for(let i=1;i<=12;i++)cv.dispatchEvent(mk('pointermove',300+dx*i/12,220+dy*i/12));cv.dispatchEvent(mk('pointerup',300+dx,220+dy))}""", [60, -60])
+    pg.wait_for_timeout(1500)
+    r1, sx1, sy1 = gap()
+    assert abs(sx1 - sx0) > 15 or abs(sy1 - sy0) > 15, ('镜头应该动了', sx0, sx1, sy0, sy1)
+    assert min(abs(r1[0] - sx1), abs(r1[1] - sx1)) < 60 and abs(r1[2] - max(30, min(372, sy1))) < 30, ('拖镜头后浮条应跟着单位', r1, sx1, sy1)
+    # 撤销：点浮条以外的空白处 → 单位退回原格、回到选中（蓝格重新出现）；然后重新走一次
+    assert pg.is_visible('#abar'); tap(info['x'] + 3, info['y'] + 3) if False else pg.mouse.click(120, 330); pg.wait_for_timeout(300)
+    u = pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);return {x:u.x,y:u.y,moved:u.moved}}', [info['id']])
+    assert (u['x'], u['y'], u['moved']) == (info['x'], info['y'], False), ('撤销后应回到原格', u)
+    assert not pg.is_visible('#abar') and st()['acting'] is None and st()['sel'] == info['id'] and rng() >= 3, ('撤销后应回到选中状态', st(), rng())
+    wc = pg.evaluate('([id])=>window.battle.world.unitById(id).cell', [info['id']]); ec = pg.evaluate('([c])=>window.battle.toEngine(c)', [wc])
+    assert tuple(ec) == (info['x'], info['y']), ('世界里的单位也应回到原格', ec)
+    tap(dest[0], dest[1])
+    pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=60000); pg.wait_for_timeout(300)
+    assert pg.is_visible('#abar') and st()['acting'] == info['id'], ('撤销后重新走应再出浮条', st(), dest, scr(dest[0], dest[1]), rng())
     pg.click('#abar .abtn'); pg.wait_for_timeout(300)
     assert not pg.is_visible('#abar') and st()['acting'] is None
     assert pg.evaluate('([id])=>window.battle.game.units.find(o=>o.id===id).acted', [info['id']]) is True

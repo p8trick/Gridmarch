@@ -103,8 +103,17 @@ export function move(g, id, x, y) {
   if (u.moved || u.acted) return {ok: false, err: '这个单位本回合已行动'};
   const r = reachable(g, u), c = r.get(key(x, y));
   if (c === undefined) return {ok: false, err: '到不了'};
+  u.origin = {x: u.x, y: u.y, fuel: u.fuel};   // 0.68：走完、选「待命」之前可以撤销
   if (g.config.fuel) u.fuel -= c;
   u.x = x; u.y = y; u.moved = true; return {ok: true, cost: c};
+}
+
+// 撤销移动（0.68）：只在「已经走了、还没待命 / 攻击」时可以，退回原位、燃料和「已移动」一起还原
+export function undoMove(g, id) {
+  const u = getUnit(g, id);
+  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
+  if (!u.moved || u.acted || !u.origin) return {ok: false, err: '现在不能撤销'};
+  u.x = u.origin.x; u.y = u.origin.y; u.fuel = u.origin.fuel; u.moved = false; delete u.origin; return {ok: true};
 }
 
 // 能打到的敌人（间接火力：移动过就不能开火；最近射程之内打不到）
@@ -132,7 +141,7 @@ export function attack(g, id, targetId) {
 
 export function wait(g, id) {
   const u = getUnit(g, id); if (!u || u.owner !== g.turn) return {ok: false, err: '不能操作'};
-  u.moved = u.acted = true; return {ok: true};
+  u.moved = u.acted = true; delete u.origin; return {ok: true};
 }
 
 // 歼灭：曾经有过单位、现在一个不剩的玩家出局（一开始就没有单位的不算，比如只测经济的场景）
@@ -151,7 +160,7 @@ export function endTurn(g) {
     checkWinner(g); if (g.winner !== null) return {ok: true};
   }
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
-  for (const u of g.units) if (u.owner === g.turn) u.moved = u.acted = false;
+  for (const u of g.units) if (u.owner === g.turn) { u.moved = u.acted = false; delete u.origin; }
   collectIncome(g);
   return {ok: true};
 }

@@ -244,3 +244,4 @@
 #battle .abtn:active{transform:skewX(-10deg) translateY(2px);color:#2b1700}
 #battle .abtn:active::after{opacity:1}
 #battle.ars-open .abar,#battle.det-open .abar{visibility:hidden}
+#battle .ahint{align-self:center;padding:4px 9px;border-radius:7px;background:rgba(9,24,46,.62);font-size:11px;line-height:1;letter-spacing:.08em;color:rgba(255,255,255,.88);pointer-events:none;white-space:nowrap}

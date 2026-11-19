@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, pathOf, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, reachable, pathOf, undoMove, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -51,6 +51,18 @@ t('移动：敌人挡路、友军可穿过但不能停', () => {
   const r = reachable(g, g.units[0]);
   assert(r.has('2,0') && !r.has('1,0') && !r.has('3,0') && !r.has('4,0'));
   assert(!move(g, 1, 4, 0).ok); assert(move(g, 1, 2, 0).ok); assert(!move(g, 1, 0, 0).ok);   // 已移动过
+});
+
+t('撤销移动：走了没待命可撤（位置 / 燃料 / 已移动一起还原）；待命后、没走过、不是自己回合都不行', () => {
+  const g = createGame({terrain: map(6, 1), units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 5, y: 0}]}), u = g.units[0], fuel0 = u.fuel;
+  assert.equal(undoMove(g, u.id).ok, false);                                       // 没走过
+  assert.equal(move(g, u.id, 3, 0).ok, true);
+  assert.equal(undoMove(g, u.id).ok, true);
+  assert.deepEqual([u.x, u.y, u.moved, u.fuel], [0, 0, false, fuel0]);
+  assert.equal(move(g, u.id, 2, 0).ok, true);                                      // 撤销后能重新走
+  assert.equal(wait(g, u.id).ok, true);
+  assert.equal(undoMove(g, u.id).ok, false);                                       // 待命后不能撤
+  assert.equal(u.x, 2);
 });
 
 t('走位路线 pathOf：从单位出发、逐格相邻、花费 = 可达表、能穿过友军、到不了 = null', () => {

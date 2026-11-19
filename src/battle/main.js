@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, wait as engineWait} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -50,7 +50,7 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="abar" class="abar" hidden><button class="abtn" data-act="wait"><span>待命</span></button></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint">点空白处撤销</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
@@ -131,8 +131,8 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
   return picked;
 }
 // ── 单位操作（0.67，高战式）：点自己没动过的单位 → 蓝格（引擎算的移动范围）→ 点蓝格直接走 → 单位旁出小浮条「待命」→ 已行动。点自己脚下 = 原地不动（直接出浮条）；点别处 = 取消选中。
-//    攻击下一版接（浮条里再加「攻击」）。走完之前必须先选浮条，点战场其它地方不响应（镜头还能拖）。
-let sel = null, reach = null, acting = null;
+//    攻击下一版接（浮条里再加「攻击」）。走完之后点浮条以外的地方（浮条周围 36px 不算）= 撤销这次移动（0.68），镜头还能拖。
+let sel = null, reach = null, acting = null, lastPul = 0;
 const clearSel = () => { sel = null; reach = null; world.deselect(); };
 function pickUnit(eu) {
   sel = eu; reach = engineReach(game, eu);
@@ -159,8 +159,20 @@ bar.addEventListener('click', e => {
   const b = e.target.closest('.abtn'); if (!b || !acting) return;
   if (b.dataset.act === 'wait') { engineWait(game, acting.id); clearAct(); syncActed(); hud(); infoUpdate(); mark(); }
 });
+function undoMove() {   // 撤销：单位退回原格，回到「选中」状态（蓝格重新出现，可以重新选落点）
+  const u = acting; if (!u || !u.origin) return;
+  const from = [u.origin.x, u.origin.y];
+  if (!engineUndo(game, u.id).ok) return;
+  clearAct(); world.placeAt(world.unitById(u.id), toWorld(from)); picked = toWorld(from); showCursor(picked); pickUnit(u);
+  syncActed(); hud(); infoUpdate(); mark();
+}
+function nearBar(px, py) {   // 浮条周围留一圈 36px 的缓冲：想点「待命」却点偏了，不算撤销
+  const l = bar.offsetLeft, t = bar.offsetTop - bar.offsetHeight / 2, M = 36;
+  return px > l - M && px < l + bar.offsetWidth + M && py > t - M && py < t + bar.offsetHeight + M;
+}
 function handleTap(px, py) {
-  if (acting || world.busy()) return;
+  if (world.busy()) return;
+  if (acting) { if (!nearBar(px, py)) undoMove(); return; }
   const c = selectAt(px, py);
   if (c) {
     const [ex, ey] = toEngine(c), eu = unitAt(game, ex, ey);
@@ -342,11 +354,13 @@ function loop(now) {
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
   let cursorOnly = false;
   if (cursor.update(now / 1000) && now - lastCur > 30) { cursorOnly = !dirty; dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
+  if (world.pulseRange(now / 1000) && now - lastPul > 30) { cursorOnly = cursorOnly || !dirty; dirty = true; lastPul = now; }   // 蓝格呼吸：有蓝格时约 30 帧/秒（同光圈，不计入帧率）
   if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
   if (detail.needsFrame()) dirty = true;   // 详细面板的展示窗：刚打开 / 拖动后画几帧，静止时不出帧
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
+    barPlace();   // 0.68：浮条每次出帧都跟着单位走（拖镜头时 cam.update 不一定报变化）
     if (cursorOnly) fpsChain = false; else { if (fpsChain) { fpsSum += now - fpsPrev; fpsN++; } fpsPrev = now; fpsChain = true; }   // 0.66 帧率采样：连续两个 rAF 都出帧才算一个样本（再慢也算，不会漏掉卡顿）
     if (ars.isOpen) ars.renderPreview(dt);
     if (detail.isOpen) detail.renderPreview();   // 战场画完后，把详细面板的展示窗（同一个场景换近景相机）画进各自的矩形
@@ -357,7 +371,7 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

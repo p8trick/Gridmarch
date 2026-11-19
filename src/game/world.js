@@ -571,7 +571,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   const hl = new THREE.Group(); scene.add(hl);
   const hlGeo = new THREE.PlaneGeometry(1.84, 1.84).rotateX(-Math.PI / 2), hlGeoSmall = new THREE.PlaneGeometry(1.1, 1.1).rotateX(-Math.PI / 2);
-  const hlMat = new THREE.MeshBasicMaterial({color: 0x8fe3ff, transparent: true, opacity: .42, depthWrite: false});
+  const hlMat = new THREE.MeshBasicMaterial({color: 0x72c6ff, transparent: true, opacity: .35, depthWrite: false});
   const selRing = new THREE.Mesh(new THREE.RingGeometry(.86, .98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({color: 0xffe08a, depthWrite: false}));
   selRing.visible = false; scene.add(selRing);
   function clearHighlights() { for (const o of [...hl.children]) hl.remove(o); }
@@ -597,6 +597,15 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, hlMat); m.position.set(x * 2, groundY(x, z) + (mtn ? .06 : .07), z * 2); m.renderOrder = 5; hl.add(m);
     }
     state.selected = u; selRing.visible = true; syncUnit(u);
+  }
+  function placeAt(u, cell) {   // 0.68：撤销移动时把单位瞬间放回原格（不播走位动画）
+    u.path = null; u.onArrive = null; u.cell = [...cell]; [u.x, u.z] = standPos(cell[0], cell[1]);
+    u.baseY = groundY(cell[0], cell[1], u); u.curY = u.baseY; refreshBuildings(); syncUnit(u);
+  }
+  // 蓝格呼吸（0.68，GBA 高战 2 的味道）：整片一起慢慢明暗，透明度只在 .24–.46 之间摆，底下的地形一直看得清；返回「现在有没有蓝格」，主循环据此保持约 30 帧/秒出帧
+  function pulseRange(t) {
+    if (!hl.children.length || !hl.visible) return false;
+    hlMat.opacity = .35 + .11 * Math.sin(t * 5.2); return true;
   }
   function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
     u.rangeCells = null; deselect();
@@ -783,7 +792,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
