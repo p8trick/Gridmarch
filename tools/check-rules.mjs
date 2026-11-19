@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, reachable, pathOf, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -51,6 +51,19 @@ t('移动：敌人挡路、友军可穿过但不能停', () => {
   const r = reachable(g, g.units[0]);
   assert(r.has('2,0') && !r.has('1,0') && !r.has('3,0') && !r.has('4,0'));
   assert(!move(g, 1, 4, 0).ok); assert(move(g, 1, 2, 0).ok); assert(!move(g, 1, 0, 0).ok);   // 已移动过
+});
+
+t('走位路线 pathOf：从单位出发、逐格相邻、花费 = 可达表、能穿过友军、到不了 = null', () => {
+  const g = createGame({terrain: map(5, 1), units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  const u = g.units[0], p = pathOf(g, u, 2, 0);
+  assert.deepEqual(p, [[0, 0], [1, 0], [2, 0]]);                                   // 穿过 (1,0) 的友军
+  assert.equal(pathOf(g, u, 0, 0).length, 1);                                      // 原地 = 只有起点
+  assert.equal(pathOf(g, u, 4, 0), null);                                          // 被敌人挡住
+  const m2 = map(4, 3); m2[0][1] = 'mountain';                                     // 轮式进不了山：必须绕路
+  const g2 = createGame({terrain: m2, units: [{type: 'recon', owner: 0, x: 0, y: 0}]});
+  const p2 = pathOf(g2, g2.units[0], 2, 0), cost = reachable(g2, g2.units[0]).get('2,0');
+  assert.equal(p2[0].join(), '0,0'); assert.equal(p2[p2.length - 1].join(), '2,0'); assert.equal(p2.length - 1, 4); assert.equal(cost, 8);   // 绕过山：下-右-右-上 = 4 格，轮式平原每格 2 点 = 8
+  for (let i = 1; i < p2.length; i++) assert.equal(Math.abs(p2[i][0] - p2[i - 1][0]) + Math.abs(p2[i][1] - p2[i - 1][1]), 1);
 });
 
 t('间接火力：不能打相邻、不能移动后开火、不被反击', () => {

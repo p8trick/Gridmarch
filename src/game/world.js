@@ -539,7 +539,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
     unitsGroup.visible = state.units;
     refreshBuildings();
-    if (state.selected) showHighlights(state.selected);
+    if (state.selected) { if (state.selected.rangeCells) showRange(state.selected.rangeCells, state.selected); else showHighlights(state.selected); }
   }
 
   // ───────── 选中 / 移动范围 / 移动 ─────────
@@ -586,6 +586,24 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   function select(u) { if (units.some(o => o.path)) return false; state.selected = u; showHighlights(u); return true; }
   function deselect() { state.selected = null; clearHighlights(); selRing.visible = false; }
+  // 0.67：移动范围 / 走位由引擎说了算（rules/engine 的 reachable / pathOf），这里只管画蓝格和播放走位动画
+  const unitById = id => units.find(o => o.spec.id === id) || null;
+  const busy = () => units.some(o => o.path);
+  function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）；起点不画（脚下有选中圈）
+    clearHighlights(); u.rangeCells = cells;
+    for (const [x, z] of cells) {
+      if (x === u.cell[0] && z === u.cell[1]) continue;
+      const mtn = terrainAt(x, z) === 'mountain';
+      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, hlMat); m.position.set(x * 2, groundY(x, z) + (mtn ? .06 : .07), z * 2); m.renderOrder = 5; hl.add(m);
+    }
+    state.selected = u; selRing.visible = true; syncUnit(u);
+  }
+  function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
+    u.rangeCells = null; deselect();
+    if (cells.length < 2) { if (onArrive) onArrive(u); return true; }
+    u.path = cells; u.dist = 0; u.curY = groundY(u.cell[0], u.cell[1], u); u.onArrive = onArrive || null;
+    refreshBuildings(); return true;
+  }
   function canMoveTo(u, cell) { const R = u.reach || reachable(u), k = key(cell[0], cell[1]); return R.dist.has(k) && k !== R.start && !R.occ.has(k); }
   function pathTo(u, cell) { const R = u.reach || reachable(u); const out = []; let k = key(cell[0], cell[1]); while (k && k !== R.start) { out.push(k.split(',').map(Number)); const p = R.prev.get(k); k = p ? key(p[0], p[1]) : null; } out.push([...u.cell]); return out.reverse(); }
   function moveTo(u, cell) {
@@ -595,7 +613,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   let treeEasing = false;
   function update(dt, camAngle) {
-    let moving = false, info = null;
+    let moving = false, info = null; const arrivals = [];
     for (const u of units) {
       if (!u.path) continue; moving = true;
       const px = u.x, pz = u.z, pyaw = u.yaw;
@@ -623,9 +641,11 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       if (u.dist >= total) {
         u.cell = [...u.path[u.path.length - 1]]; u.path = null; if (u.actors) for (const a of u.actors) a.setMode(state.infPose); [u.x, u.z] = standPos(u.cell[0], u.cell[1]); u.baseY = groundY(u.cell[0], u.cell[1], u); refreshBuildings();
         if (state.selected === u) deselect();
+        if (u.onArrive) arrivals.push(u);
       }
       syncUnit(u);
     }
+    for (const u of arrivals) { const cb = u.onArrive; u.onArrive = null; cb(u); }
     for (const u of units) if (u.actors) for (const a of u.actors) if (a.update(dt)) moving = true;   // 步兵开火动画
     for (const u of units) if (u.spec.k === 'tank') {                                                      // 坦克：排队的炮击逐发开，特效播放期间保持渲染
       const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) continue;
@@ -763,6 +783,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
+    unitById, busy, showRange, moveAlong,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

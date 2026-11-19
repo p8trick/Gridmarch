@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, wait as engineWait} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -50,6 +50,7 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="wait"><span>待命</span></button></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
@@ -129,8 +130,45 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
   if (picked) showCursor(c); else cursor.hide();
   return picked;
 }
+// ── 单位操作（0.67，高战式）：点自己没动过的单位 → 蓝格（引擎算的移动范围）→ 点蓝格直接走 → 单位旁出小浮条「待命」→ 已行动。点自己脚下 = 原地不动（直接出浮条）；点别处 = 取消选中。
+//    攻击下一版接（浮条里再加「攻击」）。走完之前必须先选浮条，点战场其它地方不响应（镜头还能拖）。
+let sel = null, reach = null, acting = null;
+const clearSel = () => { sel = null; reach = null; world.deselect(); };
+function pickUnit(eu) {
+  sel = eu; reach = engineReach(game, eu);
+  world.showRange([...reach.keys()].map(k => toWorld(k.split(',').map(Number))), world.unitById(eu.id));
+}
+function startMove(ex, ey) {
+  const u = sel, path = pathOf(game, u, ex, ey), w = world.unitById(u.id);
+  if (!path || !engineMove(game, u.id, ex, ey).ok) { clearSel(); return; }
+  clearSel(); acting = u; hideBar();
+  world.moveAlong(w, path.map(toWorld), () => { if (acting === u) { showBar(); mark(); } });
+}
+const bar = $('abar');
+function showBar() { bar.hidden = false; barPlace(); }
+function hideBar() { bar.hidden = true; }
+function barPlace() {   // 浮条贴在单位右边（单位在屏幕右侧 40% 时放左边），相机移动 / 旋转后跟着走
+  if (bar.hidden || !acting) return;
+  const w = world.unitById(acting.id); if (!w) return;
+  const v = new THREE.Vector3(w.x, world.surfaceY(w.cell[0], w.cell[1]) + .9, w.z).project(cam.cam), sx = (v.x + 1) / 2 * stage.w, sy = (1 - v.y) / 2 * stage.h;
+  const left = sx > stage.w * .6, bw = bar.offsetWidth || 90;
+  bar.style.left = Math.round(left ? sx - 34 - bw : sx + 34) + 'px'; bar.style.top = Math.round(Math.max(30, Math.min(stage.h - 30, sy))) + 'px';
+}
+function clearAct() { acting = null; hideBar(); }
+bar.addEventListener('click', e => {
+  const b = e.target.closest('.abtn'); if (!b || !acting) return;
+  if (b.dataset.act === 'wait') { engineWait(game, acting.id); clearAct(); syncActed(); hud(); infoUpdate(); mark(); }
+});
 function handleTap(px, py) {
-  if (selectAt(px, py)) { const [ex, ey] = toEngine(picked); if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(picked, game.turn === 0 ? 'blue' : 'red'); }
+  if (acting || world.busy()) return;
+  const c = selectAt(px, py);
+  if (c) {
+    const [ex, ey] = toEngine(c), eu = unitAt(game, ex, ey);
+    if (sel && reach.has(ex + ',' + ey)) { startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
+    clearSel();
+    if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) pickUnit(eu);
+    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(c, game.turn === 0 ? 'blue' : 'red');
+  } else clearSel();
   infoUpdate(); hud(); mark();
 }
 function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，但出完整版详细面板（自己的兵工厂也是看详情，不开生产界面）
@@ -201,7 +239,7 @@ function openEnd() {
 const closeEnd = () => { $('endm').hidden = true; };
 function doEndTurn() {
   if (!engineEndTurn(game).ok) return;
-  hudReady = false; $('hudL').classList.remove('ready');
+  hudReady = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
   syncActed(); hud(); infoUpdate(); mark(); playBanner();
 }
 function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑入、金色大字「第 N 天」缩放落下、扫光一闪、停一下再向右滑出；期间挡住触摸
@@ -300,7 +338,7 @@ function loop(now) {
   raf = requestAnimationFrame(loop);
   const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
   const camChanged = cam.update(dt);
-  if (camChanged) { applyView(); hud(); dirty = true; }
+  if (camChanged) { applyView(); hud(); barPlace(); dirty = true; }
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
   let cursorOnly = false;
   if (cursor.update(now / 1000) && now - lastCur > 30) { cursorOnly = !dirty; dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
@@ -319,7 +357,7 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y]))};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

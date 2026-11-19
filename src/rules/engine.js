@@ -59,8 +59,8 @@ export function produce(g, x, y, type) {
   return {ok: true, unit: u};
 }
 
-// 可到达的格子：Map('x,y' → 已花的移动力）。敌方单位挡路；友方可穿过但不能停在上面。
-export function reachable(g, unit) {
+// 移动力花费表（含只能穿过、不能停的友军格）：Map('x,y' → 已花的移动力）。敌方单位挡路。
+function costMap(g, unit) {
   const t = UNITS[unit.type], budget = g.config.fuel ? Math.min(t.move, unit.fuel) : t.move;
   const best = new Map([[key(unit.x, unit.y), 0]]), todo = [[unit.x, unit.y]];
   while (todo.length) {
@@ -74,8 +74,27 @@ export function reachable(g, unit) {
       if (!best.has(key(nx, ny)) || total < best.get(key(nx, ny))) { best.set(key(nx, ny), total); todo.push([nx, ny]); }
     }
   }
+  return best;
+}
+
+// 可到达（能停下）的格子：Map('x,y' → 已花的移动力）。友方可穿过但不能停在上面。
+export function reachable(g, unit) {
+  const best = costMap(g, unit);
   for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number), o = unitAt(g, x, y); if (o && o !== unit) best.delete(k); }
   return best;
+}
+
+// 走到 (x, y) 的最省路线：[[x, y], ...]，第一格是单位现在的位置、最后一格是目的地；到不了 = null（0.67，给战场走位动画用；规则以 reachable 为准）
+export function pathOf(g, unit, x, y) {
+  const best = costMap(g, unit), t = UNITS[unit.type];
+  if (!best.has(key(x, y))) return null;
+  const path = [[x, y]]; let cur = [x, y];
+  while (cur[0] !== unit.x || cur[1] !== unit.y) {
+    const kc = best.get(key(cur[0], cur[1])), c = TERRAINS[g.terrain[cur[1]][cur[0]]].cost[t.mt];
+    const prev = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cur[0] + dx, cur[1] + dy]).find(n => best.has(key(n[0], n[1])) && best.get(key(n[0], n[1])) + c === kc);
+    if (!prev) return null; path.push(prev); cur = prev;
+  }
+  return path.reverse();
 }
 
 export function move(g, id, x, y) {
