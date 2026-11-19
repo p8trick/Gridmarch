@@ -21,10 +21,15 @@ with sync_playwright() as p:
     tap(info['x'], info['y'])
     assert st()['sel'] == info['id'], ('点单位应选中', st())
     n = rng(); assert n >= 3, ('应出蓝格', n)
-    ops = []   # 蓝格呼吸（0.68）：透明度应该在 .22–.48 之间来回摆
+    ts = []   # 格子特效（0.71）：共享的时间 uniform 在走（呼吸 / 流光 / 涟漪都靠它）；默认样式「描边」有轮廓线
     for _ in range(8):
-        ops.append(pg.evaluate("()=>{let o=null;window.battle.world.scene.traverse(m=>{if(m.material&&m.material.color&&m.material.color.getHex()===0x72c6ff&&m.material.transparent)o=m.material.opacity});return o}")); pg.wait_for_timeout(170)
-    assert all(o is not None and .2 < o < .5 for o in ops) and max(ops) - min(ops) > .03, ('蓝格应该在呼吸', ops)
+        ts.append(pg.evaluate("()=>{let t=null;window.battle.world.scene.traverse(m=>{if(m.name==='tileFill')t=m.material.uniforms.uTime.value});return t}")); pg.wait_for_timeout(170)
+    assert all(t is not None for t in ts) and max(ts) - min(ts) > .3, ('格子特效的时间应该在走', ts)
+    edges = lambda: pg.evaluate("()=>{let n=0,v=0;window.battle.world.scene.traverse(m=>{if(m.name==='tileEdge'){n++;if(m.visible)v++}});return [n,v]}")
+    n, v = edges(); assert n > 0 and v == n, ('默认「描边」应画出范围轮廓', n, v)
+    pg.evaluate("()=>window.battle.world.setTileStyle(0)"); n, v = edges(); assert n > 0 and v == 0, ('「呼吸」样式不画轮廓', n, v)
+    for k in (2, 3): pg.evaluate("k=>window.battle.world.setTileStyle(k)", k); n, v = edges(); assert v == n > 0, ('流光 / 涟漪也有轮廓', k, n, v)
+    pg.evaluate("()=>window.battle.world.setTileStyle(1)")
     # 目的地：从引擎范围里找一个离起点 2 格以上、屏幕上在画面内的格子
     dest = pg.evaluate('''([id])=>{const B=window.battle,g=B.game,u=g.units.find(o=>o.id===id);const w=B.world.unitById(id);
         const c=w.rangeCells.map(c=>B.toEngine(c)).filter(([x,y])=>Math.abs(x-u.x)+Math.abs(y-u.y)>=2);return c[0]}''', [info['id']])

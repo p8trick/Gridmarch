@@ -571,7 +571,26 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   const hl = new THREE.Group(); scene.add(hl);
   const hlGeo = new THREE.PlaneGeometry(1.84, 1.84).rotateX(-Math.PI / 2), hlGeoSmall = new THREE.PlaneGeometry(1.1, 1.1).rotateX(-Math.PI / 2);
-  const hlMat = new THREE.MeshBasicMaterial({color: 0x72c6ff, transparent: true, opacity: .35, depthWrite: false});
+  // 0.71 格子特效：蓝格 / 红格 / 轮廓线共用一个着色器，时间、样式、起点都是共享的 uniform（所有格子一起动，不用逐格更新）。
+  // 样式 0 呼吸（0.68 的老样子）｜1 描边：整片范围的外轮廓亮起来 + 每格内缘微亮 + 轻呼吸｜2 流光：描边 + 斜向的亮带缓缓扫过整片范围｜3 涟漪：描边 + 以单位为圆心向外扩散的水波。
+  // 颜色按 sRGB 直接写进 uniform（ShaderMaterial 不做色彩空间转换，所见即所得）。
+  const tileU = {uTime: {value: 0}, uStyle: {value: 1}, uOrigin: {value: new THREE.Vector2()}};
+  const rgb = hex => new THREE.Vector3((hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255);
+  const TILE_VS = 'varying vec3 vW; varying vec2 vUv; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
+  const TILE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform float uTime, uStyle, uAdd; uniform vec2 uOrigin; uniform vec3 uColor;
+    void main(){
+      float a = .38 + .10 * sin(uTime * 5.2), k = step(.5, uStyle);
+      if (uStyle > 2.5) { float d = distance(vW.xz, uOrigin), w = .5 + .5 * sin(d * 2.6 - uTime * 3.4); a = .24 + .26 * w * w; }
+      else if (uStyle > 1.5) { float f = fract((vW.x + vW.z) * .16 - uTime * .30); a = .28 + .24 * smoothstep(0., .22, f) * (1. - smoothstep(.22, .5, f)); }
+      else if (uStyle > .5) a = .34 + .08 * sin(uTime * 5.2);
+      vec2 e = min(vUv, 1. - vUv); float edge = (1. - smoothstep(0., .07, min(e.x, e.y))) * k;
+      gl_FragColor = vec4(uColor + vec3(edge * .10), a + uAdd * k + edge * .06);
+    }`;
+  const EDGE_FS = 'precision highp float; uniform float uTime; uniform vec3 uColor; void main(){ gl_FragColor = vec4(uColor, .80 + .20 * sin(uTime * 5.2)); }';
+  const mkTileMat = (hex, add) => { const m = new THREE.ShaderMaterial({uniforms: {...tileU, uColor: {value: rgb(hex)}, uAdd: {value: add}}, vertexShader: TILE_VS, fragmentShader: TILE_FS, transparent: true, depthWrite: false}); m.userData.hex = hex; return m; };
+  const mkEdgeMat = hex => { const m = new THREE.ShaderMaterial({uniforms: {uTime: tileU.uTime, uColor: {value: rgb(hex)}}, vertexShader: TILE_VS, fragmentShader: EDGE_FS, transparent: true, depthWrite: false}); m.userData.hex = hex; return m; };
+  const hlMat = mkTileMat(0x3d8bff, 0), hlRed = mkTileMat(0xff4a3d, .08), edgeBlue = mkEdgeMat(0xe4f3ff), edgeRed = mkEdgeMat(0xffe0d8);
+  const edgeGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const selRing = new THREE.Mesh(new THREE.RingGeometry(.86, .98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({color: 0xffe08a, depthWrite: false}));
   selRing.visible = false; scene.add(selRing);
   function clearHighlights() { for (const o of [...hl.children]) hl.remove(o); }
@@ -589,24 +608,30 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 0.67：移动范围 / 走位由引擎说了算（rules/engine 的 reachable / pathOf），这里只管画蓝格和播放走位动画
   const unitById = id => units.find(o => o.spec.id === id && !o.dying) || null;
   const busy = () => units.some(o => o.path || o.atk || o.dying);
-  function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）；起点不画（脚下有选中圈）
-    clearHighlights(); u.rangeCells = cells;
+  // 一片格子 = 逐格填充 + 范围外轮廓（只在「邻格不在范围里」的那一侧画一条细亮边）；skip = 起点格：不填充，但算范围内（它周围不描边，脚下有选中圈）
+  function buildTiles(cells, mat, edgeMat, skip) {
+    const set = new Set(cells.map(c => c[0] + ',' + c[1]));
     for (const [x, z] of cells) {
-      if (x === u.cell[0] && z === u.cell[1]) continue;
-      const mtn = terrainAt(x, z) === 'mountain';
-      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, hlMat); m.position.set(x * 2, groundY(x, z) + (mtn ? .06 : .07), z * 2); m.renderOrder = 5; hl.add(m);
+      const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07), h = mtn ? .55 : .92;
+      if (!(skip && x === skip[0] && z === skip[1])) { const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, mat); m.name = 'tileFill'; m.position.set(x * 2, y, z * 2); m.renderOrder = 5; hl.add(m); }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (set.has((x + dx) + ',' + (z + dz))) continue;
+        const e = new THREE.Mesh(edgeGeo, edgeMat); e.name = 'tileEdge'; e.position.set(x * 2 + dx * h, y + .01, z * 2 + dz * h);
+        e.scale.set(dx ? .16 : 2 * h + .16, 1, dz ? .16 : 2 * h + .16); e.renderOrder = 6; e.visible = tileU.uStyle.value >= 1; hl.add(e);
+      }
     }
+  }
+  function setTileStyle(n) { n = Math.max(0, Math.min(3, n | 0)); tileU.uStyle.value = n; for (const o of hl.children) if (o.name === 'tileEdge') o.visible = n >= 1; return n; }
+  function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）
+    clearHighlights(); u.rangeCells = cells; tileU.uOrigin.value.set(u.x, u.z);
+    buildTiles(cells, hlMat, edgeBlue, u.cell);
     state.selected = u; selRing.visible = true; syncUnit(u);
   }
   // ── 0.70 攻击表现 ─────────────────────────────────────────────
   // 目标格：射程内的敌人格子画红色半透明格（和蓝格一起呼吸）；点哪个由 main.js 判断
-  const hlRed = new THREE.MeshBasicMaterial({color: 0xff5a4d, transparent: true, opacity: .42, depthWrite: false});
-  function showTargets(cells) {
-    clearHighlights();
-    for (const [x, z] of cells) {
-      const mtn = terrainAt(x, z) === 'mountain';
-      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, hlRed); m.position.set(x * 2, groundY(x, z) + (mtn ? .06 : .07), z * 2); m.renderOrder = 5; hl.add(m);
-    }
+  function showTargets(cells, u) {   // 目标格：红格 + 每格自己的红色轮廓；涟漪从攻击方向外扩
+    clearHighlights(); if (u) tileU.uOrigin.value.set(u.x, u.z);
+    buildTiles(cells, hlRed, edgeRed, null);
   }
   const clearRange = () => clearHighlights();
   // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
@@ -637,7 +662,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 蓝格呼吸（0.68，GBA 高战 2 的味道）：整片一起慢慢明暗，透明度只在 .24–.46 之间摆，底下的地形一直看得清；返回「现在有没有蓝格」，主循环据此保持约 30 帧/秒出帧
   function pulseRange(t) {
     if (!hl.children.length || !hl.visible) return false;
-    hlMat.opacity = .35 + .11 * Math.sin(t * 5.2); hlRed.opacity = .40 + .12 * Math.sin(t * 5.2); return true;
+    tileU.uTime.value = t; return true;
   }
   function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
     u.rangeCells = null; deselect();
@@ -833,7 +858,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setTileStyle, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

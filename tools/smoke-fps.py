@@ -16,6 +16,9 @@ with sync_playwright() as p:
     assert pg.is_visible('#pMain') and not pg.is_visible('#pQual')
     pg.click('[data-act=quality]'); pg.wait_for_timeout(200)
     assert pg.is_visible('#pQual') and not pg.is_visible('#pMain') and pg.inner_text('#pTitle') == '画质'
+    for want, v in (('流光', '2'), ('涟漪', '3'), ('呼吸', '0'), ('描边', '1')):   # 格子特效：点一下换下一种，存 localStorage
+        pg.click('[data-act=tilefx]'); pg.wait_for_timeout(120)
+        assert pg.inner_text('#pTileSt') == want and pg.evaluate('()=>localStorage.getItem("gridmarch.tileFx")') == v, ('格子特效切换', want, v)
     pg.click('[data-act=fps]'); pg.wait_for_timeout(200)
     assert not pg.evaluate('()=>document.querySelector("#fpsb").hidden'), '打开后应出现小标'
     assert pg.inner_text('#pFpsSt') == '开'
