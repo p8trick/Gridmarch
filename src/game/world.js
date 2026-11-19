@@ -193,7 +193,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   sun.position.set(-8, 16, 9); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, {left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 55});
   sun.shadow.bias = -.0003;
-  scene.add(sun, sun.target, new THREE.HemisphereLight(0xe5efff, 0x67704f, 1.7));
+  const hemi = new THREE.HemisphereLight(0xe5efff, 0x67704f, 1.7); scene.add(sun, sun.target, hemi);   // 0.72：显示移动 / 攻击范围时整个场景压暗一点（格子本身不受光照影响），拉开范围格和普通地块的对比
   const SUN_OFF = [-8, 16, 9];
   // 阴影范围只有 ±18，大地图要让太阳跟着相机目标走；坐标取整到 1 个世界单位，避免阴影边缘随平移闪烁
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
@@ -571,25 +571,25 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   const hl = new THREE.Group(); scene.add(hl);
   const hlGeo = new THREE.PlaneGeometry(1.84, 1.84).rotateX(-Math.PI / 2), hlGeoSmall = new THREE.PlaneGeometry(1.1, 1.1).rotateX(-Math.PI / 2);
-  // 0.71 格子特效：蓝格 / 红格 / 轮廓线共用一个着色器，时间、样式、起点都是共享的 uniform（所有格子一起动，不用逐格更新）。
-  // 样式 0 呼吸（0.68 的老样子）｜1 描边：整片范围的外轮廓亮起来 + 每格内缘微亮 + 轻呼吸｜2 流光：描边 + 斜向的亮带缓缓扫过整片范围｜3 涟漪：描边 + 以单位为圆心向外扩散的水波。
+  // 0.72 格子特效（0.71 的 4 种砍成 2 种在测：流光 / 涟漪）。蓝格 / 红格 / 轮廓线共用一个着色器，时间、样式、起点是共享的 uniform（所有格子一起动，不用逐格更新）。
+  // 填充：饱和的蓝紫色（红格：红），不再只是淡淡一层；动态效果是白光：流光 = 斜向的白色亮带扫过整片范围，涟漪 = 以单位为圆心向外扩散的白色水波。
+  // 整片范围的外轮廓是白色粗边；每格内缘有一圈淡白。显示范围时整个场景压暗（见 pulseRange），范围格本身不受光照影响，所以和普通地块的对比更强。
   // 颜色按 sRGB 直接写进 uniform（ShaderMaterial 不做色彩空间转换，所见即所得）。
-  const tileU = {uTime: {value: 0}, uStyle: {value: 1}, uOrigin: {value: new THREE.Vector2()}};
+  const tileU = {uTime: {value: 0}, uStyle: {value: 2}, uOrigin: {value: new THREE.Vector2()}};
   const rgb = hex => new THREE.Vector3((hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255);
   const TILE_VS = 'varying vec3 vW; varying vec2 vUv; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
   const TILE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform float uTime, uStyle, uAdd; uniform vec2 uOrigin; uniform vec3 uColor;
     void main(){
-      float a = .38 + .10 * sin(uTime * 5.2), k = step(.5, uStyle);
-      if (uStyle > 2.5) { float d = distance(vW.xz, uOrigin), w = .5 + .5 * sin(d * 2.6 - uTime * 3.4); a = .24 + .26 * w * w; }
-      else if (uStyle > 1.5) { float f = fract((vW.x + vW.z) * .16 - uTime * .30); a = .28 + .24 * smoothstep(0., .22, f) * (1. - smoothstep(.22, .5, f)); }
-      else if (uStyle > .5) a = .34 + .08 * sin(uTime * 5.2);
-      vec2 e = min(vUv, 1. - vUv); float edge = (1. - smoothstep(0., .07, min(e.x, e.y))) * k;
-      gl_FragColor = vec4(uColor + vec3(edge * .10), a + uAdd * k + edge * .06);
+      float glow;
+      if (uStyle > 2.5) { float d = distance(vW.xz, uOrigin), w = .5 + .5 * sin(d * 2.6 - uTime * 3.4); glow = w * w * w; }
+      else { float f = fract((vW.x + vW.z) * .16 - uTime * .30); glow = smoothstep(0., .20, f) * (1. - smoothstep(.20, .46, f)); }
+      vec2 e = min(vUv, 1. - vUv); float edge = 1. - smoothstep(0., .06, min(e.x, e.y));
+      gl_FragColor = vec4(mix(uColor, vec3(1.), glow * .62 + edge * .18), .55 + uAdd + glow * .20 + edge * .10);
     }`;
-  const EDGE_FS = 'precision highp float; uniform float uTime; uniform vec3 uColor; void main(){ gl_FragColor = vec4(uColor, .80 + .20 * sin(uTime * 5.2)); }';
+  const EDGE_FS = 'precision highp float; uniform float uTime; uniform vec3 uColor; void main(){ gl_FragColor = vec4(uColor, .92 + .08 * sin(uTime * 5.2)); }';
   const mkTileMat = (hex, add) => { const m = new THREE.ShaderMaterial({uniforms: {...tileU, uColor: {value: rgb(hex)}, uAdd: {value: add}}, vertexShader: TILE_VS, fragmentShader: TILE_FS, transparent: true, depthWrite: false}); m.userData.hex = hex; return m; };
   const mkEdgeMat = hex => { const m = new THREE.ShaderMaterial({uniforms: {uTime: tileU.uTime, uColor: {value: rgb(hex)}}, vertexShader: TILE_VS, fragmentShader: EDGE_FS, transparent: true, depthWrite: false}); m.userData.hex = hex; return m; };
-  const hlMat = mkTileMat(0x3d8bff, 0), hlRed = mkTileMat(0xff4a3d, .08), edgeBlue = mkEdgeMat(0xe4f3ff), edgeRed = mkEdgeMat(0xffe0d8);
+  const hlMat = mkTileMat(0x6a4dff, 0), hlRed = mkTileMat(0xff3b30, .05), edgeBlue = mkEdgeMat(0xffffff), edgeRed = mkEdgeMat(0xfff0ec);
   const edgeGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const selRing = new THREE.Mesh(new THREE.RingGeometry(.86, .98, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({color: 0xffe08a, depthWrite: false}));
   selRing.visible = false; scene.add(selRing);
@@ -617,11 +617,11 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         if (set.has((x + dx) + ',' + (z + dz))) continue;
         const e = new THREE.Mesh(edgeGeo, edgeMat); e.name = 'tileEdge'; e.position.set(x * 2 + dx * h, y + .01, z * 2 + dz * h);
-        e.scale.set(dx ? .16 : 2 * h + .16, 1, dz ? .16 : 2 * h + .16); e.renderOrder = 6; e.visible = tileU.uStyle.value >= 1; hl.add(e);
+        e.scale.set(dx ? .18 : 2 * h + .18, 1, dz ? .18 : 2 * h + .18); e.renderOrder = 6; hl.add(e);
       }
     }
   }
-  function setTileStyle(n) { n = Math.max(0, Math.min(3, n | 0)); tileU.uStyle.value = n; for (const o of hl.children) if (o.name === 'tileEdge') o.visible = n >= 1; return n; }
+  function setTileStyle(n) { n = n ? 1 : 0; tileU.uStyle.value = n + 2; return n; }   // 0 流光 / 1 涟漪
   function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）
     clearHighlights(); u.rangeCells = cells; tileU.uOrigin.value.set(u.x, u.z);
     buildTiles(cells, hlMat, edgeBlue, u.cell);
@@ -660,9 +660,13 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     u.baseY = groundY(cell[0], cell[1], u); u.curY = u.baseY; refreshBuildings(); syncUnit(u);
   }
   // 蓝格呼吸（0.68，GBA 高战 2 的味道）：整片一起慢慢明暗，透明度只在 .24–.46 之间摆，底下的地形一直看得清；返回「现在有没有蓝格」，主循环据此保持约 30 帧/秒出帧
-  function pulseRange(t) {
-    if (!hl.children.length || !hl.visible) return false;
-    tileU.uTime.value = t; return true;
+  let dimK = 1, lastPulseT = 0;
+  function pulseRange(t) {   // 每个 rAF 调一次；返回「现在还需要继续出帧」：有格子，或者压暗还没缓回来
+    const dt = Math.min(.1, Math.max(0, t - lastPulseT)); lastPulseT = t;
+    const on = hl.children.length > 0 && hl.visible, want = on ? .78 : 1;
+    if (Math.abs(dimK - want) > .002) { dimK += (want - dimK) * Math.min(1, dt * 9); if (Math.abs(dimK - want) <= .002) dimK = want; sun.intensity = 3 * dimK; hemi.intensity = 1.7 * dimK; }
+    if (on) tileU.uTime.value = t;
+    return on || dimK !== 1;
   }
   function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
     u.rangeCells = null; deselect();

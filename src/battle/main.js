@@ -42,7 +42,7 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pQual" hidden>
-    <li><button class="item" data-act="tilefx"><span class="txt"><span class="main">格子特效</span><span class="pst" id="pTileSt">描边</span></span></button></li>
+    <li><button class="item" data-act="tilefx"><span class="txt"><span class="main">格子特效</span><span class="pst" id="pTileSt">流光</span></span></button></li>
     <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
     <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
     <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
@@ -341,11 +341,11 @@ function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算�
 // 作战动画（0.70）：开 = 攻击时单位转向目标、播放模型自带的开火动画、被打掉的单位缩小消失；关 = 全部跳过，只飘伤害数字（存 localStorage gridmarch.combatAnim）
 const CANIM_KEY = 'gridmarch.combatAnim';
 let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
-// 格子特效（0.71）：蓝格 / 红格的样式，点一下换下一种（存 localStorage gridmarch.tileFx，默认 1 描边）
-const TILEFX_KEY = 'gridmarch.tileFx', TILEFX = ['呼吸', '描边', '流光', '涟漪'];
-let tileFx = 1; try { const v = localStorage.getItem(TILEFX_KEY); if (v !== null) tileFx = Math.max(0, Math.min(3, +v | 0)); } catch (e) {}
+// 格子特效（0.72）：蓝格 / 红格的动态样式，只剩两种在测——流光 / 涟漪，点一下换另一种（存 localStorage gridmarch.tileFx2，默认流光）
+const TILEFX_KEY = 'gridmarch.tileFx2', TILEFX = ['流光', '涟漪'];
+let tileFx = 0; try { tileFx = localStorage.getItem(TILEFX_KEY) === '1' ? 1 : 0; } catch (e) {}
 world.setTileStyle(tileFx);
-function tilefxRender() { $('pTileSt').textContent = TILEFX[tileFx]; $('pTileSt').classList.toggle('on', tileFx > 0); }
+function tilefxRender() { $('pTileSt').textContent = TILEFX[tileFx]; $('pTileSt').classList.add('on'); }
 function canimRender() { $('pCombatSt').textContent = combatOn ? '开' : '关'; $('pCombatSt').classList.toggle('on', combatOn); }
 canimRender(); tilefxRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
@@ -359,7 +359,7 @@ pause.addEventListener('click', e => {
   if (a === 'resume') pause.hidden = true;
   else if (a === 'quality') setPage(true);
   else if (a === 'back') setPage(false);
-  else if (a === 'tilefx') { tileFx = (tileFx + 1) % 4; world.setTileStyle(tileFx); try { localStorage.setItem(TILEFX_KEY, String(tileFx)); } catch (e) {} tilefxRender(); mark(); }
+  else if (a === 'tilefx') { tileFx = 1 - tileFx; world.setTileStyle(tileFx); try { localStorage.setItem(TILEFX_KEY, String(tileFx)); } catch (e) {} tilefxRender(); mark(); }
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();

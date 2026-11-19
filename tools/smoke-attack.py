@@ -22,7 +22,7 @@ def run(pg, anim, kill):
     assert sc, '找不到能摆放的邻格'
     if kill: pg.evaluate('([id])=>{window.battle.game.units.find(o=>o.id===id).hp=5}', [sc['d']])
     hp = lambda id: pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);return u?u.hp:0}', [id])
-    reds = lambda: pg.evaluate('()=>{let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="tileFill"&&m.material.userData.hex===0xff4a3d)n++});return n}')
+    reds = lambda: pg.evaluate('()=>{let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="tileFill"&&m.material.userData.hex===0xff3b30)n++});return n}')
     nunits0 = pg.evaluate('()=>window.battle.world.units.length')
     tap(sc['ax'], sc['ay']); assert st()['sel'] == sc['a'], ('应选中', st())
     tap(sc['ax'], sc['ay']); assert pg.is_visible('#abar') and st()['acting'] == sc['a'], '原地应出浮条'
