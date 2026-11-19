@@ -587,8 +587,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function select(u) { if (units.some(o => o.path)) return false; state.selected = u; showHighlights(u); return true; }
   function deselect() { state.selected = null; clearHighlights(); selRing.visible = false; }
   // 0.67：移动范围 / 走位由引擎说了算（rules/engine 的 reachable / pathOf），这里只管画蓝格和播放走位动画
-  const unitById = id => units.find(o => o.spec.id === id) || null;
-  const busy = () => units.some(o => o.path);
+  const unitById = id => units.find(o => o.spec.id === id && !o.dying) || null;
+  const busy = () => units.some(o => o.path || o.atk || o.dying);
   function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）；起点不画（脚下有选中圈）
     clearHighlights(); u.rangeCells = cells;
     for (const [x, z] of cells) {
@@ -598,6 +598,38 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
     state.selected = u; selRing.visible = true; syncUnit(u);
   }
+  // ── 0.70 攻击表现 ─────────────────────────────────────────────
+  // 目标格：射程内的敌人格子画红色半透明格（和蓝格一起呼吸）；点哪个由 main.js 判断
+  const hlRed = new THREE.MeshBasicMaterial({color: 0xff5a4d, transparent: true, opacity: .42, depthWrite: false});
+  function showTargets(cells) {
+    clearHighlights();
+    for (const [x, z] of cells) {
+      const mtn = terrainAt(x, z) === 'mountain';
+      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, hlRed); m.position.set(x * 2, groundY(x, z) + (mtn ? .06 : .07), z * 2); m.renderOrder = 5; hl.add(m);
+    }
+  }
+  const clearRange = () => clearHighlights();
+  // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
+  function playAttack(aId, tId, onDone) {
+    const a = unitById(aId), t = unitById(tId);
+    if (!a || !t) { onDone(); return; }
+    const ang = Math.atan2(t.x - a.x, t.z - a.z);
+    if (a.actors) { a.yaw = ang; syncUnit(a); a.actors.forEach((ac, i) => { ac.setMode(state.infPose === 'kneel' ? 'kneel' : 'aim'); ac.shoot(2, i * .07); }); }
+    else if (a.spec.k === 'tank') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; }
+    a.atk = {t: 0, onDone};
+  }
+  // 单位被打掉：animate 为真时缩小消失（.5 秒），否则直接移除
+  function disposeUnit(u) {
+    if (state.selected === u) deselect();
+    unitsGroup.remove(u.holder); rings.remove(u.ring);
+    for (const o of [u.badge, u.tbadge, u.amark]) if (o) scene.remove(o);
+    const i = units.indexOf(u); if (i >= 0) units.splice(i, 1);
+    refreshBuildings();
+  }
+  function removeUnit(id, animate = true) {
+    const u = unitById(id); if (!u) return;
+    if (animate) { u.dying = {t: 0}; u.path = null; } else disposeUnit(u);
+  }
   function placeAt(u, cell) {   // 0.68：撤销移动时把单位瞬间放回原格（不播走位动画）
     u.path = null; u.onArrive = null; u.cell = [...cell]; [u.x, u.z] = standPos(cell[0], cell[1]);
     u.baseY = groundY(cell[0], cell[1], u); u.curY = u.baseY; refreshBuildings(); syncUnit(u);
@@ -605,7 +637,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 蓝格呼吸（0.68，GBA 高战 2 的味道）：整片一起慢慢明暗，透明度只在 .24–.46 之间摆，底下的地形一直看得清；返回「现在有没有蓝格」，主循环据此保持约 30 帧/秒出帧
   function pulseRange(t) {
     if (!hl.children.length || !hl.visible) return false;
-    hlMat.opacity = .35 + .11 * Math.sin(t * 5.2); return true;
+    hlMat.opacity = .35 + .11 * Math.sin(t * 5.2); hlRed.opacity = .40 + .12 * Math.sin(t * 5.2); return true;
   }
   function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
     u.rangeCells = null; deselect();
@@ -655,11 +687,20 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       syncUnit(u);
     }
     for (const u of arrivals) { const cb = u.onArrive; u.onArrive = null; cb(u); }
-    for (const u of units) if (u.actors) for (const a of u.actors) if (a.update(dt)) moving = true;   // 步兵开火动画
+    for (const u of units) if (u.actors) { let b = false; for (const a of u.actors) if (a.update(dt)) b = true; u.fireBusy = b; if (b) moving = true; }   // 步兵开火动画
     for (const u of units) if (u.spec.k === 'tank') {                                                      // 坦克：排队的炮击逐发开，特效播放期间保持渲染
-      const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) continue;
+      const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) { u.fireBusy = false; continue; }
       if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) u.fireQ--;
-      m.updateFire(dt); if (m.fireState().active || u.fireQ > 0) moving = true;
+      m.updateFire(dt); u.fireBusy = m.fireState().active || u.fireQ > 0; if (u.fireBusy) moving = true;
+    }
+    // 0.70：攻击放完检测 + 死亡缩小
+    { const done = [], gone = [];
+      for (const u of units) {
+        if (u.atk) { u.atk.t += dt; moving = true; if ((u.atk.t > .45 && !u.fireBusy) || u.atk.t > 5) done.push(u); }
+        if (u.dying) { u.dying.t += dt; moving = true; const k = Math.min(1, u.dying.t / .5); u.holder.scale.setScalar(Math.max(.001, u.baseScale * (1 - k * k))); if (k >= 1) gone.push(u); }
+      }
+      for (const u of done) { if (u.actors) for (const a of u.actors) a.setMode(state.infPose); u.aimLock = false; const cb = u.atk.onDone; u.atk = null; cb(); }
+      for (const u of gone) disposeUnit(u);
     }
     { const k = 1 - Math.exp(-12 * dt);
       for (const b of buildings) {
@@ -694,7 +735,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function animate(t) {
     if (!state.idle) return;
     for (const u of units) {
-      if (u.path) continue;
+      if (u.path || u.dying) continue;
       const ph = u.phase, h = u.holder, k = u.spec.k;
       if (k === 'inf') {
         const b = 1 + .008 * Math.sin(t * 2.2 + ph);
@@ -792,7 +833,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

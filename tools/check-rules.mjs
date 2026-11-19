@@ -53,6 +53,14 @@ t('移动：敌人挡路、友军可穿过但不能停', () => {
   assert(!move(g, 1, 4, 0).ok); assert(move(g, 1, 2, 0).ok); assert(!move(g, 1, 0, 0).ok);   // 已移动过
 });
 
+t('攻击结果带开打前血量 hp0；攻击后不能再撤销移动', () => {
+  const g = createGame({terrain: map(4, 1), units: [{type: 'inf', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 2, y: 0}]}), a = g.units[0], d = g.units[1];
+  assert.equal(move(g, a.id, 1, 0).ok, true);
+  const out = attack(g, a.id, d.id);
+  assert.equal(out.ok, true); assert.deepEqual(out.hp0, {a: 100, d: 100}); assert.ok(out.hit.damage > 0);
+  assert.equal(undoMove(g, a.id).ok, false);                                       // 打完不能撤
+});
+
 t('还能不能生产 canProduce：要有空的、本回合没造过的己方兵工厂，钱够最便宜的单位', () => {
   const mk = (funds, units = []) => { const g = createGame({terrain: [['factory', 'factory', 'plain']], owners: {'0,0': 0, '1,0': 1}, units}); g.funds = [...funds]; return g; };   // 开局会先结算一次收入，所以建完再直接写资金
   assert.equal(canProduce(mk([1000, 0])), true);                                   // 步兵 1000 刚好

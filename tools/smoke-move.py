@@ -61,7 +61,7 @@ with sync_playwright() as p:
     tap(dest[0], dest[1])
     pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=60000); pg.wait_for_timeout(300)
     assert pg.is_visible('#abar') and st()['acting'] == info['id'], ('撤销后重新走应再出浮条', st(), dest, scr(dest[0], dest[1]), rng())
-    pg.click('#abar .abtn'); pg.wait_for_timeout(300)
+    pg.click('#abar [data-act=wait]'); pg.wait_for_timeout(300)
     assert not pg.is_visible('#abar') and st()['acting'] is None
     assert pg.evaluate('([id])=>window.battle.game.units.find(o=>o.id===id).acted', [info['id']]) is True
     assert pg.evaluate('()=>window.battle.world.units.filter(u=>u.acted&&u.amark&&u.amark.visible).length') == 1, '待命后脚下应有灰环'
@@ -72,7 +72,7 @@ with sync_playwright() as p:
     if other:
         tap(other['x'], other['y']); assert st()['sel'] == other['id']
         tap(other['x'], other['y']); assert pg.is_visible('#abar'), '点自己脚下应出浮条'
-        pg.click('#abar .abtn'); pg.wait_for_timeout(200)
+        pg.click('#abar [data-act=wait]'); pg.wait_for_timeout(200)
         assert pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);return u.acted&&u.x===%d&&u.y===%d}' % (other['x'], other['y']), [other['id']])
     print('选中 / 移动 / 待命冒烟测试通过', 'errors:', errs)
     b.close()

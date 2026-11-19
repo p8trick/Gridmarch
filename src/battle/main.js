@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, attack as engineAttack, targetsOf} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -42,6 +42,7 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pQual" hidden>
+    <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
     <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
     <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
     <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
@@ -50,7 +51,7 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="abar" class="abar" hidden><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint">点空白处撤销</span></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
@@ -145,18 +146,56 @@ function startMove(ex, ey) {
   world.moveAlong(w, path.map(toWorld), () => { if (acting === u) { showBar(); mark(); } });
 }
 const bar = $('abar');
-function showBar() { bar.hidden = false; barPlace(); }
+function showBar() { bar.querySelector('[data-act=attack]').hidden = !targetsOf(game, acting).length; bar.classList.remove('pick'); bar.hidden = false; barPlace(); }
 function hideBar() { bar.hidden = true; }
 function barPlace() {   // 浮条贴在单位右边（单位在屏幕右侧 40% 时放左边），相机移动 / 旋转后跟着走
   if (bar.hidden || !acting) return;
+  if (targeting) { bar.style.left = Math.round(stage.w / 2 - (bar.offsetWidth || 160) / 2) + 'px'; bar.style.top = '66px'; return; }   // 选目标时提示条放在屏幕上方中间，别压住红格
   const w = world.unitById(acting.id); if (!w) return;
   const v = new THREE.Vector3(w.x, world.surfaceY(w.cell[0], w.cell[1]) + .9, w.z).project(cam.cam), sx = (v.x + 1) / 2 * stage.w, sy = (1 - v.y) / 2 * stage.h;
   const left = sx > stage.w * .6, bw = bar.offsetWidth || 90;
   bar.style.left = Math.round(left ? sx - 34 - bw : sx + 34) + 'px'; bar.style.top = Math.round(Math.max(30, Math.min(stage.h - 30, sy))) + 'px';
 }
-function clearAct() { acting = null; hideBar(); }
+function clearAct() { exitTargeting(); acting = null; hideBar(); }
+let targeting = null;   // 选目标阶段：Map('x,y' → 敌方引擎单位)
+function enterTargeting() {
+  const list = targetsOf(game, acting); if (!list.length) return;
+  targeting = new Map(list.map(e => [e.x + ',' + e.y, e]));
+  world.showTargets(list.map(e => toWorld([e.x, e.y]))); bar.classList.add('pick'); barPlace();
+}
+function exitTargeting() { if (!targeting) return; targeting = null; world.clearRange(); bar.classList.remove('pick'); barPlace(); }
+function unitScreen(w) {
+  const v = new THREE.Vector3(w.x, world.surfaceY(w.cell[0], w.cell[1]) + 1.1, w.z).project(cam.cam);
+  return [(v.x + 1) / 2 * stage.w, (1 - v.y) / 2 * stage.h];
+}
+function popup(id, text) {   // 单位头顶飘一个伤害数字（出现位置固定在被打那一刻的屏幕位置）
+  const w = world.unitById(id); if (!w) return;
+  const el = document.createElement('div'); el.className = 'dmg'; el.textContent = text; const [x, y] = unitScreen(w);
+  el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; host.appendChild(el); setTimeout(() => el.remove(), 1300);
+}
+function showWinner() {   // 胜负已分（先用换回合横幅的样式提示一下；结算界面以后再做）
+  const w = game.winner; if (w === null) return;
+  const b = $('banner'); $('bDay').textContent = w < 0 ? '同归于尽' : '胜利'; $('bTeam').textContent = w < 0 ? '双方全灭' : OWN[w] + '获胜';
+  $('bDot').className = 'dot ' + (w === 1 ? 'r' : 'b'); b.className = 'banner ' + (w === 1 ? 'r' : 'b'); b.hidden = false; void b.offsetWidth; b.classList.add('play');
+  clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
+}
+function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按顺序演：攻击方开火 → 伤害数字 / 目标倒下 → 目标反击 → 伤害数字 / 攻击方倒下
+  const att = acting, aid = att.id, tid = tgt.id, r = engineAttack(game, aid, tid);
+  if (!r.ok) { exitTargeting(); return; }
+  exitTargeting(); hideBar();
+  const anim = combatOn, tdead = tgt.hp <= 0, adead = att.hp <= 0, fmt = d => '-' + Math.round(d) / 10;
+  const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
+  const counter = () => {
+    if (!r.counter) return fin();
+    const go = () => { popup(aid, fmt(r.counter.damage)); if (adead) world.removeUnit(aid, anim); fin(); };
+    anim ? world.playAttack(tid, aid, go) : go();
+  };
+  const first = () => { popup(tid, fmt(r.hit.damage)); if (tdead) world.removeUnit(tid, anim); counter(); };
+  anim ? world.playAttack(aid, tid, first) : first();
+}
 bar.addEventListener('click', e => {
   const b = e.target.closest('.abtn'); if (!b || !acting) return;
+  if (b.dataset.act === 'attack') { enterTargeting(); return; }
   if (b.dataset.act === 'wait') { engineWait(game, acting.id); clearAct(); syncActed(); hud(); infoUpdate(); mark(); }
 });
 function undoMove() {   // 撤销：单位退回原格，回到「选中」状态（蓝格重新出现，可以重新选落点）
@@ -172,7 +211,11 @@ function nearBar(px, py) {   // 浮条周围留一圈 36px 的缓冲：想点「
 }
 function handleTap(px, py) {
   if (world.busy()) return;
-  if (acting) { if (!nearBar(px, py)) undoMove(); return; }
+  if (acting) {
+    if (targeting) { const c = selectAt(px, py), t = c && targeting.get(toEngine(c).join(',')); if (t) doAttack(t); else { exitTargeting(); infoUpdate(); mark(); } return; }
+    if (!nearBar(px, py)) undoMove();
+    return;
+  }
   const c = selectAt(px, py);
   if (c) {
     const [ex, ey] = toEngine(c), eu = unitAt(game, ex, ey);
@@ -266,7 +309,7 @@ function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
-$('hudL').onclick = () => { if ($('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
+$('hudL').onclick = () => { if (!world.busy() && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
@@ -294,6 +337,11 @@ function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算�
   else if (now - fpsPrev > 1000) { fpsStale = true; fpsSum = 0; fpsN = 0; }
   if (fpsOn) fpsRender();
 }
+// 作战动画（0.70）：开 = 攻击时单位转向目标、播放模型自带的开火动画、被打掉的单位缩小消失；关 = 全部跳过，只飘伤害数字（存 localStorage gridmarch.combatAnim）
+const CANIM_KEY = 'gridmarch.combatAnim';
+let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
+function canimRender() { $('pCombatSt').textContent = combatOn ? '开' : '关'; $('pCombatSt').classList.toggle('on', combatOn); }
+canimRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
@@ -305,6 +353,7 @@ pause.addEventListener('click', e => {
   if (a === 'resume') pause.hidden = true;
   else if (a === 'quality') setPage(true);
   else if (a === 'back') setPage(false);
+  else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
@@ -378,7 +427,7 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

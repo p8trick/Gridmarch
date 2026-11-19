@@ -139,14 +139,14 @@ export function attack(g, id, targetId) {
   const a = getUnit(g, id), d = getUnit(g, targetId);
   if (!a || !d || a.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
   if (!targetsOf(g, a).includes(d)) return {ok: false, err: '打不到'};
-  const out = {ok: true, hit: null, counter: null};
+  const out = {ok: true, hit: null, counter: null, hp0: {a: a.hp, d: d.hp}};   // hp0：开打前双方血量（战场飘伤害数字用）
   const spend = (u, s) => { if (s.weapon === 'primary' && g.config.ammo) u.ammo--; };
   const s1 = strike(g, a, d); spend(a, s1); d.hp = Math.max(0, d.hp - s1.damage); out.hit = s1;
   if (d.hp > 0 && !UNITS[d.type].indirect && dist(a, d) === 1) {          // 活着的直瞄单位反击（间接火力不反击）
     const s2 = strike(g, d, a);
     if (s2) { spend(d, s2); a.hp = Math.max(0, a.hp - s2.damage); out.counter = s2; }
   }
-  a.moved = a.acted = true;
+  a.moved = a.acted = true; delete a.origin;
   g.units = g.units.filter(u => u.hp > 0);
   checkWinner(g); return out;
 }

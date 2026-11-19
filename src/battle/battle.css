@@ -245,3 +245,10 @@
 #battle .abtn:active::after{opacity:1}
 #battle.ars-open .abar,#battle.det-open .abar{visibility:hidden}
 #battle .ahint{align-self:center;padding:4px 9px;border-radius:7px;background:rgba(9,24,46,.62);font-size:11px;line-height:1;letter-spacing:.08em;color:rgba(255,255,255,.88);pointer-events:none;white-space:nowrap}
+/* 0.70 攻击：选目标时浮条只剩提示；伤害数字上飘 */
+#battle .abtn[hidden]{display:none}
+#battle .abar .ahint.t{display:none}
+#battle .abar.pick .abtn,#battle .abar.pick .ahint.u{display:none}
+#battle .abar.pick .ahint.t{display:block}
+#battle .dmg{position:absolute;z-index:6;transform:translate(-50%,-50%);pointer-events:none;font:900 26px/1 var(--font);color:#ffd45a;letter-spacing:.02em;-webkit-text-stroke:3px #5a1608;paint-order:stroke fill;text-shadow:0 3px 0 rgba(90,22,8,.7);animation:dmgrise 1.2s ease-out forwards}
+@keyframes dmgrise{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-60%) scale(1.15)}30%{transform:translate(-50%,-70%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
