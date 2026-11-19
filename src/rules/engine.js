@@ -1,7 +1,7 @@
 // 规则引擎骨架（0.33）：地图 + 单位 + 回合。纯数据、纯函数，不依赖画面，方便自动测试和以后接 AI。
 // 目前包含：移动（按地形消耗）、攻击与反击、回合切换、沼泽掉血、歼灭胜负。
 // 还没有：占领、生产、合流、补给燃料、修理、运输（后续里程碑）。
-import {UNITS, TERRAINS, CONFIG, DEFAULT_STYLE} from './data.js';
+import {UNIT_IDS, UNITS, TERRAINS, CONFIG, DEFAULT_STYLE} from './data.js';
 import {strike, dispHp} from './combat.js';
 
 const key = (x, y) => x + ',' + y;
@@ -45,6 +45,18 @@ export function incomeOf(g, player) {
   return Math.floor(sum * g.config.incomeMul);
 }
 function collectIncome(g) { g.funds[g.turn] += incomeOf(g, g.turn); g.built = new Set(); }
+
+// 这一方现在还能不能生产（0.69）：有一座自己的、本回合没造过、上面没单位的兵工厂，并且钱够造最便宜的可生产单位。
+// 战场用它判断「是不是真的无事可做」：单位全行动完但还能造兵 = 只脉冲提醒，不弹结束回合确认。
+export function canProduce(g, player = g.turn) {
+  const costs = UNIT_IDS.filter(id => UNITS[id].buildable !== false && UNITS[id].cost !== null).map(id => UNITS[id].cost);
+  if (!costs.length || g.funds[player] < Math.min(...costs)) return false;
+  return Object.keys(g.owners).some(k => {
+    if (g.owners[k] !== player || g.built.has(k)) return false;
+    const [x, y] = k.split(',').map(Number);
+    return TERRAINS[g.terrain[y]?.[x]] === TERRAINS.factory && !unitAt(g, x, y);
+  });
+}
 
 export function produce(g, x, y, type) {
   const t = UNITS[type], tr = TERRAINS[g.terrain[y]?.[x]];

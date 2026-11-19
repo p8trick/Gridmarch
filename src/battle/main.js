@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -132,7 +132,7 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
 }
 // ── 单位操作（0.67，高战式）：点自己没动过的单位 → 蓝格（引擎算的移动范围）→ 点蓝格直接走 → 单位旁出小浮条「待命」→ 已行动。点自己脚下 = 原地不动（直接出浮条）；点别处 = 取消选中。
 //    攻击下一版接（浮条里再加「攻击」）。走完之后点浮条以外的地方（浮条周围 36px 不算）= 撤销这次移动（0.68），镜头还能拖。
-let sel = null, reach = null, acting = null, lastPul = 0;
+let sel = null, reach = null, acting = null, lastPul = 0, wasBusy = false;
 const clearSel = () => { sel = null; reach = null; world.deselect(); };
 function pickUnit(eu) {
   sel = eu; reach = engineReach(game, eu);
@@ -219,7 +219,7 @@ function infoPlace() {   // 相机移动 / 旋转后光圈在屏幕上的位置�
 const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
-let hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, bannerT = 0;
+let hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, hudStuck = false, bannerT = 0;
 // 视距提示（0.56）：缩放时右上「旋转」按钮临时变成当前视距（格数），随缩放实时变化；停手 2 秒后淡出，变回旋转图标（双指还按着就继续等）
 const rotSpan = $('bRot').firstElementChild;
 function showZoom() {
@@ -235,8 +235,14 @@ function hideZoom() {
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
   const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
   if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
-  const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.length > 0 && mine.every(u => u.acted);   // 本方单位全部行动完 = 可以结束回合了
-  if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); if (ready && $('endm').hidden && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); }   // 刚好行动完的这一刻自动弹出结束确认；取消后状态条继续脉冲提醒
+  // 0.69：两档提醒。① 本方单位全部行动完 = 状态条脉冲（可以结束回合了，但可能还想造兵）；② 脉冲的同时再也没有有效操作了（没有能造兵的兵工厂：都造过了 / 被单位占着 / 钱不够最便宜的单位）= 才自动弹出结束确认。
+  const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game);
+  if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); }
+  if (!stuck) hudStuck = false;
+  else if (!hudStuck) {   // 刚刚变成「无事可做」的这一刻：弹出确认；兵工厂 / 详细面板 / 暂停菜单开着就先等着（它们关上时会再检查一次）；确认已经开着就不重复弹
+    if (!$('endm').hidden) hudStuck = true;
+    else if ($('pause').hidden && !ars.isOpen && !detail.isOpen) { hudStuck = true; openEnd(); }
+  }
   infoPlace();
   if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
@@ -251,7 +257,7 @@ function openEnd() {
 const closeEnd = () => { $('endm').hidden = true; };
 function doEndTurn() {
   if (!engineEndTurn(game).ok) return;
-  hudReady = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
+  hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
   syncActed(); hud(); infoUpdate(); mark(); playBanner();
 }
 function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑入、金色大字「第 N 天」缩放落下、扫光一闪、停一下再向右滑出；期间挡住触摸
@@ -355,6 +361,7 @@ function loop(now) {
   let cursorOnly = false;
   if (cursor.update(now / 1000) && now - lastCur > 30) { cursorOnly = !dirty; dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
   if (world.pulseRange(now / 1000) && now - lastPul > 30) { cursorOnly = cursorOnly || !dirty; dirty = true; lastPul = now; }   // 蓝格呼吸：有蓝格时约 30 帧/秒（同光圈，不计入帧率）
+  { const busy = ars.isOpen || detail.isOpen || !$('pause').hidden; if (wasBusy && !busy) hud(); wasBusy = busy; }   // 兵工厂 / 详细面板 / 暂停菜单刚关上：补查一次「是不是无事可做」
   if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
   if (detail.needsFrame()) dirty = true;   // 详细面板的展示窗：刚打开 / 拖动后画几帧，静止时不出帧
   if (dirty) {
@@ -371,7 +378,7 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

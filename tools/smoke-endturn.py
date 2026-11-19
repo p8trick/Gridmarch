@@ -1,5 +1,5 @@
 # 结束回合冒烟测试（同 smoke-arsenal.py：不在 npm test 里，需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# 点左上状态条 → 弹确认 → 点外面取消 → 再点 → 确认结束 → 换成红军、金币到账、横幅出现 → 本方单位全部行动完时自动弹确认并脉冲 → 再结束 → 第 2 天回到蓝军。出错直接 assert。
+# 点左上状态条 → 弹确认 → 点外面取消 → 再点 → 确认结束 → 换成红军、金币到账、横幅出现 → 本方单位全部行动完：兵工厂还能造兵时只脉冲不弹确认，没有有效操作了（钱不够 / 兵工厂都造过 / 被占）才自动弹确认 → 再结束 → 第 2 天回到蓝军。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
@@ -18,8 +18,10 @@ with sync_playwright() as p:
     assert pg.evaluate('()=>window.__bn'), '换回合横幅没出现'
     pg.wait_for_timeout(1500)
     pg.evaluate('()=>{const g=window.battle.game;g.units.filter(u=>u.owner===g.turn).forEach(u=>u.acted=true)}')
-    pg.mouse.click(700,320); pg.wait_for_timeout(400)
-    s = st(); assert s['endOpen'] and s['ready'], ('单位行动完没有自动弹确认 / 脉冲', s)
+    pg.evaluate('()=>window.battle.hud()'); pg.wait_for_timeout(400)
+    s = st(); assert s['ready'] and not s['endOpen'], ('单位全行动完、兵工厂还能造兵：只该脉冲，不弹确认（0.69）', s)
+    pg.evaluate('()=>{const g=window.battle.game;g.funds[g.turn]=0;window.battle.hud()}'); pg.wait_for_timeout(400)
+    s = st(); assert s['endOpen'] and s['ready'], ('单位全行动完 + 钱不够造任何单位：应自动弹确认', s)
     pg.click('.endp .sbtn.gold'); pg.wait_for_timeout(800)
     s = st(); assert s['turn'] == 0 and s['day'] == 2 and not s['ready'], ('第二次结束回合后状态不对', s)
     print('结束回合冒烟测试通过', s, 'errors:', errs)

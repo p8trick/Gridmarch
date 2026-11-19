@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, pathOf, undoMove, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, reachable, pathOf, undoMove, canProduce, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -51,6 +51,17 @@ t('移动：敌人挡路、友军可穿过但不能停', () => {
   const r = reachable(g, g.units[0]);
   assert(r.has('2,0') && !r.has('1,0') && !r.has('3,0') && !r.has('4,0'));
   assert(!move(g, 1, 4, 0).ok); assert(move(g, 1, 2, 0).ok); assert(!move(g, 1, 0, 0).ok);   // 已移动过
+});
+
+t('还能不能生产 canProduce：要有空的、本回合没造过的己方兵工厂，钱够最便宜的单位', () => {
+  const mk = (funds, units = []) => { const g = createGame({terrain: [['factory', 'factory', 'plain']], owners: {'0,0': 0, '1,0': 1}, units}); g.funds = [...funds]; return g; };   // 开局会先结算一次收入，所以建完再直接写资金
+  assert.equal(canProduce(mk([1000, 0])), true);                                   // 步兵 1000 刚好
+  assert.equal(canProduce(mk([999, 0])), false);                                   // 钱不够任何单位
+  assert.equal(canProduce(mk([5000, 5000]), 1), true);                             // 各算各的兵工厂
+  const g = mk([5000, 0]); assert.equal(produce(g, 0, 0, 'inf').ok, true);
+  assert.equal(canProduce(g), false);                                              // 唯一的兵工厂本回合造过了
+  assert.equal(canProduce(mk([5000, 0], [{type: 'inf', owner: 0, x: 0, y: 0}])), false);   // 兵工厂上站着单位
+  assert.equal(canProduce(mk([0, 5000]), 0), false);                               // 对方有钱有厂不算
 });
 
 t('撤销移动：走了没待命可撤（位置 / 燃料 / 已移动一起还原）；待命后、没走过、不是自己回合都不行', () => {
