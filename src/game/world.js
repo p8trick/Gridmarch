@@ -199,7 +199,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
   function sunFollow(x, z) { const sx = Math.round(x), sz = Math.round(z); sun.target.position.set(sx, 0, sz); sun.position.set(sx + SUN_OFF[0], SUN_OFF[1], sz + SUN_OFF[2]); sun.target.updateMatrixWorld(); }
 
-  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, viewQuarter: 0, bldFollow: true, sandbox: true};
+  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, viewQuarter: 0, bldFollow: true, sandbox: true};
 
   const water = createWaterWorld(mapPreset, {cutaway: true}); scene.add(water.group);   // 海 / 浅滩 / 断崖 / 河（外缘切面随"沙盘边缘"开关）
   // 桥：A 型河桥（河格上）/ B 型跨海桥（两端桥头在海岸格里，中间在海格上）。桥是叠在水域上的附加模型，桥格对陆军可通行
@@ -387,7 +387,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const makeUnit = (spec, idx) => {   // 0.55：从 map 回调拆成函数，生产时也能在运行时加单位（api.addUnit）
     const actors = spec.k === 'inf' ? [createInfantryActor(spec.team, spec.type)].map(a => { a.phase = (idx * .31) % 1; return a; }) : null;
     const model = actors ? actors[0].root : createUnitModel(spec, idx);
-    const msz = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    const lbox = new THREE.Box3().setFromObject(model), msz = lbox.getSize(new THREE.Vector3());   // 0.74：lbox 留着给血量角标按模型实际轮廓定位
     const holder = new THREE.Group(); holder.add(model); holder.rotation.y = spec.face; holder.name = spec.name;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     unitsGroup.add(holder);
@@ -395,7 +395,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     ring.rotation.x = -Math.PI / 2; rings.add(ring);
     const label = BADGE[spec.k === 'tank' || spec.type === 'at' ? spec.type : spec.k];
     const badge = makeBadge(label, spec.team); if (badge) { badge.visible = false; scene.add(badge); }
-    return {spec, holder, model, ring, badge, actors, msz, fw: 1, fl: 1, tbadge: null, phase: idx * 1.7, baseY: 0, baseScale: 1, cell: [...spec.c], yaw: spec.face, path: null, dist: 0, curY: 0, topOff: 1.5, x: spec.c[0] * 2, z: spec.c[1] * 2, tris: triCount(model)};
+    return {spec, holder, model, ring, badge, actors, msz, lbox, fw: 1, fl: 1, tbadge: null, phase: idx * 1.7, baseY: 0, baseScale: 1, cell: [...spec.c], yaw: spec.face, path: null, dist: 0, curY: 0, topOff: 1.5, x: spec.c[0] * 2, z: spec.c[1] * 2, tris: triCount(model)};
   };
   const units = UNITS.map(makeUnit);
 
@@ -512,7 +512,9 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     u.tbadge.visible = true; u.tbadge.position.set(u.x + rx * .95 + cx * .35, y + .3, u.z + rz * .95 + cz * .35);
   }
   // 0.73 血量角标（高战式）：显示血量 < 10 的单位右下角挂一块数字牌（1–9），满血不显示；颜色三档（7–9 白 / 4–6 黄 / 1–3 红），底牌深蓝、描边同色，所以在任何地形上都醒目。
-  // 做成场景里的精灵（和地形角标同一套摆法）：跟着单位走、随缩放变大变小、随镜头旋转。引擎血量 → setHp(id, 显示血量)
+  // 做成场景里的精灵：跟着单位走、随缩放变大变小、随镜头旋转。引擎血量 → setHp(id, 显示血量)
+  // 0.74：① 数字按字形实际包围盒在底牌里居中（以前用 textBaseline=middle 再手动下移 7px，数字偏下、"1" 偏左）；
+  //       ② 位置不再是固定偏移，而是贴着【模型实际轮廓】的右下角（屏幕意义上的右下），再夹在本格内：模型窄（步兵）就贴着身体，模型把格子塞满就适度压在模型上，不会跑到邻格
   const hpTex = {};
   function hpSprite(n) {
     if (typeof document === 'undefined') return null;
@@ -520,17 +522,35 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       const col = n >= 7 ? '#ffffff' : n >= 4 ? '#ffd45a' : '#ff6a5a';
       const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d');
       x.fillStyle = 'rgba(8,20,42,.93)'; x.strokeStyle = col; x.lineWidth = 7; x.beginPath(); x.roundRect(6, 6, 84, 84, 20); x.fill(); x.stroke();
-      x.fillStyle = col; x.font = '900 68px -apple-system,PingFang SC,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 48, 55);
+      x.fillStyle = col; x.font = '900 68px -apple-system,PingFang SC,sans-serif'; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+      const s = String(n), m = x.measureText(s);
+      if (m.actualBoundingBoxAscent !== undefined) x.fillText(s, 48 - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, 48 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+      else { x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(s, 48, 52); }
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; hpTex[n] = t;
     }
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(.62, .62, 1); sp.renderOrder = 21; return sp;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(HP_SIZE, HP_SIZE, 1); sp.renderOrder = 21; return sp;
+  }
+  const HP_SIZE = .62, HP_HALF = .30, HP_PAD = .03, HP_TUCK = .5;   // 牌边长 / 牌半宽（含描边）/ 离格线余量 / 左边压进模型的比例（×半宽）
+  function hpPlace(u, y) {
+    const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);   // 屏幕右 / 朝向相机（地面方向）
+    const e = state.pitchDeg * Math.PI / 180, ce = Math.cos(e), se = Math.sin(e), k = u.baseScale, ya = u.yaw, cy = Math.cos(ya), sy = Math.sin(ya), bx = u.lbox;
+    let pr = 0, pv = 0, best = -1e9;   // 包围盒 8 个角里屏幕上「最右下」的那一个（相对单位脚下那一点；屏幕纵向 v = 高度·cos俯角 − 朝相机距离·sin俯角）。取真正的角而不是外接矩形，模型斜着停时角标才不会飘在空处
+    for (let i = 0; i < 8; i++) {
+      const lx = (i & 1 ? bx.max.x : bx.min.x) * k, ly = (i & 2 ? bx.max.y : bx.min.y) * k, lz = (i & 4 ? bx.max.z : bx.min.z) * k;
+      const dx = lx * cy + lz * sy, dz = -lx * sy + lz * cy, r = dx * rx + dz * rz, v = ly * ce - (dx * cx + dz * cz) * se;
+      if (r - v > best) { best = r - v; pr = r; pv = v; }
+    }
+    let cr = pr + HP_HALF * HP_TUCK, cv = pv + HP_HALF;   // 角标左下贴着模型右下角
+    const gx = u.path ? u.x : u.cell[0] * 2, gz = u.path ? u.z : u.cell[1] * 2, ox = u.x - gx, oz = u.z - gz;   // 本格中心（走动中跟着单位自己）
+    cr = Math.min(cr, 1 - (ox * rx + oz * rz) - HP_HALF - HP_PAD);                 // 右边不越过本格右线
+    cv = Math.max(cv, ((ox * cx + oz * cz) - 1) * se + HP_HALF + HP_PAD);           // 下边不越过本格前线
+    return [u.x + rx * cr, y + cv / ce, u.z + rz * cr];
   }
   function syncHpBadge(u, y) {
     const n = u.hpN | 0;
     if (!n || n >= 10 || !state.units || u.dying) { if (u.hpBadge) u.hpBadge.visible = false; return; }
     if (!u.hpBadge || u.hpBadge.userData.n !== n) { if (u.hpBadge) scene.remove(u.hpBadge); u.hpBadge = hpSprite(n); if (!u.hpBadge) return; u.hpBadge.userData.n = n; scene.add(u.hpBadge); }
-    const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);
-    u.hpBadge.visible = true; u.hpBadge.position.set(u.x + rx * .95 + cx * .35, y + .3, u.z + rz * .95 + cz * .35);
+    u.hpBadge.visible = true; u.hpBadge.position.set(...hpPlace(u, y));
   }
   function setHp(id, n) { const u = units.find(o => o.spec.id === id && !o.dying); if (!u || u.hpN === n) return; u.hpN = n; syncUnit(u); }
   // 0.66：「已行动」标记 = 脚下一圈深灰环（0.65 的头顶「休」牌你不喜欢，已去掉）。引擎 acted → setActed(id, on)

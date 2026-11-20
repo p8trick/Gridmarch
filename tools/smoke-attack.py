@@ -50,6 +50,8 @@ def run(pg, anim, kill):
         dmg = hp0 - hp(sc['d']); assert fcs and fcs[0] == '-' + format(dmg / 10, 'g'), ('预估应和实际伤害一致', fcs, dmg)
         hb = pg.evaluate('([id])=>{const u=window.battle.world.unitById(id);return u&&u.hpBadge?[u.hpBadge.visible,u.hpBadge.userData.n]:null}', [sc['d']])
         assert hb and hb[0] and hb[1] == -(-hp(sc['d']) // 10), ('目标掉血后右下角应有血量角标', hb, hp(sc['d']))
+        inb = pg.evaluate('([id])=>{const w=window.battle.world,u=w.unitById(id),h=u.hpBadge,a=w.state.camA,dr=(h.position.x-u.cell[0]*2)*Math.cos(a)-(h.position.z-u.cell[1]*2)*Math.sin(a);return dr+.3<=1.001}', [sc['d']])
+        assert inb, '0.74：血量角标右边不应越过本格'
     print('攻击冒烟通过', {'动画': anim, '击杀': kill, 'd血量': hp(sc['d'])})
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
