@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -186,6 +186,43 @@ t('生产限制：钱不够、中立 / 对方兵工厂、非兵工厂、防空�
 t('价格表：11 个单位都有造价（防空导弹以外都可生产）', () => {
   for (const id of UNIT_IDS) assert(UNITS[id].cost > 0, id);
   assert.deepEqual(UNIT_IDS.filter(i => UNITS[i].buildable === false), ['missile']);
+});
+
+const hqMap = () => { const m = map(8, 1); m[0][0] = 'hq'; m[0][1] = 'city_small'; m[0][2] = 'city_large'; m[0][7] = 'hq'; return m; };
+
+t('占领：血量格数累加，满 20 点易主；第 1 回合 10 血步兵占小城市 → 2 次占下', () => {
+  const g = createGame({terrain: hqMap(), owners: {'0,0': 0, '7,0': 1}, units: [{type: 'inf', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 6, y: 0}]});
+  assert(canCapture(g, unitAt(g, 1, 0)));
+  const r = capture(g, 1); assert(r.ok && !r.done); assert.equal(r.gain, 10); assert.equal(r.cap, 10); assert.equal(r.need, 20); assert.equal(g.owners['1,0'], undefined);
+  assert.equal(capture(g, 1).err, '不能占领');   // 本回合已行动
+  endTurn(g); endTurn(g);
+  const r2 = capture(g, 1); assert(r2.done); assert.equal(g.owners['1,0'], 0); assert.equal(unitAt(g, 1, 0).cap, 0);
+  assert.equal(incomeOf(g, 0), 1000 + 700);
+});
+
+t('占领：残血只累加显示格数（血 41 → 5 点）；走开进度清零；撤销移动进度还原', () => {
+  const g = createGame({terrain: hqMap(), units: [{type: 'inf', owner: 0, x: 2, y: 0, hp: 41}, {type: 'inf', owner: 1, x: 6, y: 0}]});
+  assert.equal(capture(g, 1).cap, 5); endTurn(g); endTurn(g);
+  assert.equal(unitAt(g, 2, 0).cap, 5);
+  move(g, 1, 3, 0); assert.equal(unitAt(g, 3, 0).cap, 0);
+  undoMove(g, 1); assert.equal(unitAt(g, 2, 0).cap, 5);
+  move(g, 1, 2, 0); assert.equal(unitAt(g, 2, 0).cap, 5);   // 原地「移动」不清零
+});
+
+t('占领：只有步兵类能占；己方建筑 / 平地 / 对方回合不能占；占敌方城市易主', () => {
+  const g = createGame({terrain: hqMap(), owners: {'1,0': 1, '2,0': 0}, units: [{type: 'tank', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 0, x: 2, y: 0}, {type: 'inf', owner: 0, x: 3, y: 0}, {type: 'mech', owner: 1, x: 4, y: 0}]});
+  assert(!canCapture(g, unitAt(g, 1, 0)));   // 坦克
+  assert(!canCapture(g, unitAt(g, 2, 0)));   // 自己的建筑
+  assert(!canCapture(g, unitAt(g, 3, 0)));   // 平地
+  assert(!canCapture(g, unitAt(g, 4, 0)));   // 对方回合
+  const g2 = createGame({terrain: hqMap(), owners: {'1,0': 1}, units: [{type: 'inf', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 7, y: 0}]});
+  capture(g2, 1); endTurn(g2); endTurn(g2); assert(capture(g2, 1).done); assert.equal(g2.owners['1,0'], 0);
+});
+
+t('占领总部 = 获胜（hqWin），关掉后只易主', () => {
+  const mk = cfg => createGame({terrain: hqMap(), owners: {'0,0': 0, '7,0': 1}, config: cfg, units: [{type: 'inf', owner: 0, x: 7, y: 0}, {type: 'inf', owner: 1, x: 5, y: 0}]});
+  const g = mk(); capture(g, 1); endTurn(g); endTurn(g); assert(capture(g, 1).done); assert.equal(g.winner, 0);
+  const g2 = mk({hqWin: false}); capture(g2, 1); endTurn(g2); endTurn(g2); capture(g2, 1); assert.equal(g2.winner, null); assert.equal(g2.owners['7,0'], 0);
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);

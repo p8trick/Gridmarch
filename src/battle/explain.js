@@ -48,7 +48,7 @@ export function unitTip(key, {type, eu, cfg}) {
   const u = UNITS[type];
   if (key.startsWith('cat:')) { const c = key.slice(4), l = namesOf(x => UNIT_CAT[Object.keys(UNITS).find(k => UNITS[k] === x)] === c); return {t: CAT[c][0] + '大类', d: l ? '包括：' + l + '。这件武器对这一类有明显威力。' : '目前还没有这类单位。'}; }
   switch (key) {
-    case 'hp': return {t: '血量', d: '显示 1–10 格。血量越低，打出的伤害越低；防御星的减伤也随血量变弱。'};
+    case 'hp': return {t: '血量', d: (eu ? `当前 ${eu.hp}/100 点，战力按「向上取整」的 ${Math.ceil(eu.hp / 10)} 格算（战场角标和公式里都用格数）。` : '血量是 0–100 点。') + '格数越少，打出的伤害越低，防御星的减伤和占领速度也越低；每一格 10 点，血条上的刻度就是格线。'};
     case 'status': return {t: eu && eu.acted ? '已行动' : '可行动', d: '每回合每个单位行动一次（攻击或待命）。行动过就显示“已行动”，下回合恢复。'};
     case 'move': return {t: '机动', d: `一回合最多走 ${u.move} 点。每格花几点看地形和移动类型，见右边地形盒的消耗表。`};
     case 'vision': return {t: '视野', d: `能看到 ${u.vision} 格远。目前战场没有战争迷雾，这个数值暂时不影响游戏。`};
@@ -77,7 +77,7 @@ export function terrainTip(key, {tid, owner, cfg}) {
   switch (key) {
     case 'stars': return {t: '防御星 ' + T.stars + ' 颗', d: T.stars ? '守方受到的伤害按“星数 × 守方血量格数”% 减少：满血时每颗星约 −10%，血量越低效果越弱。' : '这里没有防御加成，站在上面的单位挨打不会减伤。'};
     case 'income': return {t: '收入', d: `占有者每回合可从这座建筑得到 ${T.income} 资金。`};
-    case 'capture': return {t: '占领点数', d: `占领这座建筑要把点数打到 0（共 ${T.capture} 点）。占领功能还在制作中。`};
+    case 'capture': return {t: '占领点数', d: `步兵、反坦克兵站在不属于自己的建筑上选「占领」，每次累加自己的血量格数（满血 +10）；累计到 ${T.capture} 点建筑易主。占领中走开，进度清零。`};
     case 'owner': return {t: '归属', d: owner === undefined ? '中立的建筑，谁都可以去占。' : '这座建筑已被一方占有，对方要占领才能夺走。'};
     case 'hazard': return {t: '泥潭', d: `回合结束时，站在这里的陆军掉 ${(cfg.swampDamage || 0) / 10} 格血${cfg.swampKills ? '，血量归零就会阵亡' : ''}。`};
   }

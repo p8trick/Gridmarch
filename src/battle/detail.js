@@ -33,7 +33,7 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
     return `<div class="dt-box ${eu.owner === 0 ? 'army-b' : 'army-r'}" data-box="unit">
       <div class="dt-head"><span class="dt-ico">${GLYPH[eu.type]}</span><b class="dt-name">${d.name}</b><span class="dt-chips"><em class="dt-chip ${eu.acted ? '' : 'go'}" data-k="status">${eu.acted ? '已行动' : '可行动'}</em><em class="dt-chip army">${OWN[eu.owner]}</em></span></div>
       <div class="dt-mid"><div class="dt-view" data-w="unit"></div><div class="dt-col">
-        <div class="dt-hp" data-k="hp"><span>血量</span><span class="dt-bar"><i style="width:${hp * 10}%;background:${col}"></i></span><b>${hp}/10</b></div>
+        <div class="dt-hp" data-k="hp"><span>血量</span><span class="dt-bar"><i style="width:${eu.hp}%;background:${col}"></i></span><b>${eu.hp}/100</b></div>
         <div class="dt-grid">${kv('机动', 'move', d.move)}${kv('视野', 'vision', d.vision)}${kv('射程', 'range', rg)}${kv('移动', 'mt', MT_NAME[d.mt])}${kv('燃料', 'fuel', d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel)}${kv('弹药', 'ammo', d.ammo ? eu.ammo + '/' + d.ammo : '—')}</div>
       </div></div>
       <div class="dt-wps">${weaponHtml(eu.type, d.ammo ? eu.ammo : undefined)}</div>
@@ -48,7 +48,7 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
     const mine = eu ? UNITS[eu.type].mt : null;
     const cost = MTS.map(m => { const c = T.cost[m]; return `<div class="dt-c ${m === mine ? 'me' : ''}" data-k="cost:${m}"><span>${MT_NAME[m]}</span><b class="${c === null ? 'no' : ''}">${c === null ? '✕' : c}</b></div>`; }).join('');
     const extra = [];
-    if (T.property) { extra.push(kv('收入', 'income', T.income + '/回合')); extra.push(kv('占领点数', 'capture', T.capture)); }
+    if (T.property) { extra.push(kv('收入', 'income', T.income + '/回合')); extra.push(kv(eu && eu.cap > 0 ? '占领进度' : '占领点数', 'capture', eu && eu.cap > 0 ? eu.cap + '/' + T.capture : T.capture)); }
     return `<div class="dt-box ${army}" data-box="terrain">
       <div class="dt-head"><b class="dt-name">${T.name}</b><span class="dt-chips">${chip}</span></div>
       <div class="dt-mid"><div class="dt-view" data-w="terrain"></div><div class="dt-col">

@@ -432,7 +432,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function refreshBuildings() {
     for (const b of buildings) {
       const ou = units.find(u => !u.path && u.cell[0] === b.cell[0] && u.cell[1] === b.cell[1]), occ = !!ou;
-      setBuildingAccent(b.visual, accentOf(b.owner));
+      setBuildingAccent(b.visual, b.capMat || accentOf(b.owner));   // 0.77：占领中的建筑用渐变色的专属材质
       if (b.visual.userData.transport) {
         if (b.type === 'bld_airport') b.visual.rotation.y = bTheta(b);
         else setDockyardState(b.visual.userData.dock ? b.visual : b.visual.children[0], {landOccupied: occ});
@@ -484,6 +484,59 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
   }
   function cycleOwner(cell) { const b = bldMap.get(cell[0] + ',' + cell[1]); if (!b) return null; const real = buildings.find(x => x.cell[0] === b.cell[0] && x.cell[1] === b.cell[1]); real.owner = OWNER_NEXT[real.owner]; refreshBuildings(); return real; }
+  // ── 0.77 占领表现 ──────────────────────────────────────────────
+  // 占领中的建筑 = 脚下一圈进度环（占领方颜色，弧长 = 已占点数 / 总点数）+ 灯带颜色按进度从原归属渐变向占领方。
+  // 占领完成 = 灯带闪白后换成新主人的颜色 + 一圈冲击波向外扩散。进度环 / 渐变一直留到单位走开或被打死（setCaptureMarks 按引擎状态同步）。
+  const capRings = new Map(), capFx = [], CAP_R0 = .78, CAP_R1 = 1.0, _cc = new THREE.Color(), _cw = new THREE.Color(0xffffff);
+  const capB = cell => { const k = bldMap.get(cell[0] + ',' + cell[1]); return k && buildings.find(x => x.cell[0] === k.cell[0] && x.cell[1] === k.cell[1]); };
+  const capArcGeo = f => new THREE.RingGeometry(CAP_R0, CAP_R1, 72, 1, Math.PI / 2, Math.max(.03, Math.PI * 2 * Math.min(1, f))).rotateX(-Math.PI / 2);
+  const capMatOf = team => new THREE.MeshBasicMaterial({color: ACCENT_COL[team], transparent: true, opacity: .95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4});
+  function capRing(b, team, f) {
+    let r = capRings.get(b);
+    if (!r) { r = {mesh: new THREE.Mesh(capArcGeo(f), capMatOf(team)), f}; r.mesh.name = 'capRing'; r.mesh.renderOrder = 8; r.mesh.position.set(b.cell[0] * 2, groundY(b.cell[0], b.cell[1]) + .12, b.cell[1] * 2); scene.add(r.mesh); capRings.set(b, r); }
+    r.mesh.material.color.setHex(ACCENT_COL[team]); return r;
+  }
+  function capSet(r, f) { r.f = f; r.mesh.geometry.dispose(); r.mesh.geometry = capArcGeo(f); }
+  function capTint(b, from, to, f) {
+    if (!b.capMat) b.capMat = accentOf('neutral').clone();
+    b.capMat.color.setHex(ACCENT_COL[from]).lerp(_cc.setHex(ACCENT_COL[to]), f); setBuildingAccent(b.visual, b.capMat);
+  }
+  function capClear(b) { const r = capRings.get(b); if (r) { scene.remove(r.mesh); r.mesh.geometry.dispose(); capRings.delete(b); } b.capMat = null; setBuildingAccent(b.visual, accentOf(b.owner)); }
+  function setBuildingOwner(cell, owner) { const b = capB(cell); if (!b) return false; b.owner = owner; if (!capFx.some(e => e.b === b)) capClear(b); refreshBuildings(); return true; }
+  function setCaptureMarks(list) {   // list：[{cell, f（0–1 进度）, team（占领方）, from（原归属）}]，没在 list 里的建筑一律恢复本色
+    const keep = new Set();
+    for (const m of list) { const b = capB(m.cell); if (!b || capFx.some(e => e.b === b)) continue; keep.add(b); capSet(capRing(b, m.team, m.f), m.f); capTint(b, m.from, m.team, m.f); }
+    for (const b of [...capRings.keys()]) if (!keep.has(b) && !capFx.some(e => e.b === b)) capClear(b);
+    for (const b of buildings) if (b.capMat && !keep.has(b) && !capFx.some(e => e.b === b)) capClear(b);
+  }
+  function playCapture(cell, o, onDone) {   // o = {team, from, f0, f1, done}
+    const b = capB(cell); if (!b) { if (onDone) onDone(); return; }
+    capSet(capRing(b, o.team, o.f0), o.f0); capTint(b, o.from, o.team, o.f0);
+    capFx.push({b, o, t: 0, onDone, shock: null});
+  }
+  const CAP_T1 = .75, CAP_T2 = .7;   // 进度环走满用时 / 占领完成后的闪光 + 冲击波用时
+  function updateCaptureFx(dt) {
+    const fin = [];
+    for (const e of capFx) {
+      e.t += dt; const {b, o} = e, r = capRings.get(b), k1 = Math.min(1, e.t / CAP_T1), f = o.f0 + (o.f1 - o.f0) * (1 - Math.pow(1 - k1, 3));
+      if (r) capSet(r, f); capTint(b, o.from, o.team, f);
+      if (!o.done) { if (e.t >= CAP_T1 + .2) fin.push(e); continue; }
+      if (e.t < CAP_T1) continue;
+      if (!e.shock) { e.shock = new THREE.Mesh(new THREE.RingGeometry(.9, 1.02, 72).rotateX(-Math.PI / 2), capMatOf(o.team)); e.shock.renderOrder = 8; e.shock.position.set(b.cell[0] * 2, groundY(b.cell[0], b.cell[1]) + .1, b.cell[1] * 2); scene.add(e.shock); b.owner = o.team; }
+      const k2 = Math.min(1, (e.t - CAP_T1) / CAP_T2);
+      b.capMat.color.copy(_cw).lerp(_cc.setHex(ACCENT_COL[o.team]), Math.min(1, k2 * 1.6));   // 灯带：白 → 新主人色
+      e.shock.scale.setScalar(1 + 1.4 * (1 - Math.pow(1 - k2, 2))); e.shock.material.opacity = (1 - k2) * .9;
+      if (r) r.mesh.material.opacity = (1 - k2) * .95;
+      if (k2 >= 1) fin.push(e);
+    }
+    for (const e of fin) {
+      capFx.splice(capFx.indexOf(e), 1);
+      if (e.shock) { scene.remove(e.shock); e.shock.geometry.dispose(); e.shock.material.dispose(); }
+      if (e.o.done) capClear(e.b); refreshBuildings();
+      if (e.onDone) e.onDone();
+    }
+    return capFx.length > 0;
+  }
   function syncUnit(u) {
     const y = u.path ? u.curY : groundY(u.cell[0], u.cell[1], u);
     u.holder.position.set(u.x, y, u.z); u.holder.rotation.y = u.yaw;
@@ -653,7 +706,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function deselect() { state.selected = null; clearHighlights(); selRing.visible = false; }
   // 0.67：移动范围 / 走位由引擎说了算（rules/engine 的 reachable / pathOf），这里只管画蓝格和播放走位动画
   const unitById = id => units.find(o => o.spec.id === id && !o.dying) || null;
-  const busy = () => units.some(o => o.path || o.atk || o.dying);
+  const busy = () => capFx.length > 0 || units.some(o => o.path || o.atk || o.dying);
   // 一片格子 = 逐格填充 + 范围外轮廓（只在「邻格不在范围里」的那一侧画一条细亮边）；skip = 起点格：不填充，但算范围内（它周围不描边，脚下有选中圈）
   function buildTiles(cells, mat, edgeMat, skip) {
     const set = new Set(cells.map(c => c[0] + ',' + c[1]));
@@ -776,6 +829,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       for (const u of done) { if (u.actors) for (const a of u.actors) a.setMode(state.infPose); u.aimLock = false; const cb = u.atk.onDone; u.atk = null; cb(); }
       for (const u of gone) disposeUnit(u);
     }
+    if (capFx.length && updateCaptureFx(dt)) moving = true;
     { const k = 1 - Math.exp(-12 * dt);
       for (const b of buildings) {
         let ch = false;
@@ -907,7 +961,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

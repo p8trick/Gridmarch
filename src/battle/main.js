@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, attack as engineAttack, targetsOf, forecast} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -53,7 +53,7 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="abar" class="abar" hidden><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="capture" hidden><span>占领</span></button><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
@@ -91,7 +91,10 @@ const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell
 const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
 // 生产（0.55）：兵工厂界面点「生产」→ 引擎 produce（扣钱、标记本回合已造、单位本回合不能动）→ 战场里在这座兵工厂上摆出新单位
 // 0.65：引擎里每个单位的 acted → 战场单位头顶「休」标记（生产、换回合后同步；以后移动 / 待命也走这里）
-const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted); world.setHp(u.id, dispHp(u.hp)); } };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
+const TEAM = ['blue', 'red'];
+// 0.77：占领进度同步到战场（建筑脚下的进度环 + 灯带渐变）：引擎里 cap > 0 的单位 = 正在占领；单位走开 / 被打死 / 占完后进度归零，这里会自动把建筑恢复本色
+const syncCaps = () => world.setCaptureMarks(game.units.filter(u => u.cap > 0).map(u => { const o = game.owners[u.x + ',' + u.y]; return {cell: toWorld([u.x, u.y]), f: u.cap / RULE_TERRAINS[game.terrain[u.y][u.x]].capture, team: TEAM[u.owner], from: o === undefined ? 'neutral' : TEAM[o]}; }));
+const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted); world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
   if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); syncActed(); hud(); infoUpdate(); mark(); }
@@ -119,7 +122,7 @@ function describe(c) {
   const t = b ? b.name : sets.bridge.has(k) ? '桥' : sets.mountain.has(k) ? '山地' : sets.desert.has(k) ? '沙漠' : sets.swamp.has(k) ? '沼泽' : sets.forest.has(k) ? '树林' : WATER[w] || (sets.road.has(k) ? '公路' : '平原');
   const OWN = ['蓝方', '红方'], bo = game.owners[toEngine(c).join(',')], eu = unitAt(game, ...toEngine(c));
   let txt = `(${c[0]}, ${c[1]}) ${t}` + (b && RULE_TERRAINS[game.terrain[toEngine(c)[1]][toEngine(c)[0]]].property ? ` · ${bo === undefined ? '中立' : OWN[bo]}` : '');
-  if (eu) { const d = RULE_UNITS[eu.type]; txt += `\n${OWN[eu.owner]}${d.name} · 血量 ${dispHp(eu.hp)}/10 · 弹药 ${d.ammo ? eu.ammo + '/' + d.ammo : '—'}`; }
+  if (eu) { const d = RULE_UNITS[eu.type]; txt += `\n${OWN[eu.owner]}${d.name} · 血量 ${eu.hp}/100 · 弹药 ${d.ammo ? eu.ammo + '/' + d.ammo : '—'}`; }
   return txt;
 }
 const cursor = createCursor(THREE); world.scene.add(cursor.group);   // 格子光圈（见 cursor.js）
@@ -144,11 +147,11 @@ function pickUnit(eu) {
 function startMove(ex, ey) {
   const u = sel, path = pathOf(game, u, ex, ey), w = world.unitById(u.id);
   if (!path || !engineMove(game, u.id, ex, ey).ok) { clearSel(); return; }
-  clearSel(); acting = u; hideBar();
+  clearSel(); acting = u; hideBar(); syncCaps();   // 离开正在占领的建筑 = 进度清零，建筑恢复本色
   world.moveAlong(w, path.map(toWorld), () => { if (acting === u) { showBar(); mark(); } });
 }
 const bar = $('abar');
-function showBar() { bar.querySelector('[data-act=attack]').hidden = !targetsOf(game, acting).length; bar.classList.remove('pick'); bar.hidden = false; barPlace(); }
+function showBar() { bar.querySelector('[data-act=capture]').hidden = !canCapture(game, acting); bar.querySelector('[data-act=attack]').hidden = !targetsOf(game, acting).length; bar.classList.remove('pick'); bar.hidden = false; barPlace(); }
 function hideBar() { bar.hidden = true; }
 function barPlace() {   // 浮条贴在单位右边（单位在屏幕右侧 40% 时放左边），相机移动 / 旋转后跟着走
   if (bar.hidden || !acting) return;
@@ -187,9 +190,9 @@ function showForecast(list) {
 function fcPlace() {
   for (const f of fcEls) { const w = world.unitById(f.id); if (!w) continue; const [x, y] = unitScreen(w, 1.75); f.el.style.left = Math.round(x) + 'px'; f.el.style.top = Math.round(y) + 'px'; }
 }
-function popup(id, text) {   // 单位头顶飘一个伤害数字（出现位置固定在被打那一刻的屏幕位置）
+function popup(id, text, cls = '') {   // 单位头顶飘一个伤害数字（出现位置固定在被打那一刻的屏幕位置）；cls：占领用 'cap b' / 'cap r'
   const w = world.unitById(id); if (!w) return;
-  const el = document.createElement('div'); el.className = 'dmg'; el.textContent = text; const [x, y] = unitScreen(w);
+  const el = document.createElement('div'); el.className = 'dmg ' + cls; el.textContent = text; const [x, y] = unitScreen(w);
   el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; host.appendChild(el); setTimeout(() => el.remove(), 1300);
 }
 function showWinner() {   // 胜负已分（先用换回合横幅的样式提示一下；结算界面以后再做）
@@ -212,8 +215,20 @@ function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按�
   const first = () => { popup(tid, fmt(r.hit.damage)); syncActed(); if (tdead) world.removeUnit(tid, anim); counter(); };
   anim ? world.playAttack(aid, tid, first) : first();
 }
+// 0.77 占领：规则立刻结算（engineCapture），画面演：进度环从旧进度走到新进度、灯带颜色渐变 + 头顶飘「占领 x/20」；占满 = 灯带闪白换色 + 冲击波 + 「占领成功！」。占领总部 = 获胜（见 CONFIG.hqWin）
+function doCapture() {
+  const u = acting, id = u.id, cell = toWorld([u.x, u.y]), prev = game.owners[u.x + ',' + u.y], r = engineCapture(game, id);
+  if (!r.ok) return;
+  hideBar();
+  const team = TEAM[u.owner], from = prev === undefined ? 'neutral' : TEAM[prev];
+  const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
+  popup(id, r.done ? '占领成功！' : '占领 ' + r.cap + '/' + r.need, 'cap ' + (u.owner === 0 ? 'b' : 'r'));
+  if (combatOn) world.playCapture(cell, {team, from, f0: (r.cap - r.gain) / r.need, f1: r.done ? 1 : r.cap / r.need, done: r.done}, fin);
+  else { if (r.done) world.setBuildingOwner(cell, team); fin(); }
+}
 bar.addEventListener('click', e => {
   const b = e.target.closest('.abtn'); if (!b || !acting) return;
+  if (b.dataset.act === 'capture') { doCapture(); return; }
   if (b.dataset.act === 'attack') { enterTargeting(); return; }
   if (b.dataset.act === 'wait') { engineWait(game, acting.id); clearAct(); syncActed(); hud(); infoUpdate(); mark(); }
 });
@@ -263,11 +278,11 @@ function infoUpdate() {
   if (eu) {
     const d = RULE_UNITS[eu.type], hp = dispHp(eu.hp);
     $('uCard').innerHTML = `<h3><i class="dot ${eu.owner === 0 ? 'b' : 'r'}"></i>${d.name}</h3>` +
-      `<div class="drow"><span>血量</span><span class="hpbar"><i style="width:${hp * 10}%;background:${hp >= 7 ? '#6ee06e' : hp >= 4 ? '#ffd45a' : '#ff6b5e'}"></i></span><b>${hp}/10</b></div>` +
+      `<div class="drow"><span>血量</span><span class="hpbar"><i style="width:${eu.hp}%;background:${hp >= 7 ? '#6ee06e' : hp >= 4 ? '#ffd45a' : '#ff6b5e'}"></i></span><b>${eu.hp}/100</b></div>` +
       `<div class="drow"><span>燃料</span><b>${d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel}</b></div>` +
       `<div class="drow"><span>弹药</span><b>${d.ammo ? eu.ammo + '/' + d.ammo : '—'}</b></div>`;
   }
-  $('tCard').innerHTML = `<h3>${T.name}</h3><div class="drow"><span>防御</span><b class="stars">${T.stars ? '★'.repeat(T.stars) : '—'}</b></div>` + (T.property ? `<div class="drow"><span>归属</span><b>${o === undefined ? '中立' : OWN[o]}</b></div>` : '');
+  $('tCard').innerHTML = `<h3>${T.name}</h3><div class="drow"><span>防御</span><b class="stars">${T.stars ? '★'.repeat(T.stars) : '—'}</b></div>` + (T.property ? `<div class="drow"><span>归属</span><b>${o === undefined ? '中立' : OWN[o]}</b></div>` + (eu && eu.cap > 0 ? `<div class="drow"><span>占领</span><b>${eu.cap}/${T.capture}</b></div>` : '') : '');
   dp.hidden = false; infoPlace();
 }
 function infoPlace() {   // 相机移动 / 旋转后光圈在屏幕上的位置会变，面板跟着换边

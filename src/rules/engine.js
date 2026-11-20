@@ -1,6 +1,6 @@
 // 规则引擎骨架（0.33）：地图 + 单位 + 回合。纯数据、纯函数，不依赖画面，方便自动测试和以后接 AI。
 // 目前包含：移动（按地形消耗）、攻击与反击、回合切换、沼泽掉血、歼灭胜负。
-// 还没有：占领、生产、合流、补给燃料、修理、运输（后续里程碑）。
+// 0.77 加了占领（capture）。还没有：合流、补给燃料、修理、运输（后续里程碑）。
 import {UNIT_IDS, UNITS, TERRAINS, CONFIG, DEFAULT_STYLE} from './data.js';
 import {strike, dispHp} from './combat.js';
 
@@ -123,8 +123,9 @@ export function move(g, id, x, y) {
   if (u.moved || u.acted) return {ok: false, err: '这个单位本回合已行动'};
   const r = reachable(g, u), c = r.get(key(x, y));
   if (c === undefined) return {ok: false, err: '到不了'};
-  u.origin = {x: u.x, y: u.y, fuel: u.fuel};   // 0.68：走完、选「待命」之前可以撤销
+  u.origin = {x: u.x, y: u.y, fuel: u.fuel, cap: u.cap || 0};   // 0.68：走完、选「待命」之前可以撤销（0.77：占领进度一起还原）
   if (g.config.fuel) u.fuel -= c;
+  if (x !== u.x || y !== u.y) u.cap = 0;   // 0.77：离开这一格 = 占领进度清零
   u.x = x; u.y = y; u.moved = true; return {ok: true, cost: c};
 }
 
@@ -133,7 +134,7 @@ export function undoMove(g, id) {
   const u = getUnit(g, id);
   if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
   if (!u.moved || u.acted || !u.origin) return {ok: false, err: '现在不能撤销'};
-  u.x = u.origin.x; u.y = u.origin.y; u.fuel = u.origin.fuel; u.moved = false; delete u.origin; return {ok: true};
+  u.x = u.origin.x; u.y = u.origin.y; u.fuel = u.origin.fuel; u.cap = u.origin.cap; u.moved = false; delete u.origin; return {ok: true};
 }
 
 // 能打到的敌人（间接火力：移动过就不能开火；最近射程之内打不到）
@@ -157,6 +158,26 @@ export function attack(g, id, targetId) {
   a.moved = a.acted = true; delete a.origin;
   g.units = g.units.filter(u => u.hp > 0);
   checkWinner(g); return out;
+}
+
+// ── 占领（0.77，高战规则）──
+// 步兵 / 反坦克兵站在不属于自己的建筑上选「占领」：每次累加「显示血量格数」（1–10）的占领点，累计到建筑的占领点数（20）就易主；
+// 站着不动、下回合继续占才会接着累加；走开（或被打死）进度清零；占领完毕进度也清零。占领这个动作 = 本回合行动结束。
+// 占领对方总部 = 直接获胜（CONFIG.hqWin）。
+export function canCapture(g, u) {
+  const tr = TERRAINS[g.terrain[u.y]?.[u.x]];
+  return !!(UNITS[u.type].capture && tr?.property && g.owners[key(u.x, u.y)] !== u.owner && u.owner === g.turn && !u.acted && g.winner === null);
+}
+export function capture(g, id) {
+  const u = getUnit(g, id); if (!u || !canCapture(g, u)) return {ok: false, err: '不能占领'};
+  const k = key(u.x, u.y), tr = TERRAINS[g.terrain[u.y][u.x]], prev = g.owners[k], gain = dispHp(u.hp);
+  u.cap = (u.cap || 0) + gain; u.moved = u.acted = true; delete u.origin;
+  const out = {ok: true, key: k, terrain: g.terrain[u.y][u.x], prev, gain, cap: u.cap, need: tr.capture, done: false};
+  if (u.cap >= tr.capture) {
+    g.owners[k] = u.owner; u.cap = 0; out.done = true; out.cap = tr.capture;
+    if (g.config.hqWin && g.terrain[u.y][u.x] === 'hq') g.winner = u.owner;
+  }
+  return out;
 }
 
 export function wait(g, id) {
