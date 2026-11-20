@@ -46,6 +46,14 @@ export function incomeOf(g, player) {
 }
 function collectIncome(g) { g.funds[g.turn] += incomeOf(g, g.turn); g.built = new Set(); }
 
+// 开打前的伤害预估（0.73）：在复制出来的单位上把真正的 attack 跑一遍，所以和实际结算一定一致，而且不改动 g。伤害是血量点数（0–100），counter = 反击伤害（0 = 不反击）
+export function forecast(g, id, targetId) {
+  const g2 = {...g, units: g.units.map(u => ({...u}))};
+  const out = attack(g2, id, targetId); if (!out.ok) return null;
+  const counter = out.counter ? out.counter.damage : 0;
+  return {damage: out.hit.damage, counter, kill: out.hp0.d - out.hit.damage <= 0, counterKill: out.hp0.a - counter <= 0};
+}
+
 // 这一方现在还能不能生产（0.69）：有一座自己的、本回合没造过、上面没单位的兵工厂，并且钱够造最便宜的可生产单位。
 // 战场用它判断「是不是真的无事可做」：单位全行动完但还能造兵 = 只脉冲提醒，不弹结束回合确认。
 export function canProduce(g, player = g.turn) {

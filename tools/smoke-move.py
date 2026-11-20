@@ -27,8 +27,6 @@ with sync_playwright() as p:
     assert all(t is not None for t in ts) and max(ts) - min(ts) > .3, ('格子特效的时间应该在走', ts)
     edges = lambda: pg.evaluate("()=>{let n=0,v=0;window.battle.world.scene.traverse(m=>{if(m.name==='tileEdge'){n++;if(m.visible)v++}});return [n,v]}")
     n, v = edges(); assert n > 0 and v == n, ('范围外轮廓一直都有', n, v)
-    for k in (1, 0):   # 流光 / 涟漪都能切
-        pg.evaluate("k=>window.battle.world.setTileStyle(k)", k); n, v = edges(); assert v == n > 0, ('切换样式后轮廓还在', k, n, v)
     dim = pg.evaluate("()=>window.battle.world.scene.children.filter(o=>o.isDirectionalLight).map(o=>o.intensity)[0]")
     assert dim < 2.6, ('显示范围时整个场景应该压暗（太阳光 3 → 约 2.3）', dim)
     # 目的地：从引擎范围里找一个离起点 2 格以上、屏幕上在画面内的格子

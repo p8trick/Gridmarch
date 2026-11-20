@@ -252,3 +252,10 @@
 #battle .abar.pick .ahint.t{display:block}
 #battle .dmg{position:absolute;z-index:6;transform:translate(-50%,-50%);pointer-events:none;font:900 26px/1 var(--font);color:#ffd45a;letter-spacing:.02em;-webkit-text-stroke:3px #5a1608;paint-order:stroke fill;text-shadow:0 3px 0 rgba(90,22,8,.7);animation:dmgrise 1.2s ease-out forwards}
 @keyframes dmgrise{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-60%) scale(1.15)}30%{transform:translate(-50%,-70%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
+/* 0.73 伤害预估：红格上方的小牌（大字 = 预计伤害 / 击破，小字 = 反击） */
+#battle .fc{position:absolute;z-index:6;transform:translate(-50%,-100%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 10px 4px;border-radius:9px;background:rgba(8,20,42,.9);box-shadow:inset 0 0 0 2px #ffd45a,0 3px 0 rgba(2,10,22,.55);white-space:nowrap}
+#battle .fc b{font:900 22px/1 var(--font);color:#ffd45a;letter-spacing:.02em}
+#battle .fc i{font:700 11px/1.1 var(--font);font-style:normal;color:#ffb0a6}
+#battle .fc i.die{color:#ff6a5a}
+#battle .fc.kill{box-shadow:inset 0 0 0 2px #ff6a5a,0 3px 0 rgba(2,10,22,.55)}
+#battle .fc.kill b{color:#ff6a5a}

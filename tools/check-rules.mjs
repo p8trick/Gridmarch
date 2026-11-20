@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, reachable, pathOf, undoMove, canProduce, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -51,6 +51,18 @@ t('移动：敌人挡路、友军可穿过但不能停', () => {
   const r = reachable(g, g.units[0]);
   assert(r.has('2,0') && !r.has('1,0') && !r.has('3,0') && !r.has('4,0'));
   assert(!move(g, 1, 4, 0).ok); assert(move(g, 1, 2, 0).ok); assert(!move(g, 1, 0, 0).ok);   // 已移动过
+});
+
+t('伤害预估 forecast：和真正的攻击结算一致，而且不改动对局', () => {
+  const mk = () => createGame({terrain: map(4, 1), units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 1, y: 0}]});
+  const g = mk(), a = g.units[0], d = g.units[1], snap = JSON.stringify(g), f = forecast(g, a.id, d.id);
+  assert.equal(JSON.stringify(g), snap);                                           // 预估不改任何东西
+  const g2 = mk(), out = attack(g2, g2.units[0].id, g2.units[1].id);
+  assert.equal(f.damage, out.hit.damage); assert.equal(f.counter, out.counter ? out.counter.damage : 0);
+  assert.equal(f.kill, g2.units.length === 1);                                     // 打死了目标就只剩攻击方
+  const g3 = createGame({terrain: map(5, 1), units: [{type: 'arty', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 2, y: 0}]});
+  const f3 = forecast(g3, g3.units[0].id, g3.units[1].id); assert.ok(f3.damage > 0); assert.equal(f3.counter, 0);   // 间接火力不挨反击
+  assert.equal(forecast(g3, g3.units[1].id, g3.units[0].id), null);                // 不是自己回合 / 打不到 = null
 });
 
 t('攻击结果带开打前血量 hp0；攻击后不能再撤销移动', () => {

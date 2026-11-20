@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, attack as engineAttack, targetsOf} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, attack as engineAttack, targetsOf, forecast} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -42,7 +42,6 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pQual" hidden>
-    <li><button class="item" data-act="tilefx"><span class="txt"><span class="main">格子特效</span><span class="pst" id="pTileSt">流光</span></span></button></li>
     <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
     <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
     <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
@@ -90,7 +89,7 @@ const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell
 const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
 // 生产（0.55）：兵工厂界面点「生产」→ 引擎 produce（扣钱、标记本回合已造、单位本回合不能动）→ 战场里在这座兵工厂上摆出新单位
 // 0.65：引擎里每个单位的 acted → 战场单位头顶「休」标记（生产、换回合后同步；以后移动 / 待命也走这里）
-const syncActed = () => { for (const u of game.units) world.setActed(u.id, u.acted); };
+const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted); world.setHp(u.id, dispHp(u.hp)); } };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
   if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); syncActed(); hud(); infoUpdate(); mark(); }
@@ -162,12 +161,29 @@ let targeting = null;   // 选目标阶段：Map('x,y' → 敌方引擎单位)
 function enterTargeting() {
   const list = targetsOf(game, acting); if (!list.length) return;
   targeting = new Map(list.map(e => [e.x + ',' + e.y, e]));
-  world.showTargets(list.map(e => toWorld([e.x, e.y])), world.unitById(acting.id)); bar.classList.add('pick'); barPlace();
+  world.showTargets(list.map(e => toWorld([e.x, e.y])), world.unitById(acting.id)); bar.classList.add('pick'); barPlace(); showForecast(list);
 }
-function exitTargeting() { if (!targeting) return; targeting = null; world.clearRange(); bar.classList.remove('pick'); barPlace(); }
-function unitScreen(w) {
-  const v = new THREE.Vector3(w.x, world.surfaceY(w.cell[0], w.cell[1]) + 1.1, w.z).project(cam.cam);
+function exitTargeting() { if (!targeting) return; clearForecast(); targeting = null; world.clearRange(); bar.classList.remove('pick'); barPlace(); }
+function unitScreen(w, up = 1.1) {
+  const v = new THREE.Vector3(w.x, world.surfaceY(w.cell[0], w.cell[1]) + up, w.z).project(cam.cam);
   return [(v.x + 1) / 2 * stage.w, (1 - v.y) / 2 * stage.h];
+}
+const fmtHp = d => String(Math.round(d) / 10);   // 伤害点数（0–100）→ 显示血量（0.1 为单位）
+// 伤害预估（0.73）：触屏上「点一下目标 → 出预估 → 再点确认」太拖沓，所以进入选目标时，每个红格上方直接标出预估：大字 = 预计伤害（会打死就显示「击破」），小字 = 对方反击伤害；点哪个就直接打
+let fcEls = [];
+function clearForecast() { for (const f of fcEls) f.el.remove(); fcEls = []; }
+function showForecast(list) {
+  clearForecast();
+  for (const t of list) {
+    const f = forecast(game, acting.id, t.id); if (!f) continue;
+    const el = document.createElement('div'); el.className = 'fc' + (f.kill ? ' kill' : '');
+    el.innerHTML = '<b>' + (f.kill ? '击破' : '-' + fmtHp(f.damage)) + '</b>' + (f.counter > 0 ? '<i' + (f.counterKill ? ' class="die"' : '') + '>反击 -' + fmtHp(f.counter) + (f.counterKill ? ' · 会被反杀' : '') + '</i>' : '');
+    host.appendChild(el); fcEls.push({el, id: t.id});
+  }
+  fcPlace();
+}
+function fcPlace() {
+  for (const f of fcEls) { const w = world.unitById(f.id); if (!w) continue; const [x, y] = unitScreen(w, 1.75); f.el.style.left = Math.round(x) + 'px'; f.el.style.top = Math.round(y) + 'px'; }
 }
 function popup(id, text) {   // 单位头顶飘一个伤害数字（出现位置固定在被打那一刻的屏幕位置）
   const w = world.unitById(id); if (!w) return;
@@ -184,14 +200,14 @@ function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按�
   const att = acting, aid = att.id, tid = tgt.id, r = engineAttack(game, aid, tid);
   if (!r.ok) { exitTargeting(); return; }
   exitTargeting(); hideBar();
-  const anim = combatOn, tdead = tgt.hp <= 0, adead = att.hp <= 0, fmt = d => '-' + Math.round(d) / 10;
+  const anim = combatOn, tdead = tgt.hp <= 0, adead = att.hp <= 0, fmt = d => '-' + fmtHp(d);
   const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
   const counter = () => {
     if (!r.counter) return fin();
-    const go = () => { popup(aid, fmt(r.counter.damage)); if (adead) world.removeUnit(aid, anim); fin(); };
+    const go = () => { popup(aid, fmt(r.counter.damage)); syncActed(); if (adead) world.removeUnit(aid, anim); fin(); };
     anim ? world.playAttack(tid, aid, go) : go();
   };
-  const first = () => { popup(tid, fmt(r.hit.damage)); if (tdead) world.removeUnit(tid, anim); counter(); };
+  const first = () => { popup(tid, fmt(r.hit.damage)); syncActed(); if (tdead) world.removeUnit(tid, anim); counter(); };
   anim ? world.playAttack(aid, tid, first) : first();
 }
 bar.addEventListener('click', e => {
@@ -341,13 +357,8 @@ function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算�
 // 作战动画（0.70）：开 = 攻击时单位转向目标、播放模型自带的开火动画、被打掉的单位缩小消失；关 = 全部跳过，只飘伤害数字（存 localStorage gridmarch.combatAnim）
 const CANIM_KEY = 'gridmarch.combatAnim';
 let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
-// 格子特效（0.72）：蓝格 / 红格的动态样式，只剩两种在测——流光 / 涟漪，点一下换另一种（存 localStorage gridmarch.tileFx2，默认流光）
-const TILEFX_KEY = 'gridmarch.tileFx2', TILEFX = ['流光', '涟漪'];
-let tileFx = 0; try { tileFx = localStorage.getItem(TILEFX_KEY) === '1' ? 1 : 0; } catch (e) {}
-world.setTileStyle(tileFx);
-function tilefxRender() { $('pTileSt').textContent = TILEFX[tileFx]; $('pTileSt').classList.add('on'); }
 function canimRender() { $('pCombatSt').textContent = combatOn ? '开' : '关'; $('pCombatSt').classList.toggle('on', combatOn); }
-canimRender(); tilefxRender();
+canimRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
@@ -359,7 +370,6 @@ pause.addEventListener('click', e => {
   if (a === 'resume') pause.hidden = true;
   else if (a === 'quality') setPage(true);
   else if (a === 'back') setPage(false);
-  else if (a === 'tilefx') { tileFx = 1 - tileFx; world.setTileStyle(tileFx); try { localStorage.setItem(TILEFX_KEY, String(tileFx)); } catch (e) {} tilefxRender(); mark(); }
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();
@@ -423,7 +433,7 @@ function loop(now) {
   if (dirty) {
     dirty = false; cam.place(); world.sunFollow(cam.target.x, cam.target.z); world.cull(cam.cam); world.beforeRender();
     renderer.render(world.scene, cam.cam); frames++;
-    barPlace();   // 0.68：浮条每次出帧都跟着单位走（拖镜头时 cam.update 不一定报变化）
+    barPlace(); if (fcEls.length) fcPlace();   // 0.68：浮条每次出帧都跟着单位走（拖镜头时 cam.update 不一定报变化）；0.73：伤害预估同理
     if (cursorOnly) fpsChain = false; else { if (fpsChain) { fpsSum += now - fpsPrev; fpsN++; } fpsPrev = now; fpsChain = true; }   // 0.66 帧率采样：连续两个 rAF 都出帧才算一个样本（再慢也算，不会漏掉卡顿）
     if (ars.isOpen) ars.renderPreview(dt);
     if (detail.isOpen) detail.renderPreview();   // 战场画完后，把详细面板的展示窗（同一个场景换近景相机）画进各自的矩形

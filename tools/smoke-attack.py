@@ -30,10 +30,13 @@ def run(pg, anim, kill):
     # 进选目标 → 红格 → 点空白处返回
     pg.click('#abar [data-act=attack]'); pg.wait_for_timeout(300)
     assert st()['targeting'] and reds() >= 1, ('应进入选目标并画出红格', st(), reds())
+    fcs = pg.evaluate('()=>[...document.querySelectorAll(".fc")].map(e=>e.innerText)'); assert len(fcs) >= 1, ('每个红格上方应有伤害预估', fcs)
     center(sc['ax'], sc['ay']); pg.mouse.click(120, 330); pg.wait_for_timeout(300)
+    assert pg.evaluate('()=>document.querySelectorAll(".fc").length') == 0, '退出选目标后预估牌应消失'
     assert not st()['targeting'] and pg.is_visible('#abar') and st()['acting'] == sc['a'] and reds() == 0, ('点空白应回到浮条（不撤销）', st(), reds())
     # 再来一次，点红格开打
     pg.click('#abar [data-act=attack]'); pg.wait_for_timeout(300)
+    fcs = pg.evaluate('()=>[...document.querySelectorAll(".fc b")].map(e=>e.innerText)')
     hp0 = hp(sc['d']); tap(sc['dx'], sc['dy'])
     pg.wait_for_function('()=>{const u=window.battle.world.units;return u.every(o=>!o.path&&!o.atk&&!o.dying)}', timeout=90000); pg.wait_for_timeout(500)
     assert st()['acting'] is None and not pg.is_visible('#abar'), ('打完应结束操作', st())
@@ -44,6 +47,9 @@ def run(pg, anim, kill):
         assert pg.evaluate('()=>window.battle.world.units.length') == nunits0 - 1, '战场里目标单位应被移除'
     else:
         assert hp(sc['d']) < hp0, ('目标应掉血', hp0, hp(sc['d']))
+        dmg = hp0 - hp(sc['d']); assert fcs and fcs[0] == '-' + format(dmg / 10, 'g'), ('预估应和实际伤害一致', fcs, dmg)
+        hb = pg.evaluate('([id])=>{const u=window.battle.world.unitById(id);return u&&u.hpBadge?[u.hpBadge.visible,u.hpBadge.userData.n]:null}', [sc['d']])
+        assert hb and hb[0] and hb[1] == -(-hp(sc['d']) // 10), ('目标掉血后右下角应有血量角标', hb, hp(sc['d']))
     print('攻击冒烟通过', {'动画': anim, '击杀': kill, 'd血量': hp(sc['d'])})
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])

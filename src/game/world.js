@@ -490,7 +490,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     u.ring.position.set(u.x, y + .05, u.z);
     if (u.badge) u.badge.position.set(u.x, y + u.topOff + .45, u.z);
     if (state.selected === u) selRing.position.set(u.x, y + .07, u.z);
-    syncTerrainBadge(u, y);
+    syncTerrainBadge(u, y); syncHpBadge(u, y);
     if (u.amark) u.amark.position.set(u.x, y + .06, u.z);
   }
   const TLABEL = {forest: '林', desert: '漠', swamp: '沼', mountain: '山', building: '城', shoal: '滩', cliff: '崖', river: '河', bridge: '桥'}, tbTex = {};
@@ -511,6 +511,28 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);
     u.tbadge.visible = true; u.tbadge.position.set(u.x + rx * .95 + cx * .35, y + .3, u.z + rz * .95 + cz * .35);
   }
+  // 0.73 血量角标（高战式）：显示血量 < 10 的单位右下角挂一块数字牌（1–9），满血不显示；颜色三档（7–9 白 / 4–6 黄 / 1–3 红），底牌深蓝、描边同色，所以在任何地形上都醒目。
+  // 做成场景里的精灵（和地形角标同一套摆法）：跟着单位走、随缩放变大变小、随镜头旋转。引擎血量 → setHp(id, 显示血量)
+  const hpTex = {};
+  function hpSprite(n) {
+    if (typeof document === 'undefined') return null;
+    if (!hpTex[n]) {
+      const col = n >= 7 ? '#ffffff' : n >= 4 ? '#ffd45a' : '#ff6a5a';
+      const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d');
+      x.fillStyle = 'rgba(8,20,42,.93)'; x.strokeStyle = col; x.lineWidth = 7; x.beginPath(); x.roundRect(6, 6, 84, 84, 20); x.fill(); x.stroke();
+      x.fillStyle = col; x.font = '900 68px -apple-system,PingFang SC,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 48, 55);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; hpTex[n] = t;
+    }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(.62, .62, 1); sp.renderOrder = 21; return sp;
+  }
+  function syncHpBadge(u, y) {
+    const n = u.hpN | 0;
+    if (!n || n >= 10 || !state.units || u.dying) { if (u.hpBadge) u.hpBadge.visible = false; return; }
+    if (!u.hpBadge || u.hpBadge.userData.n !== n) { if (u.hpBadge) scene.remove(u.hpBadge); u.hpBadge = hpSprite(n); if (!u.hpBadge) return; u.hpBadge.userData.n = n; scene.add(u.hpBadge); }
+    const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);
+    u.hpBadge.visible = true; u.hpBadge.position.set(u.x + rx * .95 + cx * .35, y + .3, u.z + rz * .95 + cz * .35);
+  }
+  function setHp(id, n) { const u = units.find(o => o.spec.id === id && !o.dying); if (!u || u.hpN === n) return; u.hpN = n; syncUnit(u); }
   // 0.66：「已行动」标记 = 脚下一圈深灰环（0.65 的头顶「休」牌你不喜欢，已去掉）。引擎 acted → setActed(id, on)
   const actedGeo = new THREE.RingGeometry(STAND_R - .12, STAND_R + .02, 48).rotateX(-Math.PI / 2);
   const actedMat = new THREE.MeshBasicMaterial({color: 0x26303c, transparent: true, opacity: .78, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2});
@@ -571,18 +593,16 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   const hl = new THREE.Group(); scene.add(hl);
   const hlGeo = new THREE.PlaneGeometry(1.84, 1.84).rotateX(-Math.PI / 2), hlGeoSmall = new THREE.PlaneGeometry(1.1, 1.1).rotateX(-Math.PI / 2);
-  // 0.72 格子特效（0.71 的 4 种砍成 2 种在测：流光 / 涟漪）。蓝格 / 红格 / 轮廓线共用一个着色器，时间、样式、起点是共享的 uniform（所有格子一起动，不用逐格更新）。
-  // 填充：饱和的蓝紫色（红格：红），不再只是淡淡一层；动态效果是白光：流光 = 斜向的白色亮带扫过整片范围，涟漪 = 以单位为圆心向外扩散的白色水波。
-  // 整片范围的外轮廓是白色粗边；每格内缘有一圈淡白。显示范围时整个场景压暗（见 pulseRange），范围格本身不受光照影响，所以和普通地块的对比更强。
+  // 0.73 格子特效：定稿「涟漪」（流光已删）。蓝格 / 红格 / 轮廓线共用一个着色器，时间、起点是共享的 uniform（所有格子一起动，不用逐格更新）。
+  // 填充：饱和的蓝紫色（红格：红）；动态效果是白光：以单位（红格：攻击方）为圆心向外扩散的白色水波；每格内缘一圈淡白。
+  // 整片范围的外轮廓是白色粗边。显示范围时整个场景压暗（见 pulseRange），范围格本身不受光照影响，所以和普通地块的对比更强。
   // 颜色按 sRGB 直接写进 uniform（ShaderMaterial 不做色彩空间转换，所见即所得）。
-  const tileU = {uTime: {value: 0}, uStyle: {value: 2}, uOrigin: {value: new THREE.Vector2()}};
+  const tileU = {uTime: {value: 0}, uOrigin: {value: new THREE.Vector2()}};
   const rgb = hex => new THREE.Vector3((hex >> 16 & 255) / 255, (hex >> 8 & 255) / 255, (hex & 255) / 255);
   const TILE_VS = 'varying vec3 vW; varying vec2 vUv; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
-  const TILE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform float uTime, uStyle, uAdd; uniform vec2 uOrigin; uniform vec3 uColor;
+  const TILE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform float uTime, uAdd; uniform vec2 uOrigin; uniform vec3 uColor;
     void main(){
-      float glow;
-      if (uStyle > 2.5) { float d = distance(vW.xz, uOrigin), w = .5 + .5 * sin(d * 2.6 - uTime * 3.4); glow = w * w * w; }
-      else { float f = fract((vW.x + vW.z) * .16 - uTime * .30); glow = smoothstep(0., .20, f) * (1. - smoothstep(.20, .46, f)); }
+      float d = distance(vW.xz, uOrigin), w = .5 + .5 * sin(d * 2.6 - uTime * 3.4), glow = w * w * w;
       vec2 e = min(vUv, 1. - vUv); float edge = 1. - smoothstep(0., .06, min(e.x, e.y));
       gl_FragColor = vec4(mix(uColor, vec3(1.), glow * .62 + edge * .18), .55 + uAdd + glow * .20 + edge * .10);
     }`;
@@ -621,7 +641,6 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       }
     }
   }
-  function setTileStyle(n) { n = n ? 1 : 0; tileU.uStyle.value = n + 2; return n; }   // 0 流光 / 1 涟漪
   function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）
     clearHighlights(); u.rangeCells = cells; tileU.uOrigin.value.set(u.x, u.z);
     buildTiles(cells, hlMat, edgeBlue, u.cell);
@@ -647,13 +666,13 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function disposeUnit(u) {
     if (state.selected === u) deselect();
     unitsGroup.remove(u.holder); rings.remove(u.ring);
-    for (const o of [u.badge, u.tbadge, u.amark]) if (o) scene.remove(o);
+    for (const o of [u.badge, u.tbadge, u.amark, u.hpBadge]) if (o) scene.remove(o);
     const i = units.indexOf(u); if (i >= 0) units.splice(i, 1);
     refreshBuildings();
   }
   function removeUnit(id, animate = true) {
     const u = unitById(id); if (!u) return;
-    if (animate) { u.dying = {t: 0}; u.path = null; } else disposeUnit(u);
+    if (animate) { u.dying = {t: 0}; u.path = null; if (u.hpBadge) u.hpBadge.visible = false; } else disposeUnit(u);
   }
   function placeAt(u, cell) {   // 0.68：撤销移动时把单位瞬间放回原格（不播走位动画）
     u.path = null; u.onArrive = null; u.cell = [...cell]; [u.x, u.z] = standPos(cell[0], cell[1]);
@@ -862,7 +881,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setTileStyle, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
