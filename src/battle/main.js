@@ -43,6 +43,8 @@ export async function mountBattle(host, stage, opts = {}) {
   </ul>
   <ul class="pmenu" id="pQual" hidden>
     <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
+    <li><button class="item" data-act="hptuck"><span class="txt"><span class="main">血量角标左移</span><span class="pst" id="pTuckSt">25%</span></span></button></li>
+    <li class="pnote">角标左边压进模型的量（占角标宽度）：0% = 角标整块在模型右下角外面，数值越大越贴向模型。点一下换下一档</li>
     <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
     <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
     <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
@@ -304,7 +306,7 @@ function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 
     else if ($('pause').hidden && !ars.isOpen && !detail.isOpen) { hudStuck = true; openEnd(); }
   }
   infoPlace();
-  if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
+  if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; world.setHpView({k: Math.max(1, cam.cells / 9)}); }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
 // 结束回合（0.58）：点左上状态条 → 状态条下方弹出确认；点「结束回合」才真正结束：引擎 endTurn（换人 / 天数 / 单位恢复 / 收入 / 兵工厂可再生产）→ 中央大横幅「第 N 天」
@@ -359,6 +361,11 @@ const CANIM_KEY = 'gridmarch.combatAnim';
 let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
 function canimRender() { $('pCombatSt').textContent = combatOn ? '开' : '关'; $('pCombatSt').classList.toggle('on', combatOn); }
 canimRender();
+// 血量角标左移（0.75）：0 / 25 / 50 / 75 / 100% 轮换，存 localStorage gridmarch.hpTuck；视距超过 9 格时角标按 视距/9 放大，屏幕上保持 9 格时的大小
+const TUCK_KEY = 'gridmarch.hpTuck', TUCKS = [0, 25, 50, 75, 100];
+let tuckPct = 25; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.includes(v) && localStorage.getItem(TUCK_KEY) !== null) tuckPct = v; } catch (e) {}
+const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
+tuckRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
@@ -371,6 +378,7 @@ pause.addEventListener('click', e => {
   else if (a === 'quality') setPage(true);
   else if (a === 'back') setPage(false);
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
+  else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）

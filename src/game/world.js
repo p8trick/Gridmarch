@@ -199,7 +199,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
   function sunFollow(x, z) { const sx = Math.round(x), sz = Math.round(z); sun.target.position.set(sx, 0, sz); sun.position.set(sx + SUN_OFF[0], SUN_OFF[1], sz + SUN_OFF[2]); sun.target.updateMatrixWorld(); }
 
-  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, viewQuarter: 0, bldFollow: true, sandbox: true};
+  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .25, viewQuarter: 0, bldFollow: true, sandbox: true};
 
   const water = createWaterWorld(mapPreset, {cutaway: true}); scene.add(water.group);   // 海 / 浅滩 / 断崖 / 河（外缘切面随"沙盘边缘"开关）
   // 桥：A 型河桥（河格上）/ B 型跨海桥（两端桥头在海岸格里，中间在海格上）。桥是叠在水域上的附加模型，桥格对陆军可通行
@@ -528,9 +528,10 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       else { x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(s, 48, 52); }
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; hpTex[n] = t;
     }
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(HP_SIZE, HP_SIZE, 1); sp.renderOrder = 21; return sp;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(HP_SIZE * state.hpK, HP_SIZE * state.hpK, 1); sp.renderOrder = 21; return sp;
   }
-  const HP_SIZE = .62, HP_HALF = .30, HP_PAD = .03, HP_TUCK = .5;   // 牌边长 / 牌半宽（含描边）/ 离格线余量 / 左边压进模型的比例（×半宽）
+  const HP_SIZE = .62, HP_HALF = .30, HP_PAD = .03;   // 牌边长 / 牌半宽（含描边）/ 离格线余量（均为 1× 时；视距拉远时整体乘 state.hpK，让牌在屏幕上不变小）
+  // 0.75：state.hpK = 牌的放大倍数（战场里 = max(1, 视距格数/9)：9 格以内牌随模型一起缩放，超过 9 格牌在屏幕上保持 9 格时的大小，只是模型变小）；state.hpTuck = 牌左边压进模型的量（占牌宽的比例，默认 .25，菜单里可调 0–100%）
   function hpPlace(u, y) {
     const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);   // 屏幕右 / 朝向相机（地面方向）
     const e = state.pitchDeg * Math.PI / 180, ce = Math.cos(e), se = Math.sin(e), k = u.baseScale, ya = u.yaw, cy = Math.cos(ya), sy = Math.sin(ya), bx = u.lbox;
@@ -540,17 +541,22 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       const dx = lx * cy + lz * sy, dz = -lx * sy + lz * cy, r = dx * rx + dz * rz, v = ly * ce - (dx * cx + dz * cz) * se;
       if (r - v > best) { best = r - v; pr = r; pv = v; }
     }
-    let cr = pr + HP_HALF * HP_TUCK, cv = pv + HP_HALF;   // 角标左下贴着模型右下角
+    const hh = HP_HALF * state.hpK, pad = HP_PAD * state.hpK;
+    let cr = pr + hh * (1 - 2 * state.hpTuck), cv = pv + hh;   // 牌左边 = 模型右边 − 牌宽×hpTuck   // 角标左下贴着模型右下角
     const gx = u.path ? u.x : u.cell[0] * 2, gz = u.path ? u.z : u.cell[1] * 2, ox = u.x - gx, oz = u.z - gz;   // 本格中心（走动中跟着单位自己）
-    cr = Math.min(cr, 1 - (ox * rx + oz * rz) - HP_HALF - HP_PAD);                 // 右边不越过本格右线
-    cv = Math.max(cv, ((ox * cx + oz * cz) - 1) * se + HP_HALF + HP_PAD);           // 下边不越过本格前线
+    cr = Math.min(cr, 1 - (ox * rx + oz * rz) - hh - pad);                 // 右边不越过本格右线
+    cv = Math.max(cv, ((ox * cx + oz * cz) - 1) * se + hh + pad);           // 下边不越过本格前线
     return [u.x + rx * cr, y + cv / ce, u.z + rz * cr];
   }
   function syncHpBadge(u, y) {
     const n = u.hpN | 0;
     if (!n || n >= 10 || !state.units || u.dying) { if (u.hpBadge) u.hpBadge.visible = false; return; }
     if (!u.hpBadge || u.hpBadge.userData.n !== n) { if (u.hpBadge) scene.remove(u.hpBadge); u.hpBadge = hpSprite(n); if (!u.hpBadge) return; u.hpBadge.userData.n = n; scene.add(u.hpBadge); }
-    u.hpBadge.visible = true; u.hpBadge.position.set(...hpPlace(u, y));
+    u.hpBadge.visible = true; u.hpBadge.scale.set(HP_SIZE * state.hpK, HP_SIZE * state.hpK, 1); u.hpBadge.position.set(...hpPlace(u, y));
+  }
+  function setHpView(o) {   // 0.75：改角标放大倍数 k / 左移量 tuck 后，把所有已显示的角标重新摆一遍
+    if (o.k !== undefined) state.hpK = o.k; if (o.tuck !== undefined) state.hpTuck = o.tuck;
+    for (const u of units) if (u.hpBadge && u.hpBadge.visible) syncHpBadge(u, u.path ? u.curY : groundY(u.cell[0], u.cell[1], u));
   }
   function setHp(id, n) { const u = units.find(o => o.spec.id === id && !o.dying); if (!u || u.hpN === n) return; u.hpN = n; syncUnit(u); }
   // 0.66：「已行动」标记 = 脚下一圈深灰环（0.65 的头顶「休」牌你不喜欢，已去掉）。引擎 acted → setActed(id, on)
@@ -901,7 +907,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
