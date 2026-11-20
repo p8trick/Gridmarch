@@ -199,7 +199,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
   function sunFollow(x, z) { const sx = Math.round(x), sz = Math.round(z); sun.target.position.set(sx, 0, sz); sun.position.set(sx + SUN_OFF[0], SUN_OFF[1], sz + SUN_OFF[2]); sun.target.updateMatrixWorld(); }
 
-  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .25, viewQuarter: 0, bldFollow: true, sandbox: true};
+  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .4, viewQuarter: 0, bldFollow: true, sandbox: true};
 
   const water = createWaterWorld(mapPreset, {cutaway: true}); scene.add(water.group);   // 海 / 浅滩 / 断崖 / 河（外缘切面随"沙盘边缘"开关）
   // 桥：A 型河桥（河格上）/ B 型跨海桥（两端桥头在海岸格里，中间在海格上）。桥是叠在水域上的附加模型，桥格对陆军可通行
@@ -531,7 +531,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: hpTex[n], depthTest: false, transparent: true})); sp.scale.set(HP_SIZE * state.hpK, HP_SIZE * state.hpK, 1); sp.renderOrder = 21; return sp;
   }
   const HP_SIZE = .62, HP_HALF = .30, HP_PAD = .03;   // 牌边长 / 牌半宽（含描边）/ 离格线余量（均为 1× 时；视距拉远时整体乘 state.hpK，让牌在屏幕上不变小）
-  // 0.75：state.hpK = 牌的放大倍数（战场里 = max(1, 视距格数/9)：9 格以内牌随模型一起缩放，超过 9 格牌在屏幕上保持 9 格时的大小，只是模型变小）；state.hpTuck = 牌左边压进模型的量（占牌宽的比例，默认 .25，菜单里可调 0–100%）
+  // 0.75：state.hpK = 牌的放大倍数（战场里 = max(1, 视距格数/9)：9 格以内牌随模型一起缩放，超过 9 格牌在屏幕上保持 9 格时的大小，只是模型变小）；state.hpTuck = 牌左边压进模型的量（占牌宽的比例，默认 .4，菜单里可调 0 / 25 / 40 / 50%）
   function hpPlace(u, y) {
     const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);   // 屏幕右 / 朝向相机（地面方向）
     const e = state.pitchDeg * Math.PI / 180, ce = Math.cos(e), se = Math.sin(e), k = u.baseScale, ya = u.yaw, cy = Math.cos(ya), sy = Math.sin(ya), bx = u.lbox;

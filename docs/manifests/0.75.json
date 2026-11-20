@@ -148,7 +148,6 @@
   "tools/smoke-loading.py": "f0a2b8e144695e4828aaedbd708d7846",
   "tools/smoke-move.py": "1256388d23a463311c09020fd054589e",
   "tools/smoke-stuck.py": "ad6576914b73b23be8b2849868d72b2b",
-  "tools/stamp.mjs": "3ed5d5018de6bf7b861f981c34c789ac",
-  "升级包_0.73到0.74.zip": "cb8c9af42b27944d9902fe9904aff1e9"
+  "tools/stamp.mjs": "3ed5d5018de6bf7b861f981c34c789ac"
  }
 }
