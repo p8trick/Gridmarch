@@ -200,7 +200,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
   function sunFollow(x, z) { const sx = Math.round(x), sz = Math.round(z); sun.target.position.set(sx, 0, sz); sun.position.set(sx + SUN_OFF[0], SUN_OFF[1], sz + SUN_OFF[2]); sun.target.updateMatrixWorld(); }
 
-  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .4, capStyle: 'combo', viewQuarter: 0, bldFollow: true, sandbox: true};
+  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .4, capStyle: 'bar', viewQuarter: 0, bldFollow: true, sandbox: true};
 
   const water = createWaterWorld(mapPreset, {cutaway: true}); scene.add(water.group);   // 海 / 浅滩 / 断崖 / 河（外缘切面随"沙盘边缘"开关）
   // 桥：A 型河桥（河格上）/ B 型跨海桥（两端桥头在海岸格里，中间在海格上）。桥是叠在水域上的附加模型，桥格对陆军可通行
@@ -492,7 +492,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 头顶条：动画时先「弹大」→ 在大尺寸下从旧进度灌到新进度 → 缩回常驻尺寸（不会小到看不清）；
   // 染色：一道裁剪面沿屏幕左→右推进（随镜头旋转），裁剪面以左的地板罩一层占领方颜色，建筑的可见网格复制一份染色后同样裁剪，边缘一条亮线扫过。
   const capVis = new Map(), capFx = [], CAP_R0 = .78, CAP_R1 = 1.0, _cc = new THREE.Color(), _cw = new THREE.Color(0xffffff);
-  const CAP_PRE = .22, CAP_FILL = .75, CAP_POST = .3, CAP_DONE = .7, CAP_POP = 1.5;   // 弹大 / 灌条 / 缩回 / 占满后的闪光 + 冲击波（秒）；弹大倍数
+  const CAP_PRE = .22, CAP_FILL = .75, CAP_POST = .3, CAP_DONE = .7, CAP_POP = 2.0;   // 弹大 / 灌条 / 缩回 / 占满后的闪光 + 冲击波（秒）；弹大倍数
   const capHas = k => state.capStyle === 'combo' ? (k === 'bar' || k === 'wipe') : state.capStyle === k;
   const hexCss = h => '#' + _cc.setHex(h).getHexString();
   const capB = cell => { const k = bldMap.get(cell[0] + ',' + cell[1]); return k && buildings.find(x => x.cell[0] === k.cell[0] && x.cell[1] === k.cell[1]); };
@@ -535,7 +535,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       c.lineWidth = 6; c.strokeStyle = 'rgba(8,20,42,.9)'; c.strokeText(t, tx, ty); c.fillStyle = '#fff'; c.fillText(t, tx, ty); bar.tex.needsUpdate = true;
     }
     const k = state.hpK * v.pop;   // 视距拉远时和血量角标一样按 hpK 放大，屏幕上不变小
-    bar.sp.scale.set(2.5 * k, .62 * k, 1); bar.sp.position.set(v.cx, v.gy + 2.4 * Math.max(1, state.hpK * .85), v.cz); bar.sp.material.opacity = v.fade;
+    bar.sp.scale.set(1.8 * k, .45 * k, 1);   // 0.79：常驻宽度 ≈ 一格（1.8 < 格宽 2），连排的城市里相邻的条不会挤在一起 bar.sp.position.set(v.cx, v.gy + 2.4 * Math.max(1, state.hpK * .85), v.cz); bar.sp.material.opacity = v.fade;
   }
   function capWipe(v) {
     const w = v.wipe; if (!w) return;
@@ -687,8 +687,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     const u = units.find(o => o.spec.id === id); if (!u) return false;
     on = !!on; if (!!u.acted === on) return true;
     u.acted = on; u.grayT = on ? 1 : 0;   // 0.78：已行动 → 部队慢慢变灰（高战式）
-    if (on && !u.amark) { u.amark = new THREE.Mesh(actedGeo, actedMat); u.amark.renderOrder = 4; scene.add(u.amark); }
-    if (u.amark) u.amark.visible = on && state.units;
+    // 0.79：脚下深灰环去掉了，只靠变灰区分已行动（amark 不再创建）
     syncUnit(u); return true;
   }
   function applyUnits() {

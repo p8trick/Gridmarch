@@ -69,7 +69,7 @@ with sync_playwright() as p:
     pg.click('#abar [data-act=wait]'); pg.wait_for_timeout(300)
     assert not pg.is_visible('#abar') and st()['acting'] is None
     assert pg.evaluate('([id])=>window.battle.game.units.find(o=>o.id===id).acted', [info['id']]) is True
-    assert pg.evaluate('()=>window.battle.world.units.filter(u=>u.acted&&u.amark&&u.amark.visible).length') == 1, '待命后脚下应有灰环'
+    assert pg.evaluate('()=>window.battle.world.units.filter(u=>u.acted&&u.grayT===1).length') == 1, '待命后应变灰'
     # 已行动的单位点了不再选中
     tap(dest[0], dest[1]); assert st()['sel'] is None, '已行动的单位不该再选中'
     # 另一个单位：点自己脚下 = 原地待命；再点空地取消选中
