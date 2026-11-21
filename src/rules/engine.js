@@ -1,6 +1,6 @@
 // 规则引擎骨架（0.33）：地图 + 单位 + 回合。纯数据、纯函数，不依赖画面，方便自动测试和以后接 AI。
 // 目前包含：移动（按地形消耗）、攻击与反击、回合切换、沼泽掉血、歼灭胜负。
-// 0.77 加了占领（capture）。还没有：合流、补给燃料、修理、运输（后续里程碑）。
+// 0.77 加了占领（capture）；0.81 加了回合开始的修理 / 补给（repairUnits）。还没有：合流、运输（后续里程碑）。
 import {UNIT_IDS, UNITS, TERRAINS, CONFIG, DEFAULT_STYLE} from './data.js';
 import {strike, dispHp} from './combat.js';
 
@@ -45,6 +45,25 @@ export function incomeOf(g, player) {
   return Math.floor(sum * g.config.incomeMul);
 }
 function collectIncome(g) { g.funds[g.turn] += incomeOf(g, g.turn); g.built = new Set(); }
+
+// 0.81 修理 / 补给：回合开始、收完收入之后，轮到的这一方站在「己方可修理建筑」上的陆军：血量回复 CONFIG.repairHp 点（不超过 100），
+// 修理费 = 造价 × 回复点数 / 100，从这一方资金里扣；钱不够就跳过这个单位（按单位编号顺序先到先得）；弹药 / 燃料补满，不收费。
+// 返回 [{id, heal, cost}]（只列回了血的单位，给战场演飘字用）。
+function repairUnits(g) {
+  const out = [];
+  if (!g.config.repair) return out;
+  for (const u of g.units) {
+    if (u.owner !== g.turn) continue;
+    const tr = TERRAINS[g.terrain[u.y]?.[u.x]]; if (!tr?.repair || g.owners[key(u.x, u.y)] !== u.owner) continue;
+    const t = UNITS[u.type], heal = Math.min(g.config.repairHp, 100 - u.hp);
+    if (heal > 0) {
+      const cost = Math.floor(t.cost * heal / 100);
+      if (g.funds[g.turn] >= cost) { g.funds[g.turn] -= cost; u.hp += heal; out.push({id: u.id, heal, cost}); }
+    }
+    u.ammo = t.ammo; u.fuel = t.fuel;
+  }
+  return out;
+}
 
 // 开打前的伤害预估（0.73）：在复制出来的单位上把真正的 attack 跑一遍，所以和实际结算一定一致，而且不改动 g。伤害是血量点数（0–100），counter = 反击伤害（0 = 不反击）
 export function forecast(g, id, targetId) {
@@ -202,8 +221,10 @@ export function endTurn(g) {
   }
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
   for (const u of g.units) if (u.owner === g.turn) { u.moved = u.acted = false; delete u.origin; }
+  const before = g.funds[g.turn];
   collectIncome(g);
-  return {ok: true};
+  const income = g.funds[g.turn] - before, repairs = repairUnits(g);
+  return {ok: true, income, fundsBefore: before, repairs, repairCost: repairs.reduce((a, r) => a + r.cost, 0)};   // 0.81：战场用这份清单演「收入 → 修理」动画
 }
 
 export {dispHp};

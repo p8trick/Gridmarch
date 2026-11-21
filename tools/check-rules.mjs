@@ -225,4 +225,24 @@ t('占领总部 = 获胜（hqWin），关掉后只易主', () => {
   const g2 = mk({hqWin: false}); capture(g2, 1); endTurn(g2); endTurn(g2); capture(g2, 1); assert.equal(g2.winner, null); assert.equal(g2.owners['7,0'], 0);
 });
 
+t('修理（0.81）：回合开始先收入再修理；己方城市上的残血陆军 +20 点、按造价比例扣钱；弹药补满', () => {
+  const mk = (extra = {}) => createGame({terrain: map(6, 1, 'plain').map(r => { r[1] = 'city_small'; r[2] = 'city_small'; r[3] = 'hq'; return r; }),
+    owners: {'1,0': 1, '2,0': 0, '3,0': 1}, funds: [0, 0],
+    units: [{type: 'tank', owner: 1, x: 1, y: 0, hp: 50, ammo: 2}, {type: 'inf', owner: 1, x: 4, y: 0, hp: 40}, {type: 'inf', owner: 1, x: 2, y: 0, hp: 40}, {type: 'inf', owner: 0, x: 5, y: 0}], ...extra});
+  const g = mk(); const r = endTurn(g);
+  assert.equal(r.income, 1700); assert.equal(r.fundsBefore, 0);   // 红军：1 座小城市 700 + 总部 1000
+  assert.deepEqual(r.repairs.map(q => [q.id, q.heal, q.cost]), [[1, 20, 1400]]);   // 轻坦 7000 × 20%；平地上的步兵、站在对方城市上的步兵都不修
+  assert.equal(r.repairCost, 1400); assert.equal(g.funds[1], 300); assert.equal(unitAt(g, 1, 0).hp, 70); assert.equal(unitAt(g, 1, 0).ammo, 9);
+  assert.equal(unitAt(g, 4, 0).hp, 40); assert.equal(unitAt(g, 2, 0).hp, 40);
+});
+
+t('修理：只回到 100（回复点数按实际算价）；钱不够的单位跳过；config.repair 可关', () => {
+  const mk = cfg => createGame({terrain: map(4, 1).map(r => { r[1] = 'city_small'; r[2] = 'city_small'; return r; }), owners: {'1,0': 1, '2,0': 1}, funds: [0, 0], config: cfg,
+    units: [{type: 'tank', owner: 1, x: 1, y: 0, hp: 95}, {type: 'neotank', owner: 1, x: 2, y: 0, hp: 40}, {type: 'inf', owner: 0, x: 3, y: 0}]});
+  const g = mk(); const r = endTurn(g);   // 收入 1400：轻坦回 5 点 = 350；重坦要 4000 → 钱不够，跳过
+  assert.equal(r.income, 1400); assert.deepEqual(r.repairs.map(q => [q.id, q.heal, q.cost]), [[1, 5, 350]]);
+  assert.equal(unitAt(g, 1, 0).hp, 100); assert.equal(unitAt(g, 2, 0).hp, 40); assert.equal(g.funds[1], 1050);
+  const g2 = mk({repair: false}); assert.equal(endTurn(g2).repairs.length, 0); assert.equal(unitAt(g2, 2, 0).hp, 40);
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);

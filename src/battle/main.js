@@ -94,7 +94,8 @@ const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cel
 const TEAM = ['blue', 'red'];
 // 0.77：占领进度同步到战场（建筑脚下的进度环 + 灯带渐变）：引擎里 cap > 0 的单位 = 正在占领；单位走开 / 被打死 / 占完后进度归零，这里会自动把建筑恢复本色
 const syncCaps = () => world.setCaptureMarks(game.units.filter(u => u.cap > 0).map(u => { const o = game.owners[u.x + ',' + u.y]; return {cell: toWorld([u.x, u.y]), f: u.cap / RULE_TERRAINS[game.terrain[u.y][u.x]].capture, cap: u.cap, need: RULE_TERRAINS[game.terrain[u.y][u.x]].capture, team: TEAM[u.owner], from: o === undefined ? 'neutral' : TEAM[o]}; }));
-const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted && u.owner === game.turn); world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
+const holdHp = new Set();   // 0.81：回合开始修理动画还没演到的单位，血量角标先不更新（飘 +N 的那一刻才变）
+const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted && u.owner === game.turn); if (!holdHp.has(u.id)) world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
   if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); syncActed(); hud(); infoUpdate(); mark(); }
@@ -244,7 +245,7 @@ function nearBar(px, py) {   // 浮条周围留一圈 36px 的缓冲：想点「
   return px > l - M && px < l + bar.offsetWidth + M && py > t - M && py < t + bar.offsetHeight + M;
 }
 function handleTap(px, py) {
-  if (world.busy()) return;
+  if (world.busy() || econBusy) return;
   if (acting) {
     if (targeting) { const c = selectAt(px, py), t = c && targeting.get(toEngine(c).join(',')); if (t) doAttack(t); else { exitTargeting(); infoUpdate(); mark(); } return; }
     if (!nearBar(px, py)) undoMove();
@@ -261,6 +262,7 @@ function handleTap(px, py) {
   infoUpdate(); hud(); mark();
 }
 function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，但出完整版详细面板（自己的兵工厂也是看详情，不开生产界面）
+  if (econBusy) return;
   const c = selectAt(px, py);
   infoUpdate(); hud(); mark();
   if (c) detail.open(c);
@@ -296,6 +298,7 @@ function infoPlace() {   // 相机移动 / 旋转后光圈在屏幕上的位置�
 const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
+let econBusy = false, econShown = null, econTok = 0, econTimers = [];   // 0.81：回合开始「收入 → 修理」动画期间：econShown = 状态条上显示的资金（null = 跟引擎走），econBusy 挡住操作
 let hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, hudStuck = false, bannerT = 0;
 // 视距提示（0.56）：缩放时右上「旋转」按钮临时变成当前视距（格数），随缩放实时变化；停手 2 秒后淡出，变回旋转图标（双指还按着就继续等）
 const rotSpan = $('bRot').firstElementChild;
@@ -310,15 +313,15 @@ function hideZoom() {
   zoomT = setTimeout(() => { rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; }, 200);
 }
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
-  const t = game.turn, sig = game.day + '|' + t + '|' + game.funds[t];
-  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = game.funds[t]; }
+  const t = game.turn, shown = econShown !== null ? econShown : game.funds[t], sig = game.day + '|' + t + '|' + shown;
+  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; }
   // 0.69：两档提醒。① 本方单位全部行动完 = 状态条脉冲（可以结束回合了，但可能还想造兵）；② 脉冲的同时再也没有有效操作了（没有能造兵的兵工厂：都造过了 / 被单位占着 / 钱不够最便宜的单位）= 才自动弹出结束确认。
   const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game);
   if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); }
   if (!stuck) hudStuck = false;
   else if (!hudStuck) {   // 刚刚变成「无事可做」的这一刻：弹出确认；兵工厂 / 详细面板 / 暂停菜单开着就先等着（它们关上时会再检查一次）；确认已经开着就不重复弹
     if (!$('endm').hidden) hudStuck = true;
-    else if ($('pause').hidden && !ars.isOpen && !detail.isOpen) { hudStuck = true; openEnd(); }
+    else if ($('pause').hidden && !ars.isOpen && !detail.isOpen && !econBusy) { hudStuck = true; openEnd(); }
   }
   infoPlace();
   if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; world.setHpView({k: Math.max(1, cam.cells / 9)}); }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
@@ -333,9 +336,50 @@ function openEnd() {
 }
 const closeEnd = () => { $('endm').hidden = true; };
 function doEndTurn() {
-  if (!engineEndTurn(game).ok) return;
+  const r = engineEndTurn(game); if (!r.ok) return;
   hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
+  const fx = combatOn && ((r.income || 0) > 0 || (r.repairs && r.repairs.length > 0));   // 关了「作战动画」就不演，直接到账
+  if (fx) { econShown = r.fundsBefore; econBusy = true; for (const q of r.repairs) holdHp.add(q.id); }
   syncActed(); hud(); infoUpdate(); mark(); playBanner();
+  if (fx) playEconomy(r);
+}
+// 0.81 回合开始的经济动画（规则在 engineEndTurn 里已经结算好，这里只是演）：横幅快滑出时 → 状态条下方飘「+收入」，资金数字滚动涨上去 →
+// 然后所有在己方建筑上回血的单位「同时」飘绿色「+N」（和被打时的伤害飘字同一套动画，只是变成加），同时状态条下方飘「-修理费合计」，资金数字同步滚动扣下来。
+// 期间 econBusy 挡住点击；全部演完才解除，再检查一次「无事可做」提醒。
+function fxMoney(text, cls) {   // 状态条下方、资金数字正下方飘一个数字（只动 transform / opacity）
+  const bar = $('hudL'), f = $('hFunds'), el = document.createElement('div');
+  el.className = 'fxm ' + cls; el.textContent = text;
+  el.style.left = Math.round(bar.offsetLeft + f.offsetLeft + f.offsetWidth / 2) + 'px'; el.style.top = Math.round(bar.offsetTop + bar.offsetHeight + 16) + 'px';
+  bar.parentNode.appendChild(el); setTimeout(() => el.remove(), 1500);
+}
+function tweenFunds(from, to, ms, done) {
+  const tok = econTok, f = $('hFunds'), t0 = performance.now(); f.classList.remove('up', 'down'); f.classList.add(to > from ? 'up' : 'down');
+  const step = now => {
+    if (!alive || tok !== econTok) return;
+    const k = Math.max(0, Math.min(1, (now - t0) / ms)), e = 1 - (1 - k) * (1 - k);   // rAF 时间戳可能比 t0 早一点点，k 不夹下限第一帧会冒出反向的数（测试抓到 3010）
+    econShown = Math.round(from + (to - from) * e); f.textContent = econShown;
+    if (k < 1) requestAnimationFrame(step); else { f.classList.remove('up', 'down'); done(); }
+  };
+  requestAnimationFrame(step);
+}
+function playEconomy(r) {
+  const tok = ++econTok, later = (fn, ms) => econTimers.push(setTimeout(() => { if (alive && tok === econTok) fn(); }, ms));
+  const after = (r.income || 0) > 0 ? r.fundsBefore + r.income : r.fundsBefore, reps = r.repairs || [];
+  const finish = () => { econShown = null; econBusy = false; holdHp.clear(); syncActed(); hud(); infoUpdate(); mark(); };
+  const repairPhase = () => {
+    if (!reps.length) return finish();
+    for (const q of reps) popup(q.id, '+' + fmtHp(q.heal), 'heal');
+    for (const q of reps) holdHp.delete(q.id);
+    syncActed(); mark();
+    if (r.repairCost > 0) { fxMoney('-' + r.repairCost, 'out'); later(() => tweenFunds(after, after - r.repairCost, 700, () => later(finish, 350)), 250); }
+    else later(finish, 900);
+  };
+  const incomePhase = () => {
+    if (!(r.income > 0)) return repairPhase();
+    fxMoney('+' + r.income, 'in');
+    later(() => tweenFunds(r.fundsBefore, after, 700, () => later(repairPhase, 450)), 250);
+  };
+  later(incomePhase, 650);
 }
 function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑入、金色大字「第 N 天」缩放落下、扫光一闪、停一下再向右滑出；期间挡住触摸
   const b = $('banner'), t = game.turn;
@@ -343,7 +387,7 @@ function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
-$('hudL').onclick = () => { if (!world.busy() && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
+$('hudL').onclick = () => { if (!world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
@@ -473,7 +517,7 @@ window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (ty
 function destroy() {
   if (!alive) return; alive = false;
   ars.dispose(); detail.dispose();
-  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT);
+  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); econTok++; econTimers.forEach(clearTimeout);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
   if (stage.dbg) stage.dbg.close();

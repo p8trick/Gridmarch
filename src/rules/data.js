@@ -11,6 +11,8 @@ export const CONFIG = {
   swampDamage: 10,     // 沼泽：回合结束时站在上面的陆军掉 1 格血（内部血量 10 点 = 显示 1 格）；可致死
   swampKills: true,
   incomeMul: 1,        // 整体收入倍率（以后做 AI 难度档位用）
+  repair: true,        // 0.81：回合开始，己方陆军站在己方城市 / 总部 / 兵工厂上 = 修理 + 补给弹药燃料（高战规则，机场 / 船坞只修空军 / 海军，现在没有）
+  repairHp: 20,        // 每回合最多回复的血量点数（20 点 = 2 格）；修理费 = 造价 × 回复点数 / 100，钱不够这个单位就不修
   hqWin: true,         // 0.77：占领对方总部 = 直接获胜（高战规则）；关掉则总部只是一座普通的可占领建筑
 };
 
@@ -58,10 +60,10 @@ export const TERRAINS = {
   shoal:      {name: '浅滩',   stars: 0, cost: {...P}},
   road:       {name: '公路',   stars: 0, cost: {...P}},
   bridge:     {name: '桥梁',   stars: 0, cost: {...P}},
-  hq:         {name: '总部',   stars: 4, cost: {...P}, income: 1000, property: true, capture: 20},
-  city_large: {name: '大城市', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
-  city_small: {name: '小城市', stars: 3, cost: {...P}, income: 700, property: true, capture: 20},
-  factory:    {name: '兵工厂', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
+  hq:         {name: '总部',   stars: 4, cost: {...P}, income: 1000, property: true, capture: 20, repair: true},
+  city_large: {name: '大城市', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20, repair: true},
+  city_small: {name: '小城市', stars: 3, cost: {...P}, income: 700, property: true, capture: 20, repair: true},
+  factory:    {name: '兵工厂', stars: 3, cost: {...P}, income: 1000, property: true, capture: 20, repair: true},
   airport:    {name: '机场',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   port:       {name: '船坞',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   // 以下是我们自己的设计【草案】
