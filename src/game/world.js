@@ -276,14 +276,21 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
   }
   rebuildBoard();
-  // 浅滩/断崖格：格内一部分是水，单位站在格心会悬在水面上。把站位从"水侧"推向陆侧 COAST_SHIFT，高度取该处真实地表
-  const COAST_SHIFT = .4, coastOff = new Map(), coastY = new Map();
+  // 浅滩/断崖格：格内约 3/4 是陆地、其余是水，单位站在格心会悬在水面上。0.82：站位取「格内陆地部分的中心」（在格内按 0.22 间距采样地表，高于水面的点取重心；
+  // 重心若正好落在水里 / 凹处，就取离重心最近的陆地采样点），这样单位在陆地上居中，而不是被固定推开 0.4 / 贴到岸边；高度取该点真实地表。不依赖美术组件的 groundAnchor（那个按「最高处」挑点，不居中）
+  const coastOff = new Map(), coastY = new Map(), LAND_Y = -.28;
   const coastOffset = (cx, cz) => {
     const k = cx + ',' + cz; let o = coastOff.get(k);
     if (!o) {
-      let sx = 0, sz = 0;
-      for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) { const h = water.surfaceAt(cx * 2 + i * .4, cz * 2 + j * .4); if (h && h.y < -.28) { sx += i * .4; sz += j * .4; } }
-      const L = Math.hypot(sx, sz); o = L > 1e-6 ? [-sx / L * COAST_SHIFT, -sz / L * COAST_SHIFT] : [0, 0]; coastOff.set(k, o);
+      const pts = []; let sx = 0, sz = 0;
+      for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) { const dx = i * .22, dz = j * .22, h = water.surfaceAt(cx * 2 + dx, cz * 2 + dz); if (h && h.y >= LAND_Y) { pts.push([dx, dz]); sx += dx; sz += dz; } }
+      if (!pts.length) o = [0, 0];
+      else {
+        const mx = sx / pts.length, mz = sz / pts.length, h = water.surfaceAt(cx * 2 + mx, cz * 2 + mz);
+        if (h && h.y >= LAND_Y) o = [mx, mz];
+        else { let best = pts[0], bd = 1e9; for (const q of pts) { const d = Math.hypot(q[0] - mx, q[1] - mz); if (d < bd) { bd = d; best = q; } } o = [best[0], best[1]]; }
+      }
+      coastOff.set(k, o);
     }
     return o;
   };
@@ -295,7 +302,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (sandH && SAND_SET.has(cx + ',' + cz)) return sandH(cx * 2, cz * 2);   // 沙漠：格心处的沙丘高度（每格不同）
     if (SWAMP_SET.has(cx + ',' + cz)) return -mireDepth(cx, cz, u);          // 沼泽：陷进泥里一点（每格深浅不同）
     if (water.typeAt(cx, cz) === 'river') return WATER_Y - WADE_DEPTH * (u?.topOff || 1.8);   // 河里没有河床几何：水面不透明，沉下去的下半身被水面遮住
-    if (isCoast(cx, cz)) { const an = water.anchorAt?.(cx, cz); if (an) return an[1]; const k = cx + ',' + cz; if (!coastY.has(k)) { const o = coastOffset(cx, cz); coastY.set(k, water.surfaceAt(cx * 2 + o[0], cz * 2 + o[1])?.y ?? 0); } return coastY.get(k); }
+    if (isCoast(cx, cz)) { const k = cx + ',' + cz; if (!coastY.has(k)) { const o = coastOffset(cx, cz); coastY.set(k, water.surfaceAt(cx * 2 + o[0], cz * 2 + o[1])?.y ?? water.anchorAt?.(cx, cz)?.[1] ?? 0); } return coastY.get(k); }
     { const bb = bldMap.get(cx + ',' + cz); if (bb?.dockAnchor) return bb.dockAnchor.y; return bb?.y || 0; }
   };
 
@@ -372,11 +379,11 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   });
   const bq = () => state.bldFollow ? state.viewQuarter : 0;
   const bTheta = b => b.follow === false ? 0 : bq() * Math.PI / 2;
-  // 海岸格站位：MT2 逐格给出实际陆面参考点（anchorAt）；旧海岸模块没有，退回 coastOffset 的推算
+  // 海岸格站位：陆地部分的中心（coastOffset；0.82 起不再用 MT2 的 anchorAt，它偏向最高处、不居中）
   const standPos = (cx, cz) => {
     const b = bldMap.get(cx + ',' + cz), mh = hills.get(cx + ',' + cz);
     if (mh) { const p = getMountainStandPoint(mh.hill); return [p.x, p.z]; }   // 山格：驻扎锚点（随朝向旋转，偏离格心一点）
-    if (!b) { if (isCoast(cx, cz) && !bridgeInfo.has(cx + ',' + cz)) { const an = water.anchorAt?.(cx, cz); if (an) return [an[0], an[2]]; const o = coastOffset(cx, cz); return [cx * 2 + o[0], cz * 2 + o[1]]; } return [cx * 2, cz * 2]; }
+    if (!b) { if (isCoast(cx, cz) && !bridgeInfo.has(cx + ',' + cz)) { const o = coastOffset(cx, cz); return [cx * 2 + o[0], cz * 2 + o[1]]; } return [cx * 2, cz * 2]; }
     if (b.dockAnchor) return [b.dockAnchor.x, b.dockAnchor.z];   // 船坞：陆军站位用 D1 给的陆地锚点
     const th = bTheta(b), [lx, lz] = b.stand || [0, .45];
     return [cx * 2 + lx * Math.cos(th) + lz * Math.sin(th), cz * 2 - lx * Math.sin(th) + lz * Math.cos(th)];
@@ -656,8 +663,11 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function hpPlace(u, y) {
     const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), cx = Math.sin(a), cz = Math.cos(a);   // 屏幕右 / 朝向相机（地面方向）
     const e = state.pitchDeg * Math.PI / 180, ce = Math.cos(e), se = Math.sin(e), k = u.baseScale, ya = u.yaw, cy = Math.cos(ya), sy = Math.sin(ya), bx = u.lbox;
-    let pr = 0, pv = 0, best = -1e9;   // 包围盒 8 个角里屏幕上「最右下」的那一个（相对单位脚下那一点；屏幕纵向 v = 高度·cos俯角 − 朝相机距离·sin俯角）。取真正的角而不是外接矩形，模型斜着停时角标才不会飘在空处
-    for (let i = 0; i < 8; i++) {
+    let pr = 0, pv = 0, best = -1e9, inf = u.spec.k === 'inf';   // 包围盒 8 个角里屏幕上「最右下」的那一个（相对单位脚下那一点；屏幕纵向 v = 高度·cos俯角 − 朝相机距离·sin俯角）。取真正的角而不是外接矩形，模型斜着停时角标才不会飘在空处
+    // 0.82：步兵的包围盒带背包 / 枪，朝左朝右时右下角离身体和腿的距离不一样（背包在身后）。步兵改用「与朝向无关」的圆柱：半径 = 身体宽度的一半（取 x 方向，不含背包前后），
+    // 圆在屏幕右下方向上的最远点离脚下的位置只和相机有关，转向时不会变
+    if (inf) { const R = (bx.max.x - bx.min.x) * k / 2, q = Math.sqrt(1 + se * se); pr = R / q; pv = bx.min.y * k * ce - R * se * se / q; }
+    for (let i = 0; i < (inf ? 0 : 8); i++) {
       const lx = (i & 1 ? bx.max.x : bx.min.x) * k, ly = (i & 2 ? bx.max.y : bx.min.y) * k, lz = (i & 4 ? bx.max.z : bx.min.z) * k;
       const dx = lx * cy + lz * sy, dz = -lx * sy + lz * cy, r = dx * rx + dz * rz, v = ly * ce - (dx * cx + dz * cz) * se;
       if (r - v > best) { best = r - v; pr = r; pv = v; }

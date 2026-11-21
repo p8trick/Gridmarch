@@ -57,7 +57,7 @@ export const TERRAINS = {
   mountain:   {name: '山地',   stars: 4, cost: {foot: 2, mech: 1, tread: null, wheel: null}},
   river:      {name: '河流',   stars: 0, cost: {foot: 2, mech: 1, tread: null, wheel: null}},
   sea:        {name: '海洋',   stars: 0, cost: {foot: null, mech: null, tread: null, wheel: null}},
-  shoal:      {name: '浅滩',   stars: 0, cost: {...P}},
+  shoal:      {name: '浅滩',   stars: 0, cost: {...P}, noNaval: true},   // 0.82：浅滩 / 断崖在棋盘上有约 3/4 面积是陆地，陆军可站；以后加海军时，noNaval 的格子海军不能进
   road:       {name: '公路',   stars: 0, cost: {...P}},
   bridge:     {name: '桥梁',   stars: 0, cost: {...P}},
   hq:         {name: '总部',   stars: 4, cost: {...P}, income: 1000, property: true, capture: 20, repair: true},
@@ -67,7 +67,7 @@ export const TERRAINS = {
   airport:    {name: '机场',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   port:       {name: '船坞',   stars: 3, cost: {...P}, income: 1000, property: true, capture: 20},
   // 以下是我们自己的设计【草案】
-  cliff:      {name: '断崖',   stars: 0, cost: {foot: null, mech: null, tread: null, wheel: null}},   // 断崖海岸：陆军不能站上去
+  cliff:      {name: '断崖',   stars: 0, cost: {...P}, noNaval: true},   // 0.82：断崖海岸改成陆军可站（全部陆军单位，消耗 1；防御星暂定 0 与浅滩一致）；海军不能进
   desert:     {name: '沙漠',   stars: 0, cost: {foot: 2, mech: 2, tread: 2, wheel: 3}},                // 拖慢移动，无遮蔽
   swamp:      {name: '沼泽',   stars: 0, cost: {foot: 2, mech: 2, tread: 3, wheel: 4}, hazard: true}, // 拖慢移动；回合结束掉血（见 CONFIG）
 };

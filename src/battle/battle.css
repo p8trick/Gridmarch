@@ -235,7 +235,7 @@
 #battle .fpsb b{transform:skewX(10deg);font:800 12px/1 var(--font);font-variant-numeric:tabular-nums}
 
 /* 0.67 单位旁的操作浮条（走完后选「待命」；以后加「攻击」）：斜切深蓝条，按下变金，同 .gbtn；打开兵工厂 / 详细面板时藏起来 */
-#battle .abar{position:absolute;z-index:5;display:flex;flex-direction:column;gap:7px;transform:translateY(-50%);pointer-events:auto}
+#battle .abar{position:absolute;z-index:5;display:flex;flex-direction:column;gap:9px;transform:translateY(-50%);pointer-events:auto}
 #battle .abar[hidden]{display:none}
 #battle .abtn{position:relative;min-width:84px;height:36px;padding:0 16px;border:0;background:none;color:#fff;border-radius:9px;transform:skewX(-10deg);font:800 15px/1 var(--font);letter-spacing:.14em;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
 #battle .abtn::before,#battle .abtn::after{content:"";position:absolute;inset:0;border-radius:inherit}
@@ -248,6 +248,7 @@
 #battle .ahint{align-self:center;padding:4px 9px;border-radius:7px;background:rgba(9,24,46,.62);font-size:11px;line-height:1;letter-spacing:.08em;color:rgba(255,255,255,.88);pointer-events:none;white-space:nowrap}
 /* 0.70 攻击：选目标时浮条只剩提示；伤害数字上飘 */
 #battle .abtn[hidden]{display:none}
+#battle .abar .abtn[data-act=capture]:not([hidden])~.abtn[data-act=wait],#battle .abar .abtn[data-act=attack]:not([hidden])~.abtn[data-act=wait]{margin-top:26px}   /* 0.82：「待命」和上面的「占领 / 攻击」拉开一大段，免得点错；只有待命一个按钮时不留空 */
 #battle .abar .ahint.t{display:none}
 #battle .abar.pick .abtn,#battle .abar.pick .ahint.u{display:none}
 #battle .abar.pick .ahint.t{display:block}

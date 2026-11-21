@@ -245,4 +245,12 @@ t('修理：只回到 100（回复点数按实际算价）；钱不够的单位�
   const g2 = mk({repair: false}); assert.equal(endTurn(g2).repairs.length, 0); assert.equal(unitAt(g2, 2, 0).hp, 40);
 });
 
+t('断崖 / 浅滩（0.82）：全部陆军单位都能走上去（消耗 1），标了 noNaval（海军以后不能进）', () => {
+  for (const id of ['cliff', 'shoal']) assert(TERRAINS[id].noNaval);
+  for (const type of ['inf', 'mech', 'recon', 'apc', 'tank', 'mdtank', 'neotank', 'arty', 'rocket', 'aa']) {
+    const g = createGame({terrain: [['plain', 'cliff', 'shoal', 'plain']], units: [{type, owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+    const r = reachable(g, unitAt(g, 0, 0)); assert(r.has('1,0') && r.has('2,0'), type + ' 应能站上断崖 / 浅滩');
+  }
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);
