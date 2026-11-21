@@ -535,7 +535,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       c.lineWidth = 6; c.strokeStyle = 'rgba(8,20,42,.9)'; c.strokeText(t, tx, ty); c.fillStyle = '#fff'; c.fillText(t, tx, ty); bar.tex.needsUpdate = true;
     }
     const k = state.hpK * v.pop;   // 视距拉远时和血量角标一样按 hpK 放大，屏幕上不变小
-    bar.sp.scale.set(1.8 * k, .45 * k, 1);   // 0.79：常驻宽度 ≈ 一格（1.8 < 格宽 2），连排的城市里相邻的条不会挤在一起 bar.sp.position.set(v.cx, v.gy + 2.4 * Math.max(1, state.hpK * .85), v.cz); bar.sp.material.opacity = v.fade;
+    // 0.79：常驻宽度 ≈ 一格（1.8 < 格宽 2），连排的城市里相邻的条不会挤在一起
+    bar.sp.scale.set(1.8 * k, .45 * k, 1); bar.sp.position.set(v.cx, v.gy + 2.4 * Math.max(1, state.hpK * .85), v.cz); bar.sp.material.opacity = v.fade;
   }
   function capWipe(v) {
     const w = v.wipe; if (!w) return;

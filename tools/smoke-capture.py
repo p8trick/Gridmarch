@@ -72,6 +72,10 @@ with sync_playwright() as p:
           const names=new Set();w.scene.traverse(m=>{if(m.name==='capBar'||m.name==='capWipe'||m.name==='capRing')names.add(m.name)});
           const a=[...names];w.setCaptureMarks([]);let left=0;w.scene.traverse(m=>{if(m.name==='capBar'||m.name==='capWipe'||m.name==='capRing')left++});return [a,left]}''', [st, setup['a']['c']])
         assert sorted(n[0]) == sorted(want) and n[1] == 0, (st, n)
+    # ⑥ 头顶条的位置必须在建筑正上方（0.79 的注释吃掉了定位语句，条全跑到原点，当时只查了「存在」没查位置）
+    pos = pg.evaluate('''([c])=>{const B=window.battle,w=B.world,wc=B.toWorld(c);w.setCapStyle('bar');w.setCaptureMarks([{cell:wc,f:.5,cap:10,need:20,team:'blue',from:'neutral'}]);
+      let p=null;w.scene.traverse(m=>{if(m.name==='capBar')p=[m.position.x/2,m.position.y,m.position.z/2]});const r={want:wc,got:p};w.setCaptureMarks([]);return r}''', [setup['a']['c']])
+    assert pos['got'] and abs(pos['got'][0] - pos['want'][0]) < .01 and abs(pos['got'][2] - pos['want'][1]) < .01 and pos['got'][1] > 1, ('头顶条应在建筑正上方', pos)
     assert not errs, errs
     print('占领冒烟 OK', r)
     b.close()
