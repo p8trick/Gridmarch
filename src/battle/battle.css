@@ -188,9 +188,9 @@
 #battle .dt-col{position:relative;z-index:1;flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;justify-content:center}
 #battle .dt-hp{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub)}
 #battle .dt-hp b{font-size:14px;color:var(--text);min-width:4.4em;text-align:right}
-#battle .dt-bar{position:relative;flex:1;height:9px;border-radius:5px;background:#e5e0cf;overflow:hidden}
-#battle .dt-bar::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 1px),rgba(46,34,12,.4) calc(10% - 1px),rgba(46,34,12,.4) 10%)}   /* 0.77：每 10 点一格的刻度（威力 / 减伤按格数算） */
-#battle .dt-bar i{display:block;height:100%}
+#battle .dt-bar{flex:1;display:flex;gap:2px;height:14px;padding:0 3px}   /* 0.78：10 格斜切槽（高战血条味道），每格 10 点，格内按点数填 */
+#battle .dt-bar s{position:relative;flex:1;height:100%;transform:skewX(-18deg);border-radius:2px;background:#cfc8b2;box-shadow:inset 0 1px 2px rgba(60,44,12,.55),0 0 0 1px rgba(255,255,255,.5);overflow:hidden}
+#battle .dt-bar s i{position:absolute;left:0;top:0;bottom:0;display:block;box-shadow:inset 0 3px 0 rgba(255,255,255,.4),inset 0 -2px 0 rgba(0,0,0,.18)}
 #battle .dt-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 #battle .dt-kv{display:flex;justify-content:space-between;align-items:baseline;padding:2px 8px;border-radius:9px;background:var(--card);font-size:12px;color:var(--sub);line-height:1.3;white-space:nowrap}
 #battle .dt-kv b{font-size:14px;color:var(--text)}

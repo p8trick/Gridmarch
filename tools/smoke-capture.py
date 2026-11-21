@@ -10,6 +10,7 @@ with sync_playwright() as p:
     pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
+    pg.evaluate("()=>window.battle.world.setCapStyle('ring')")   # 默认样式是「条+染色」，这里先按「脚下环」数进度环；最后再单独验条 / 染色
     scr = lambda ex, ey: pg.evaluate('''([ex,ey])=>{const B=window.battle,[cx,cz]=B.toWorld([ex,ey]),v=new B.THREE.Vector3(cx*2,B.world.surfaceY(cx,cz),cz*2).project(B.cam.cam);
         const cv=document.querySelector("#battle canvas").getBoundingClientRect();return [cv.left+(v.x+1)/2*cv.width, cv.top+(1-v.y)/2*cv.height]}''', [ex, ey])
     tap = lambda ex, ey: (lambda xy: (pg.mouse.click(xy[0], xy[1]), pg.wait_for_timeout(250)))(scr(ex, ey))
@@ -62,6 +63,15 @@ with sync_playwright() as p:
     pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=30000); pg.wait_for_timeout(400)
     r = pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="capRing")n++});return {cap:u.cap,rings:n}}', [setup['a']['id']])
     assert r['cap'] == 0 and r['rings'] == 0, ('走开后进度清零、进度环消失', r)
+    # ④ 已行动单位变灰（grayT = 1）；复位后 grayT = 0
+    g = pg.evaluate('([id])=>{const w=window.battle.world,u=w.units.find(o=>o.spec.id===id);return [u.grayT,u.acted]}', [setup['b']['id']])
+    assert g == [1, True], ('占领完成后这个单位已行动 → 灰化目标应为 1', g)
+    # ⑤ 另外三种样式：条 / 染色 / 条+染色 各自出现对应部件，清掉后消失
+    for st, want in [('bar', ['capBar']), ('wipe', ['capWipe']), ('combo', ['capBar', 'capWipe'])]:
+        n = pg.evaluate('''([st,c])=>{const B=window.battle,w=B.world;w.setCapStyle(st);w.setCaptureMarks([{cell:B.toWorld(c),f:.5,cap:10,need:20,team:'blue',from:'neutral'}]);
+          const names=new Set();w.scene.traverse(m=>{if(m.name==='capBar'||m.name==='capWipe'||m.name==='capRing')names.add(m.name)});
+          const a=[...names];w.setCaptureMarks([]);let left=0;w.scene.traverse(m=>{if(m.name==='capBar'||m.name==='capWipe'||m.name==='capRing')left++});return [a,left]}''', [st, setup['a']['c']])
+        assert sorted(n[0]) == sorted(want) and n[1] == 0, (st, n)
     assert not errs, errs
     print('占领冒烟 OK', r)
     b.close()

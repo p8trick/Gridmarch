@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {createTank, TRACK_GAUGE} from './units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
+import {patchGrayTree, setMatGray} from '../art/gray.js';
 import {createInfantryActor, resetInfantryBatches, syncInfantryBatches, infantryTriCount} from './units/infantry-actors.js';
 import {createTreePine, createTreeBroad} from '../art/terrain/forest/forest-original.js';   // 树林包 V1.0：与原树型逐面一致
 import {createForestRegion, disposeForest} from '../art/terrain/forest/forest-performance.js';
@@ -199,7 +200,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setShadowRadius(r) { Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r, far: 55 + (r - 18)}); sun.shadow.camera.updateProjectionMatrix(); }
   function sunFollow(x, z) { const sx = Math.round(x), sz = Math.round(z); sun.target.position.set(sx, 0, sz); sun.position.set(sx + SUN_OFF[0], SUN_OFF[1], sz + SUN_OFF[2]); sun.target.updateMatrixWorld(); }
 
-  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .4, viewQuarter: 0, bldFollow: true, sandbox: true};
+  const state = {infPose: 'idle', infGait: 'run', treeK: 1, mtnK: 1, unitK: 1, artK: ART_K, artElev: ART_ELEV, annexPush: true, rings: false, units: true, cull: true, idle: false, badges: false, selected: null, clsK: {...CLS_DEFAULT}, treeMode: 1, sizeMode: 0, floorTint: false, terrBadges: false, camA: 0, pitchDeg: 55, hpK: 1, hpTuck: .4, capStyle: 'combo', viewQuarter: 0, bldFollow: true, sandbox: true};
 
   const water = createWaterWorld(mapPreset, {cutaway: true}); scene.add(water.group);   // 海 / 浅滩 / 断崖 / 河（外缘切面随"沙盘边缘"开关）
   // 桥：A 型河桥（河格上）/ B 型跨海桥（两端桥头在海岸格里，中间在海格上）。桥是叠在水域上的附加模型，桥格对陆军可通行
@@ -393,9 +394,10 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     unitsGroup.add(holder);
     const ring = new THREE.Mesh(new THREE.RingGeometry(STAND_R - .02, STAND_R + .02, 48), new THREE.MeshBasicMaterial({color: 0xffeed0, side: THREE.DoubleSide}));
     ring.rotation.x = -Math.PI / 2; rings.add(ring);
+    const grayMats = actors ? null : patchGrayTree(model);   // 0.78：已行动变灰——坦克 / 火炮材质是每个单位自己的，直接改 uniform；步兵走批量绘制的实例颜色（见 art/gray.js）
     const label = BADGE[spec.k === 'tank' || spec.type === 'at' ? spec.type : spec.k];
     const badge = makeBadge(label, spec.team); if (badge) { badge.visible = false; scene.add(badge); }
-    return {spec, holder, model, ring, badge, actors, msz, lbox, fw: 1, fl: 1, tbadge: null, phase: idx * 1.7, baseY: 0, baseScale: 1, cell: [...spec.c], yaw: spec.face, path: null, dist: 0, curY: 0, topOff: 1.5, x: spec.c[0] * 2, z: spec.c[1] * 2, tris: triCount(model)};
+    return {spec, holder, model, ring, badge, actors, grayMats, grayK: 0, grayT: 0, msz, lbox, fw: 1, fl: 1, tbadge: null, phase: idx * 1.7, baseY: 0, baseScale: 1, cell: [...spec.c], yaw: spec.face, path: null, dist: 0, curY: 0, topOff: 1.5, x: spec.c[0] * 2, z: spec.c[1] * 2, tris: triCount(model)};
   };
   const units = UNITS.map(makeUnit);
 
@@ -484,49 +486,114 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
   }
   function cycleOwner(cell) { const b = bldMap.get(cell[0] + ',' + cell[1]); if (!b) return null; const real = buildings.find(x => x.cell[0] === b.cell[0] && x.cell[1] === b.cell[1]); real.owner = OWNER_NEXT[real.owner]; refreshBuildings(); return real; }
-  // ── 0.77 占领表现 ──────────────────────────────────────────────
-  // 占领中的建筑 = 脚下一圈进度环（占领方颜色，弧长 = 已占点数 / 总点数）+ 灯带颜色按进度从原归属渐变向占领方。
-  // 占领完成 = 灯带闪白后换成新主人的颜色 + 一圈冲击波向外扩散。进度环 / 渐变一直留到单位走开或被打死（setCaptureMarks 按引擎状态同步）。
-  const capRings = new Map(), capFx = [], CAP_R0 = .78, CAP_R1 = 1.0, _cc = new THREE.Color(), _cw = new THREE.Color(0xffffff);
+  // ── 0.77 占领表现 / 0.78 四种样式可选 ──────────────────────────────────
+  // state.capStyle：'ring' 脚下进度环（0.77）｜'bar' 头顶进度条｜'wipe' 地块 + 建筑按进度从左到右染成占领方颜色｜'combo' 条 + 染色（默认）
+  // 共同点：灯带颜色按进度渐变；占满 = 闪白换色 + 冲击波；表现一直留到单位走开 / 被打死 / 占完（setCaptureMarks 按引擎状态同步）。
+  // 头顶条：动画时先「弹大」→ 在大尺寸下从旧进度灌到新进度 → 缩回常驻尺寸（不会小到看不清）；
+  // 染色：一道裁剪面沿屏幕左→右推进（随镜头旋转），裁剪面以左的地板罩一层占领方颜色，建筑的可见网格复制一份染色后同样裁剪，边缘一条亮线扫过。
+  const capVis = new Map(), capFx = [], CAP_R0 = .78, CAP_R1 = 1.0, _cc = new THREE.Color(), _cw = new THREE.Color(0xffffff);
+  const CAP_PRE = .22, CAP_FILL = .75, CAP_POST = .3, CAP_DONE = .7, CAP_POP = 1.5;   // 弹大 / 灌条 / 缩回 / 占满后的闪光 + 冲击波（秒）；弹大倍数
+  const capHas = k => state.capStyle === 'combo' ? (k === 'bar' || k === 'wipe') : state.capStyle === k;
+  const hexCss = h => '#' + _cc.setHex(h).getHexString();
   const capB = cell => { const k = bldMap.get(cell[0] + ',' + cell[1]); return k && buildings.find(x => x.cell[0] === k.cell[0] && x.cell[1] === k.cell[1]); };
   const capArcGeo = f => new THREE.RingGeometry(CAP_R0, CAP_R1, 72, 1, Math.PI / 2, Math.max(.03, Math.PI * 2 * Math.min(1, f))).rotateX(-Math.PI / 2);
   const capMatOf = team => new THREE.MeshBasicMaterial({color: ACCENT_COL[team], transparent: true, opacity: .95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4});
-  function capRing(b, team, f) {
-    let r = capRings.get(b);
-    if (!r) { r = {mesh: new THREE.Mesh(capArcGeo(f), capMatOf(team)), f}; r.mesh.name = 'capRing'; r.mesh.renderOrder = 8; r.mesh.position.set(b.cell[0] * 2, groundY(b.cell[0], b.cell[1]) + .12, b.cell[1] * 2); scene.add(r.mesh); capRings.set(b, r); }
-    r.mesh.material.color.setHex(ACCENT_COL[team]); return r;
+  function capVisOf(b, team) {
+    let v = capVis.get(b); if (v) return v;
+    v = {b, team, f: 0, cap: 0, need: 20, pop: 1, fade: 1, pulse: 0}; capVis.set(b, v);
+    const cx = b.cell[0] * 2, cz = b.cell[1] * 2, gy = groundY(b.cell[0], b.cell[1]); v.cx = cx; v.cz = cz; v.gy = gy;
+    if (capHas('ring')) { const m = new THREE.Mesh(capArcGeo(0), capMatOf(team)); m.name = 'capRing'; m.renderOrder = 8; m.position.set(cx, gy + .12, cz); scene.add(m); v.ring = m; }
+    if (capHas('bar') && typeof document !== 'undefined') {
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64; const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: tex, depthTest: false, transparent: true})); sp.name = 'capBar'; sp.renderOrder = 22; scene.add(sp); v.bar = {cv, tex, sp, key: ''};
+    }
+    if (capHas('wipe')) {
+      const plane = new THREE.Plane(), pm = {transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3};
+      const ov = new THREE.Mesh(new THREE.PlaneGeometry(1.96, 1.96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({...pm, color: ACCENT_COL[team], opacity: .45, clippingPlanes: [plane]})); ov.name = 'capWipe'; ov.renderOrder = 6; ov.position.set(cx, gy + .08, cz); scene.add(ov);
+      const edge = new THREE.Mesh(new THREE.PlaneGeometry(.22, 1.96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({...pm, color: 0xffffff, opacity: .9})); edge.renderOrder = 9; edge.position.set(cx, gy + .14, cz); scene.add(edge);
+      const ghosts = []; b.visual.updateWorldMatrix(true, true);
+      b.visual.traverse(o => {   // 建筑真正在画的网格（性能层把零件合并成了 2 块）：复制一份，染色 + 同一个裁剪面
+        if (!o.isMesh || o.isInstancedMesh) return; for (let p = o; p; p = p.parent) if (!p.visible) return;
+        const m = o.material.clone(); m.userData = {}; m.clippingPlanes = [plane]; m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2;
+        const g = new THREE.Mesh(o.geometry, m); g.matrixAutoUpdate = false; g.matrix.copy(o.matrixWorld); g.renderOrder = o.renderOrder; g.userData.base = o.material.color.clone(); scene.add(g); ghosts.push(g);
+      });
+      v.wipe = {plane, ov, edge, ghosts};
+    }
+    return v;
   }
-  function capSet(r, f) { r.f = f; r.mesh.geometry.dispose(); r.mesh.geometry = capArcGeo(f); }
+  function capDrawBar(v) {
+    const bar = v.bar; if (!bar) return;
+    const f = Math.max(0, Math.min(1, v.f)), num = Math.round(f * v.need), key = num + '|' + v.team + '|' + Math.round(f * 230);
+    if (bar.key !== key) {
+      bar.key = key; const c = bar.cv.getContext('2d'), col = hexCss(ACCENT_COL[v.team]), lite = '#' + _cc.setHex(ACCENT_COL[v.team]).lerp(_cw, .4).getHexString();
+      c.clearRect(0, 0, 256, 64); c.fillStyle = 'rgba(8,20,42,.95)'; c.strokeStyle = '#fff'; c.lineWidth = 5; c.beginPath(); c.roundRect(5, 6, 246, 52, 17); c.fill(); c.stroke();
+      c.save(); c.beginPath(); c.roundRect(13, 14, 230, 36, 11); c.clip(); c.fillStyle = 'rgba(255,255,255,.14)'; c.fillRect(13, 14, 230, 36);
+      if (f > 0) { const g = c.createLinearGradient(0, 14, 0, 50); g.addColorStop(0, lite); g.addColorStop(1, col); c.fillStyle = g; c.fillRect(13, 14, 230 * f, 36); c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(13, 14, 230 * f, 9); }
+      c.restore();
+      const t = num + '/' + v.need; c.font = '900 28px -apple-system,PingFang SC,sans-serif'; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.lineJoin = 'round';
+      const m = c.measureText(t), tx = 128 - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, ty = 32 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+      c.lineWidth = 6; c.strokeStyle = 'rgba(8,20,42,.9)'; c.strokeText(t, tx, ty); c.fillStyle = '#fff'; c.fillText(t, tx, ty); bar.tex.needsUpdate = true;
+    }
+    const k = state.hpK * v.pop;   // 视距拉远时和血量角标一样按 hpK 放大，屏幕上不变小
+    bar.sp.scale.set(2.5 * k, .62 * k, 1); bar.sp.position.set(v.cx, v.gy + 2.4 * Math.max(1, state.hpK * .85), v.cz); bar.sp.material.opacity = v.fade;
+  }
+  function capWipe(v) {
+    const w = v.wipe; if (!w) return;
+    const a = state.camA, rx = Math.cos(a), rz = -Math.sin(a), f = Math.max(0, Math.min(1, v.f)), s = -1 + 2 * f;   // 擦除线在本格 [-1, 1] 上的位置（沿屏幕向右）
+    w.plane.normal.set(-rx, 0, -rz); w.plane.constant = rx * v.cx + rz * v.cz + s;
+    w.edge.position.set(v.cx + rx * s, v.gy + .14, v.cz + rz * s); w.edge.rotation.y = a; w.edge.visible = f > .01 && f < .995 && v.fade > .5;
+    w.edge.material.opacity = (.55 + .45 * v.pulse) * v.fade; w.ov.material.color.setHex(ACCENT_COL[v.team]); w.ov.material.opacity = (.5 + .2 * v.pulse) * v.fade;
+    for (const g of w.ghosts) { g.material.color.copy(g.userData.base).lerp(_cc.setHex(ACCENT_COL[v.team]), .72); g.visible = v.fade > .02; }
+  }
+  function capRender(v) {
+    if (v.ring) { v.ring.geometry.dispose(); v.ring.geometry = capArcGeo(v.f); v.ring.material.color.setHex(ACCENT_COL[v.team]); }
+    capDrawBar(v); capWipe(v);
+  }
   function capTint(b, from, to, f) {
     if (!b.capMat) b.capMat = accentOf('neutral').clone();
     b.capMat.color.setHex(ACCENT_COL[from]).lerp(_cc.setHex(ACCENT_COL[to]), f); setBuildingAccent(b.visual, b.capMat);
   }
-  function capClear(b) { const r = capRings.get(b); if (r) { scene.remove(r.mesh); r.mesh.geometry.dispose(); capRings.delete(b); } b.capMat = null; setBuildingAccent(b.visual, accentOf(b.owner)); }
+  function capClear(b) {
+    const v = capVis.get(b);
+    if (v) {
+      if (v.ring) { scene.remove(v.ring); v.ring.geometry.dispose(); v.ring.material.dispose(); }
+      if (v.bar) { scene.remove(v.bar.sp); v.bar.tex.dispose(); v.bar.sp.material.dispose(); }
+      if (v.wipe) { for (const o of [v.wipe.ov, v.wipe.edge]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); } for (const g of v.wipe.ghosts) { scene.remove(g); g.material.dispose(); } }
+      capVis.delete(b);
+    }
+    b.capMat = null; setBuildingAccent(b.visual, accentOf(b.owner));
+  }
+  function setCapStyle(st) { if (state.capStyle === st) return; state.capStyle = st; for (const b of [...capVis.keys()]) capClear(b); }   // 换样式：全部清掉，调用方再 setCaptureMarks 重建
   function setBuildingOwner(cell, owner) { const b = capB(cell); if (!b) return false; b.owner = owner; if (!capFx.some(e => e.b === b)) capClear(b); refreshBuildings(); return true; }
-  function setCaptureMarks(list) {   // list：[{cell, f（0–1 进度）, team（占领方）, from（原归属）}]，没在 list 里的建筑一律恢复本色
+  function setCaptureMarks(list) {   // list：[{cell, f（0–1 进度）, cap, need, team（占领方）, from（原归属）}]，没在 list 里的建筑一律恢复本色
     const keep = new Set();
-    for (const m of list) { const b = capB(m.cell); if (!b || capFx.some(e => e.b === b)) continue; keep.add(b); capSet(capRing(b, m.team, m.f), m.f); capTint(b, m.from, m.team, m.f); }
-    for (const b of [...capRings.keys()]) if (!keep.has(b) && !capFx.some(e => e.b === b)) capClear(b);
+    for (const m of list) {
+      const b = capB(m.cell); if (!b || capFx.some(e => e.b === b)) continue; keep.add(b);
+      const v = capVisOf(b, m.team); Object.assign(v, {team: m.team, f: m.f, cap: m.cap, need: m.need, pop: 1, fade: 1, pulse: 0}); capRender(v); capTint(b, m.from, m.team, m.f);
+    }
+    for (const b of [...capVis.keys()]) if (!keep.has(b) && !capFx.some(e => e.b === b)) capClear(b);
     for (const b of buildings) if (b.capMat && !keep.has(b) && !capFx.some(e => e.b === b)) capClear(b);
   }
-  function playCapture(cell, o, onDone) {   // o = {team, from, f0, f1, done}
+  function playCapture(cell, o, onDone) {   // o = {team, from, f0, f1, need, done}
     const b = capB(cell); if (!b) { if (onDone) onDone(); return; }
-    capSet(capRing(b, o.team, o.f0), o.f0); capTint(b, o.from, o.team, o.f0);
-    capFx.push({b, o, t: 0, onDone, shock: null});
+    const v = capVisOf(b, o.team); Object.assign(v, {team: o.team, f: o.f0, need: o.need || 20, pop: 1, fade: 1, pulse: 0}); capRender(v); capTint(b, o.from, o.team, o.f0);
+    capFx.push({b, v, o, t: 0, onDone, shock: null});
   }
-  const CAP_T1 = .75, CAP_T2 = .7;   // 进度环走满用时 / 占领完成后的闪光 + 冲击波用时
+  const easeOut = k => 1 - Math.pow(1 - k, 3);
   function updateCaptureFx(dt) {
     const fin = [];
     for (const e of capFx) {
-      e.t += dt; const {b, o} = e, r = capRings.get(b), k1 = Math.min(1, e.t / CAP_T1), f = o.f0 + (o.f1 - o.f0) * (1 - Math.pow(1 - k1, 3));
-      if (r) capSet(r, f); capTint(b, o.from, o.team, f);
-      if (!o.done) { if (e.t >= CAP_T1 + .2) fin.push(e); continue; }
-      if (e.t < CAP_T1) continue;
-      if (!e.shock) { e.shock = new THREE.Mesh(new THREE.RingGeometry(.9, 1.02, 72).rotateX(-Math.PI / 2), capMatOf(o.team)); e.shock.renderOrder = 8; e.shock.position.set(b.cell[0] * 2, groundY(b.cell[0], b.cell[1]) + .1, b.cell[1] * 2); scene.add(e.shock); b.owner = o.team; }
-      const k2 = Math.min(1, (e.t - CAP_T1) / CAP_T2);
+      e.t += dt; const {b, v, o} = e, pre = v.bar ? CAP_PRE : 0, k1 = Math.min(1, Math.max(0, (e.t - pre) / CAP_FILL)), f = o.f0 + (o.f1 - o.f0) * easeOut(k1), tEnd = pre + CAP_FILL;
+      v.f = f; v.pulse = .5 + .5 * Math.sin(e.t * 22);
+      if (v.bar) v.pop = e.t < pre ? 1 + (CAP_POP - 1) * easeOut(e.t / pre) : (o.done || e.t < tEnd) ? CAP_POP : CAP_POP - (CAP_POP - 1) * easeOut(Math.min(1, (e.t - tEnd) / CAP_POST));
+      capTint(b, o.from, o.team, f);
+      if (!o.done) { capRender(v); if (e.t >= tEnd + (v.bar ? CAP_POST : .2)) { v.pulse = 0; capRender(v); fin.push(e); } continue; }
+      if (e.t < tEnd) { capRender(v); continue; }
+      if (!e.shock) { e.shock = new THREE.Mesh(new THREE.RingGeometry(.9, 1.02, 72).rotateX(-Math.PI / 2), capMatOf(o.team)); e.shock.renderOrder = 8; e.shock.position.set(v.cx, v.gy + .1, v.cz); scene.add(e.shock); b.owner = o.team; }
+      const k2 = Math.min(1, (e.t - tEnd) / CAP_DONE);
       b.capMat.color.copy(_cw).lerp(_cc.setHex(ACCENT_COL[o.team]), Math.min(1, k2 * 1.6));   // 灯带：白 → 新主人色
-      e.shock.scale.setScalar(1 + 1.4 * (1 - Math.pow(1 - k2, 2))); e.shock.material.opacity = (1 - k2) * .9;
-      if (r) r.mesh.material.opacity = (1 - k2) * .95;
+      e.shock.scale.setScalar(1 + 1.4 * easeOut(k2)); e.shock.material.opacity = (1 - k2) * .9;
+      v.fade = 1 - k2 * k2; v.pulse = 1 - k2; if (v.ring) v.ring.material.opacity = (1 - k2) * .95; capRender(v);
       if (k2 >= 1) fin.push(e);
     }
     for (const e of fin) {
@@ -610,6 +677,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setHpView(o) {   // 0.75：改角标放大倍数 k / 左移量 tuck 后，把所有已显示的角标重新摆一遍
     if (o.k !== undefined) state.hpK = o.k; if (o.tuck !== undefined) state.hpTuck = o.tuck;
     for (const u of units) if (u.hpBadge && u.hpBadge.visible) syncHpBadge(u, u.path ? u.curY : groundY(u.cell[0], u.cell[1], u));
+    if (typeof capVis !== 'undefined') for (const v of capVis.values()) capDrawBar(v);   // 0.78：头顶占领条也跟着视距放大
   }
   function setHp(id, n) { const u = units.find(o => o.spec.id === id && !o.dying); if (!u || u.hpN === n) return; u.hpN = n; syncUnit(u); }
   // 0.66：「已行动」标记 = 脚下一圈深灰环（0.65 的头顶「休」牌你不喜欢，已去掉）。引擎 acted → setActed(id, on)
@@ -618,7 +686,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function setActed(id, on) {
     const u = units.find(o => o.spec.id === id); if (!u) return false;
     on = !!on; if (!!u.acted === on) return true;
-    u.acted = on;
+    u.acted = on; u.grayT = on ? 1 : 0;   // 0.78：已行动 → 部队慢慢变灰（高战式）
     if (on && !u.amark) { u.amark = new THREE.Mesh(actedGeo, actedMat); u.amark.renderOrder = 4; scene.add(u.amark); }
     if (u.amark) u.amark.visible = on && state.units;
     syncUnit(u); return true;
@@ -829,7 +897,13 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       for (const u of done) { if (u.actors) for (const a of u.actors) a.setMode(state.infPose); u.aimLock = false; const cb = u.atk.onDone; u.atk = null; cb(); }
       for (const u of gone) disposeUnit(u);
     }
+    for (const u of units) if (u.grayK !== u.grayT) {   // 变灰 / 复色：0.25 秒缓动
+      u.grayK += (u.grayT - u.grayK) * Math.min(1, dt * 14); if (Math.abs(u.grayK - u.grayT) < .01) u.grayK = u.grayT;
+      if (u.grayMats) for (const m of u.grayMats) setMatGray(m, u.grayK);
+      const a = u.actors && u.actors[0]; if (a && a.unit) a.unit.userData.gray = u.grayK; moving = true;
+    }
     if (capFx.length && updateCaptureFx(dt)) moving = true;
+    for (const v of capVis.values()) if (v.wipe && !capFx.length) capWipe(v);   // 镜头转了，擦除方向跟着转
     { const k = 1 - Math.exp(-12 * dt);
       for (const b of buildings) {
         let ch = false;
@@ -961,7 +1035,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

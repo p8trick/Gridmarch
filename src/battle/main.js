@@ -45,6 +45,8 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
     <li><button class="item" data-act="hptuck"><span class="txt"><span class="main">血量角标左移</span><span class="pst" id="pTuckSt">40%</span></span></button></li>
     <li class="pnote">角标左边压进模型的量（占角标宽度）：0% = 角标整块在模型右下角外面，数值越大越贴向模型。点一下换下一档</li>
+    <li><button class="item" data-act="capstyle"><span class="txt"><span class="main">占领进度表现</span><span class="pst" id="pCapSt">条+染色</span></span></button></li>
+    <li class="pnote">占领时怎么显示进度：脚下环 / 头顶进度条 / 地块和建筑从左到右染色 / 条 + 染色。点一下换下一种，去占一次看效果</li>
     <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
     <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
     <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
@@ -78,7 +80,7 @@ world = buildWorld({preset});
 const L = preset.layout;
 world.setShadowRadius(33);   // 视距 11 格时画面对角约 ±22：阴影范围放大到 ±33（2048 贴图下约每格 62 像素；原 9 格 ±27 时是 80）
 
-renderer = new THREE.WebGLRenderer({antialias: true});
+renderer = new THREE.WebGLRenderer({antialias: true}); renderer.localClippingEnabled = true;   // 0.78：占领「染色」样式用裁剪面做从左到右的擦除
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -93,7 +95,7 @@ const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cel
 // 0.65：引擎里每个单位的 acted → 战场单位头顶「休」标记（生产、换回合后同步；以后移动 / 待命也走这里）
 const TEAM = ['blue', 'red'];
 // 0.77：占领进度同步到战场（建筑脚下的进度环 + 灯带渐变）：引擎里 cap > 0 的单位 = 正在占领；单位走开 / 被打死 / 占完后进度归零，这里会自动把建筑恢复本色
-const syncCaps = () => world.setCaptureMarks(game.units.filter(u => u.cap > 0).map(u => { const o = game.owners[u.x + ',' + u.y]; return {cell: toWorld([u.x, u.y]), f: u.cap / RULE_TERRAINS[game.terrain[u.y][u.x]].capture, team: TEAM[u.owner], from: o === undefined ? 'neutral' : TEAM[o]}; }));
+const syncCaps = () => world.setCaptureMarks(game.units.filter(u => u.cap > 0).map(u => { const o = game.owners[u.x + ',' + u.y]; return {cell: toWorld([u.x, u.y]), f: u.cap / RULE_TERRAINS[game.terrain[u.y][u.x]].capture, cap: u.cap, need: RULE_TERRAINS[game.terrain[u.y][u.x]].capture, team: TEAM[u.owner], from: o === undefined ? 'neutral' : TEAM[o]}; }));
 const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted); world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
@@ -223,7 +225,7 @@ function doCapture() {
   const team = TEAM[u.owner], from = prev === undefined ? 'neutral' : TEAM[prev];
   const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
   popup(id, r.done ? '占领成功！' : '占领 ' + r.cap + '/' + r.need, 'cap ' + (u.owner === 0 ? 'b' : 'r'));
-  if (combatOn) world.playCapture(cell, {team, from, f0: (r.cap - r.gain) / r.need, f1: r.done ? 1 : r.cap / r.need, done: r.done}, fin);
+  if (combatOn) world.playCapture(cell, {team, from, f0: (r.cap - r.gain) / r.need, f1: r.done ? 1 : r.cap / r.need, need: r.need, done: r.done}, fin);
   else { if (r.done) world.setBuildingOwner(cell, team); fin(); }
 }
 bar.addEventListener('click', e => {
@@ -381,6 +383,11 @@ const TUCK_KEY = 'gridmarch.hpTuck', TUCKS = [0, 25, 40, 50];
 let tuckPct = 40; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.includes(v) && localStorage.getItem(TUCK_KEY) !== null) tuckPct = v; } catch (e) {}
 const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
 tuckRender();
+// 占领进度表现（0.78）：环 / 头顶条 / 染色 / 条+染色，存 localStorage gridmarch.capStyle
+const CAPSTYLES = [['ring', '脚下环'], ['bar', '头顶条'], ['wipe', '地块染色'], ['combo', '条+染色']], CAP_KEY = 'gridmarch.capStyle';
+let capStyle = 'combo'; try { const v = localStorage.getItem(CAP_KEY); if (CAPSTYLES.some(c => c[0] === v)) capStyle = v; } catch (e) {}
+const capStyleRender = () => { $('pCapSt').textContent = CAPSTYLES.find(c => c[0] === capStyle)[1]; world.setCapStyle(capStyle); syncCaps(); mark(); };
+capStyleRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
@@ -394,6 +401,7 @@ pause.addEventListener('click', e => {
   else if (a === 'back') setPage(false);
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
+  else if (a === 'capstyle') { capStyle = CAPSTYLES[(CAPSTYLES.findIndex(c => c[0] === capStyle) + 1) % CAPSTYLES.length][0]; try { localStorage.setItem(CAP_KEY, capStyle); } catch (e) {} capStyleRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
