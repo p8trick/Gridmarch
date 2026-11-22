@@ -125,12 +125,13 @@ t('弹药：主武器每次出手消耗 1，机枪不耗', () => {
   attack(g2, 1, 2); assert.equal(g2.units[0].ammo, 9);
 });
 
-t('沼泽：回合结束掉 1 格血，会致死', () => {
+t('沼泽（0.84）：自己结束回合不扣，等对方也结束、轮回自己时才掉 1 格血，会致死', () => {
   const m = map(3, 1); m[0][1] = 'swamp';
   const g = createGame({terrain: m, units: [{type: 'inf', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 0, x: 0, y: 0, hp: 100}, {type: 'inf', owner: 1, x: 2, y: 0}]});
-  endTurn(g); assert.equal(unitAt(g, 1, 0).hp, 90);
+  endTurn(g); assert.equal(unitAt(g, 1, 0).hp, 100);   // 蓝军结束回合：不扣
+  endTurn(g); assert.equal(g.turn, 0); assert.equal(unitAt(g, 1, 0).hp, 90);   // 红军也结束、轮回蓝军：这时才扣
   const g2 = createGame({terrain: m, units: [{type: 'inf', owner: 0, x: 1, y: 0, hp: 10}, {type: 'inf', owner: 1, x: 2, y: 0}]});
-  endTurn(g2); assert.equal(g2.winner, 1);
+  endTurn(g2); assert.equal(g2.winner, null); endTurn(g2); assert.equal(g2.winner, 1);   // 轮回自己时被扣死 → 红军获胜
 });
 
 t('回合与胜负：换人、日期、行动重置；歼灭取胜', () => {
@@ -253,14 +254,14 @@ t('断崖 / 浅滩（0.82）：全部陆军单位都能走上去（消耗 1）�
   }
 });
 
-t('沼泽掉血清单（0.83）：endTurn 返回 swamp [{id, damage, dead}]，战场据此演飘字 / 倒下', () => {
-  const mk = hp => createGame({terrain: map(4, 1).map(r => { r[1] = 'swamp'; return r; }), units: [{type: 'inf', owner: 0, x: 1, y: 0, hp}, {type: 'inf', owner: 0, x: 0, y: 0, hp: 50}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+t('沼泽掉血清单（0.83 / 0.84）：轮回自己那次 endTurn 返回 swamp [{id, damage, dead}]，战场据此演飘字 / 倒下', () => {
+  const mk = hp => { const g = createGame({terrain: map(4, 1).map(r => { r[1] = 'swamp'; return r; }), units: [{type: 'inf', owner: 0, x: 1, y: 0, hp}, {type: 'inf', owner: 0, x: 0, y: 0, hp: 50}, {type: 'inf', owner: 1, x: 3, y: 0}]}); endTurn(g); return g; };   // 先让蓝军结束一次，下面那次 endTurn（红军结束）才轮回蓝军
   let g = mk(50), r = endTurn(g);
   assert.deepEqual(r.swamp, [{id: 1, damage: 10, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 40);   // 平地上的单位不在清单里
   g = mk(10); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 10, dead: true}]); assert.equal(unitAt(g, 1, 0), undefined);
   g = mk(5); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 5, dead: true}]);   // 只剩 5 点：实际只掉 5
   g = createGame({terrain: map(4, 1).map(r2 => { r2[1] = 'swamp'; return r2; }), config: {swampKills: false}, units: [{type: 'inf', owner: 0, x: 1, y: 0, hp: 5}, {type: 'inf', owner: 1, x: 3, y: 0}]});
-  r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 4, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 1);   // 不致死：留 1 点，实际掉 4
+  endTurn(g); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 4, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 1);   // 不致死：留 1 点，实际掉 4
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);

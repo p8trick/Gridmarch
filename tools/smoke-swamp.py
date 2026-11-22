@@ -1,5 +1,5 @@
-# 沼泽掉血动画冒烟测试（0.83；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# 蓝军一个单位站沼泽（血 50）、另一个站沼泽（血 10，会被扣死），红军一个残血单位在己方总部 → 结束蓝军回合 →
+# 沼泽掉血动画冒烟测试（0.83；0.84 改规则：沼泽在「轮回到自己」的回合开始才扣，所以这里站沼泽的是红军；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
+# 红军一个单位站沼泽（血 50）、另一个站沼泽（血 10，会被扣死），红军另一个残血单位在己方总部 → 结束蓝军回合（轮回红军）→
 # 沼泽红色「-1」飘字和修理绿色「+2」在同一刻（相差 < 250ms）出现；血 10 的那个倒下（画面里的模型被拿掉，引擎里也没了）；
 # 动画期间点屏幕被挡，演完状态条资金 = 引擎资金。出错直接 assert。
 from playwright.sync_api import sync_playwright
@@ -14,7 +14,7 @@ with sync_playwright() as p:
     ids = pg.evaluate('''()=>{
       const B=window.battle,g=B.game; const hq=Object.keys(g.owners).find(k=>g.owners[k]===1&&g.terrain[+k.split(',')[1]][+k.split(',')[0]]==='hq');
       const [hx,hy]=hq.split(',').map(Number); const red=g.units.find(q=>q.owner===1&&!(q.x===hx&&q.y===hy)), occ=g.units.find(q=>q.x===hx&&q.y===hy);
-      const blues=g.units.filter(q=>q.owner===0).slice(0,2);
+      const blues=g.units.filter(q=>q.owner===1&&q!==red).slice(0,2);   // （变量名沿用 blues，其实是红军的两个沼泽单位）
       const put=(u,x,y)=>{u.x=x;u.y=y;B.world.placeAt(B.world.unitById(u.id),B.toWorld([x,y]));};
       if(occ) put(occ, red.x, red.y);
       put(red,hx,hy); red.hp=50;
@@ -26,7 +26,7 @@ with sync_playwright() as p:
       return {alive:blues[0].id, dead:blues[1].id, red:red.id};}''')
     pg.click('#hudL'); pg.wait_for_timeout(200); pg.click('.endp .sbtn.gold'); pg.wait_for_timeout(250)
     eng = pg.evaluate('(i)=>({hp:window.battle.game.units.find(u=>u.id===i.alive)?.hp, dead:!window.battle.game.units.some(u=>u.id===i.dead), redhp:window.battle.game.units.find(u=>u.id===i.red).hp})', ids)
-    assert eng == {'hp':40,'dead':True,'redhp':70}, ('引擎应已结算', eng)
+    assert eng == {'hp':40,'dead':True,'redhp':70}, ('引擎应已结算（轮回红军：沼泽 -10、修理 +20）', eng)
     pg.wait_for_function('Object.keys(window.__t).length>=2', timeout=15000)
     pg.mouse.click(437,200); assert pg.evaluate('()=>document.querySelector("#dp").hidden'), '动画期间点击没被挡住'
     t = pg.evaluate('()=>window.__t'); keys = list(t)

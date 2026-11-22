@@ -343,7 +343,7 @@ function doEndTurn() {
   if (fx) { if (r.fundsBefore !== undefined) econShown = r.fundsBefore; econBusy = true; for (const q of reps) holdHp.add(q.id); for (const q of swamp) if (!q.dead) holdHp.add(q.id); }
   else for (const q of swamp) if (q.dead) world.removeUnit(q.id, false);   // 沼泽扣死的单位：引擎里已经没了，画面里也要拿掉
   syncActed(); hud(); infoUpdate(); mark();
-  if (game.winner === null) playBanner();   // 沼泽扣光对方：不换人，没有「第 N 天」横幅，演完直接报胜负
+  if (game.winner === null) playBanner();   // 沼泽把轮到的这一方扣光：对方直接获胜，不放「第 N 天」横幅，演完直接报胜负
   if (fx) playEconomy(r); else if (game.winner !== null) showWinner();
 }
 // 0.81 回合开始的经济动画（规则在 engineEndTurn 里已经结算好，这里只是演）：横幅快滑出时 → 状态条下方飘「+收入」，资金数字滚动涨上去 →
@@ -380,7 +380,7 @@ function playEconomy(r) {
     else later(finish, 1000);
   };
   const incomePhase = () => {
-    if (!(r.income > 0)) return repairPhase();   // （沼泽扣光对方时 income 是 undefined，直接进下一段）
+    if (!(r.income > 0)) return repairPhase();   // （没有收入就直接进下一段）
     fxMoney('+' + r.income, 'in');
     later(() => tweenFunds(r.fundsBefore, after, 700, () => later(repairPhase, 450)), 250);
   };

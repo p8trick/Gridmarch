@@ -2,8 +2,8 @@ import {planWater, validateLayout} from '../map-builder.js';
 
 // 第一关：20×12，红蓝左右镜像（x → -1-x）。蓝方在西，红方在东。
 // 一切都由 seed 决定（同一个 seed 永远生成同一张图），不同 seed 的图差别很大：
-//   · 水域：中央大湖（大小不同）/ 不规则湖 / 左右各一池 / 没有湖；湖上有时横跨一座跨海桥
-//   · 河流：每一侧可能有一条竖向小河，河上一座公路桥
+//   · 水域：中央大湖（大小不同）/ 不规则湖 / 左右各一池 / 贴着上缘或下缘的不规则海湾（0.84）/ 没有湖；矩形湖上有时横跨一座跨海桥
+//   · 河流：每一侧可能有一条小河（0.84 起会拐弯、绕圈，不再只是竖线），河上一座公路桥
 //   · 基地行号、城市位置、公路走向、山、沙漠、沼泽、树林
 // 随机只在西半边（蓝方）生成，再镜像到东半边，所以双方地形完全对称、公平。
 // 单位不在这里：开局单位、生产由规则引擎负责。
@@ -37,7 +37,7 @@ function build(seed, attempt) {
 
   // ── 水域：湖（海岸交给 MT2 规划，西岸浅滩、东岸断崖）──
   const sea = new Set(), addSea = (x, z) => { sea.add(key(x, z)); sea.add(key(mir(x), z)); };
-  const r0 = rnd(), lakeKind = r0 < .40 ? 'rect' : r0 < .65 ? 'blob' : r0 < .85 ? 'twin' : 'none';
+  const r0 = rnd(), lakeKind = r0 < .30 ? 'rect' : r0 < .50 ? 'blob' : r0 < .65 ? 'twin' : r0 < .90 ? 'edge' : 'none';   // 0.84：新增 edge（贴边海湾），各类占比重新分配
   let rectInfo = null;
   if (lakeKind === 'rect') {   // 居中的矩形湖：半宽 2–3，高 2–3
     const a = ri(2, 3), H = ri(2, 3), zt = H === 2 ? ri(-2, 0) : ri(-2, -1);
@@ -54,6 +54,14 @@ function build(seed, attempt) {
     const w = ri(2, 3), h = ri(2, 3), x0 = ri(-6, -3 - w + 1), z0 = ri(-4, 1);
     for (let x = x0; x < x0 + w; x++) for (let z = z0; z < z0 + h; z++) addSea(x, z);
   }
+  else if (lakeKind === 'edge') {   // 0.84：贴着棋盘上缘或下缘的不规则海湾：从边缘一格长出来，深入不超过 1–3 行；镜像后左右各一个（起点靠近中线时在中线连成一个）
+    const zb = rnd() < .5 ? Z0 : Z1, depth = ri(1, 3), target = ri(5, 11), cells = [[ri(-7, -1), zb]];
+    for (let g = 0; cells.length < target && g < 160; g++) {
+      const [x, z] = pick(cells), [dx, dz] = pick(N4), nx = x + dx, nz = z + dz;
+      if (nx >= -8 && nx <= -1 && nz >= Z0 && nz <= Z1 && Math.abs(nz - zb) <= depth && !apron.has(key(nx, nz)) && !cells.some(c => c[0] === nx && c[1] === nz)) cells.push([nx, nz]);
+    }
+    cells.forEach(([x, z]) => addSea(x, z));
+  }
   const outside = [...rect(X0 - 1, X0 - 1, Z0 - 1, Z1 + 1), ...rect(X1 + 1, X1 + 1, Z0 - 1, Z1 + 1), ...rect(X0, X1, Z0 - 1, Z0 - 1), ...rect(X0, X1, Z1 + 1, Z1 + 1)];
   const preset = {
     name: '第一关', x: [X0, X1], z: [Z0, Z1], seed: 7, levelSeed: seed,
@@ -67,20 +75,26 @@ function build(seed, attempt) {
   const bld = new Set(WEST.map(b => key(...b.cell)));
   for (const b of WEST) if (!west(...b.cell)) throw Error('基地被水占了');
 
-  // ── 河：西半边一条竖向小河（带一点弯），中间一段笔直处架公路桥；整条河离海岸、棋盘外缘、基地都要有距离 ──
+  // ── 河：西半边一条小河，会拐弯（0.84：随机走法 = 向下 / 偶尔横着走 1–3 格再向下，两次横走之间必须先向下走一格，不再只是竖线 + 偶尔一格侧移），
+  //    中间一段笔直处架公路桥；整条河离海岸、棋盘外缘、基地都要有距离，且河不能自己贴自己（不相邻的两格至少隔一格，否则河会糊成一团）──
   const river = []; let bridgeA = null;
-  if (rnd() < .75) for (let tries = 0; tries < 12 && !river.length; tries++) {   // 河的位置不合适（碰到水岸 / 基地）就换一条再试
-    const x0 = ri(-6, -4), len = ri(6, 8), z0 = ri(-5, 4 - len + 1);
-    let x = x0, z = z0; river.push([x, z]);
-    while (river.length < len) {
-      const dx = rnd() < .25 ? pick([-1, 1]) : 0;
-      if (dx && x + dx >= -6 && x + dx <= -4) { x += dx; } else z++;
-      river.push([x, z]);
+  if (rnd() < .75) for (let tries = 0; tries < 80 && !river.length; tries++) {   // 河的位置不合适（碰到水岸 / 基地 / 自己）就换一条再试
+    const x0 = ri(-7, -3), len = ri(7, 11), z0 = ri(-5, -3), cand = [[x0, z0]];
+    let run = 0, dir = 0, lastH = false;
+    while (cand.length < len) {
+      let [x, z] = cand[cand.length - 1];
+      if (run > 0) { x += dir; run--; lastH = true; }
+      else if (!lastH && rnd() < .38) { dir = x <= -6 ? 1 : x >= -3 ? -1 : pick([-1, 1]); run = ri(1, 3) - 1; x += dir; lastH = true; }
+      else { z++; lastH = false; }
+      if (x < -7 || x > -3 || z > Z1 - 1) break;
+      cand.push([x, z]);
     }
-    const inR = new Set(river.map(c => key(...c)));
-    const ok = river.every(([x, z]) => z > Z0 && z < Z1 && x > X0 && !apron.has(key(x, z)) && N8.every(([a, b]) => { const k = key(x + a, z + b); return inR.has(k) || (plan.type.get(k) === 'land' && !bld.has(k)); }));
-    const straight = river.map((c, i) => i > 0 && i < river.length - 1 && river[i - 1][0] === c[0] && river[i + 1][0] === c[0] && river[i - 1][1] !== river[i + 1][1] && isLand(c[0] - 1, c[1]) && isLand(c[0] + 1, c[1]) && !inR.has(key(c[0] - 1, c[1])) && !inR.has(key(c[0] + 1, c[1])) ? i : -1).filter(i => i >= 0);
-    if (ok && straight.length) { bridgeA = river[pick(straight)]; } else river.length = 0;
+    if (cand.length < 6) continue;
+    const inR = new Set(cand.map(c => key(...c)));
+    const selfTouch = cand.some((c, i) => cand.some((d, j) => j - i >= 3 && Math.max(Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1])) < 2));
+    const ok = !selfTouch && cand.every(([x, z]) => z > Z0 && z < Z1 && x > X0 && !apron.has(key(x, z)) && N8.every(([a, b]) => { const k = key(x + a, z + b); return inR.has(k) || (plan.type.get(k) === 'land' && !bld.has(k)); }));
+    const straight = cand.map((c, i) => i > 0 && i < cand.length - 1 && cand[i - 1][0] === c[0] && cand[i + 1][0] === c[0] && cand[i - 1][1] !== cand[i + 1][1] && isLand(c[0] - 1, c[1]) && isLand(c[0] + 1, c[1]) && !inR.has(key(c[0] - 1, c[1])) && !inR.has(key(c[0] + 1, c[1])) ? i : -1).filter(i => i >= 0);
+    if (ok && straight.length) { river.push(...cand); bridgeA = river[pick(straight)]; }
   }
   const riverSet = new Set(river.map(c => key(...c)));
   const bridgeKey = bridgeA ? key(...bridgeA) : null;

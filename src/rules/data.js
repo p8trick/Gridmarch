@@ -8,7 +8,7 @@ export const CONFIG = {
   ammo: true,          // 弹药：主武器耗弹，打光后只能用副武器（机枪）
   fuel: false,         // 燃料：0.33 先关，移动只受移动力限制
   joinRefund: 0.9,     // 合流溢出血量的返现比例（合流本身等定价后实现）
-  swampDamage: 10,     // 沼泽：回合结束时站在上面的陆军掉 1 格血（内部血量 10 点 = 显示 1 格）；可致死
+  swampDamage: 10,     // 沼泽：每次轮回到自己这一方的回合开始时（0.84 起；以前是自己回合结束时），站在上面的陆军掉 1 格血（内部血量 10 点 = 显示 1 格）；可致死
   swampKills: true,
   incomeMul: 1,        // 整体收入倍率（以后做 AI 难度档位用）
   repair: true,        // 0.81：回合开始，己方陆军站在己方城市 / 总部 / 兵工厂上 = 修理 + 补给弹药燃料（高战规则，机场 / 船坞只修空军 / 海军，现在没有）
@@ -69,7 +69,7 @@ export const TERRAINS = {
   // 以下是我们自己的设计【草案】
   cliff:      {name: '断崖',   stars: 0, cost: {...P}, noNaval: true},   // 0.82：断崖海岸改成陆军可站（全部陆军单位，消耗 1；防御星暂定 0 与浅滩一致）；海军不能进
   desert:     {name: '沙漠',   stars: 0, cost: {foot: 2, mech: 2, tread: 2, wheel: 3}},                // 拖慢移动，无遮蔽
-  swamp:      {name: '沼泽',   stars: 0, cost: {foot: 2, mech: 2, tread: 3, wheel: 4}, hazard: true}, // 拖慢移动；回合结束掉血（见 CONFIG）
+  swamp:      {name: '沼泽',   stars: 0, cost: {foot: 2, mech: 2, tread: 3, wheel: 4}, hazard: true}, // 拖慢移动；轮回自己时回合开始掉血（见 CONFIG）
 };
 
 // ── 伤害表：基础伤害 %（攻击方行 → 目标列），数组顺序 = TARGET_ORDER；null = 打不了 ──

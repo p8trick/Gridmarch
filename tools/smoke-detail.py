@@ -12,7 +12,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width':W,'height':H}); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=11')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
     scr = lambda c: pg.evaluate('''(c)=>{const b=window.battle,T=b.THREE,w=b.world;const v=new T.Vector3(c[0]*2,w.surfaceY(c[0],c[1])+.1,c[1]*2).project(b.cam.cam);const s=document.querySelector("#stage").getBoundingClientRect();return [(v.x+1)/2*window.__sw,(1-v.y)/2*window.__sh]}''', c)
@@ -72,8 +72,8 @@ with sync_playwright() as p:
     pos2 = scr(cellOf(*empty)); hold(pos2); s = st(); assert s['det'] == 1 and s['boxes'] == 1, ('长按空地应只有地形盒', s)
     pg.mouse.up(); pg.wait_for_timeout(300); pg.screenshot(path='/tmp/det_plain.png'); pg.mouse.click(20, H // 2); pg.wait_for_timeout(300)
     log('兵工厂')
-    # 4 自己的兵工厂（本回合一方）：长按 → 详细面板，不是生产界面
-    f = pg.evaluate('()=>{const b=window.battle,g=b.game;for(const k in g.owners){const [x,y]=k.split(",").map(Number);if(g.terrain[y][x]==="factory"&&g.owners[k]===g.turn)return [x,y]}}')
+    # 4 自己的兵工厂（本回合一方；0.84：种子换成 11——0.84 改了关卡生成，种子 7 的地图在屏幕左缘正好有个单位，第 78 行「点左缘关面板」会误选它，再点厂就成了「移动到厂上」；厂被占住时本来就打不开生产界面）：长按 → 详细面板，不是生产界面
+    f = pg.evaluate('()=>{const b=window.battle,g=b.game;for(const k in g.owners){const [x,y]=k.split(",").map(Number);if(g.terrain[y][x]==="factory"&&g.owners[k]===g.turn&&!g.units.some(u=>u.x===x&&u.y===y))return [x,y]}}')
     pos3 = scr(cellOf(*f)); hold(pos3); s = st(); assert s['det'] == 1 and s['ars'] == 0, ('长按己方兵工厂应出详细面板而不是生产界面', s)
     pg.mouse.up(); pg.wait_for_timeout(300); pg.mouse.click(20, H // 2); pg.wait_for_timeout(300)
     pg.mouse.click(*pos3); pg.wait_for_timeout(500); s = st(); assert s['ars'] == 1 and s['det'] == 0, ('点按己方兵工厂应仍是生产界面', s)

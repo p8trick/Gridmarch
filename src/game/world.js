@@ -276,29 +276,35 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
   }
   rebuildBoard();
-  // 浅滩/断崖格：格内约 3/4 是陆地、其余是水。0.83：站位「尽量贴格心」——在格内按 0.1 间距采样地表，取离格心最近的合格点：
-  //   断崖：合格 = 站得住（高于水面）且离最近的水面 / 无地面采样点 ≥ CLIFF_EDGE（脚边留一点，单位贴着悬崖边缘站，格心离崖边够远时就站在正中）；
-  //   浅滩：合格 = 沙面，或离沙面不超过 WADE_REACH 的浅水（涉水站着也不违和）；水深一律不低于水面。
-  // 这样大多数海岸格单位就在格心，只有转角 / 窄岸才被推向陆地。高度取该点真实地表（不低于水面）。不依赖美术组件的 groundAnchor（它按「最高处」挑点）。
-  const coastOff = new Map(), coastY = new Map(), LAND_Y = -.28, CLIFF_EDGE = .22, WADE_REACH = .3;
+  // 浅滩/断崖格：格内约 3/4 是陆地、其余是水。站位「尽量贴格心」：以 0.1 为间距把格内的点按离格心由近到远排好，逐个试，第一个合格的就是站位（通常第 1 个就合格，只采几个点）：
+  //   断崖：合格 = 站得住（高于水面）且周围约 0.2–0.28 范围内也都站得住（脚边留一点，贴着崖边站；崖边离格心够远时就站正中）；
+  //   浅滩：合格 = 沙面，或水面点但 0.3 内有沙面（涉水站着也不违和）。
+  // 0.84 注意：water.surfaceAt 在水面上一次要 ~5ms（陆地才 ~0.5ms），所以必须「按需采样 + 缓存」，不能整格铺满采样（0.83 铺满采样，第一次点海岸附近的单位要卡好几秒）；
+  // 全部海岸格在建场景时一次算好（见下面的预算循环），点击时只查缓存。高度取该点真实地表，不依赖美术组件的 groundAnchor（它按「最高处」挑点）。
+  const coastOff = new Map(), coastY = new Map(), LAND_Y = -.28, G = .1, GN = 9;
+  const GRID = []; for (let i = -GN; i <= GN; i++) for (let j = -GN; j <= GN; j++) GRID.push([i, j, Math.hypot(i, j)]);
+  GRID.sort((p, q) => p[2] - q[2] || p[1] - q[1] || p[0] - q[0]);
+  const CLIFF_RING = [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [2, -2], [-2, 2], [-2, -2]], WADE_RING = [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [2, -2], [-2, 2], [-2, -2]];
   const coastOffset = (cx, cz) => {
     const k = cx + ',' + cz; let o = coastOff.get(k);
     if (!o) {
-      const cliff = water.typeAt(cx, cz) === 'cliff', S = .1, N = 9, pts = [], dry = [], wet = [];
-      for (let i = -N; i <= N; i++) for (let j = -N; j <= N; j++) {
-        const dx = i * S, dz = j * S, h = water.surfaceAt(cx * 2 + dx, cz * 2 + dz), p = [dx, dz, Math.hypot(dx, dz)];
-        if (h && h.y >= LAND_Y) { pts.push(p); dry.push(p); } else { wet.push(p); if (h) p.water = true; }
+      const cliff = water.typeAt(cx, cz) === 'cliff', memo = new Map();
+      const H = (i, j) => { const m = i + ',' + j; let v = memo.get(m); if (v === undefined) { const h = water.surfaceAt(cx * 2 + i * G, cz * 2 + j * G); v = h ? h.y : -9; memo.set(m, v); } return v; };
+      const dry = (i, j) => H(i, j) >= LAND_Y, wetWater = (i, j) => { const y = H(i, j); return y > -9 && y < LAND_Y; };
+      let best = null, firstDry = null;
+      for (const [i, j] of GRID) {
+        if (dry(i, j)) {
+          if (!firstDry) firstDry = [i, j];
+          if (!cliff || CLIFF_RING.every(([a, b]) => dry(i + a, j + b))) { best = [i, j]; break; }
+        } else if (!cliff && wetWater(i, j) && WADE_RING.some(([a, b]) => dry(i + a, j + b))) { best = [i, j]; break; }
       }
-      const near = (p, set, r) => { for (const q of set) if (Math.hypot(p[0] - q[0], p[1] - q[1]) < r) return true; return false; };
-      let best = null;
-      if (cliff) { for (const p of dry) if (!near(p, wet, CLIFF_EDGE) && (!best || p[2] < best[2])) best = p; }
-      else { for (const p of pts) if (!best || p[2] < best[2]) best = p; for (const p of wet) if (p.water && near(p, dry, WADE_REACH) && (!best || p[2] < best[2])) best = p; }
-      if (!best) { for (const p of dry) { let m = 9; for (const q of wet) m = Math.min(m, Math.hypot(p[0] - q[0], p[1] - q[1])); p.m = m; if (!best || p.m > best.m) best = p; } }   // 窄岸：取离水最远的陆地点
-      o = best ? [best[0], best[1]] : [0, 0]; coastOff.set(k, o);
+      best = best || firstDry;   // 窄岸 / 小岛：没有「脚边留空」的合格点，退而求其次取离格心最近的能站的点
+      o = best ? [best[0] * G, best[1] * G] : [0, 0]; coastOff.set(k, o);
     }
     return o;
   };
   const isCoast = (cx, cz) => { const t = water.typeAt(cx, cz); return t === 'shoal' || t === 'cliff'; };
+  for (let cx = MAP.x[0]; cx <= MAP.x[1]; cx++) for (let cz = MAP.z[0]; cz <= MAP.z[1]; cz++) if (isCoast(cx, cz)) coastOffset(cx, cz);   // 0.84：海岸格站位建场景时一次算好（放到点击时算会卡）
   const WADE_DEPTH = .27;   // 涉水深度定稿：水面落在身高 27% 处（膝盖）；再深不好看
   const groundY = (cx, cz, u) => {
     { const k = cx + ',' + cz; if (bridgeInfo.has(k)) return getBridgeSurfaceY(bridgeByCell.get(k), cx * 2, cz * 2) ?? bridgeInfo.get(k); }   // 桥面高度（必须最先判断：桥格底下是河，否则会被当成涉水而陷进水里）：静止时取格心处的实际桥面
@@ -316,6 +322,16 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const baseY = (cx, cz) => hills.has(cx + ',' + cz) ? 0 : groundY(cx, cz);
   // 任意点的"可见表面高度"（画格子光圈用）：cx,cz 决定按哪种地形的规则取，x,z 是具体采样点（光圈四角、底色网格都会取）
   //   桥面 → 桥面高度；山体 → 山脚；沙漠 → 沙丘起伏；河 / 海 → 水面；海岸格 → 锚点高度；沼泽 → 0；其余 → 平地 / 建筑底面
+  const flatCache = new Map();   // 整格水面（海 / 河）是不是平的：采 9 个点（中心 + 四角 + 四边中点），高度差 < 0.004 就当平面，返回平均高度；不平返回 null（走精确采样）
+  const flatWaterY = (cx, cz) => {
+    const k = cx + ',' + cz; let v = flatCache.get(k);
+    if (v === undefined) {
+      let mn = 9, mx = -9, sum = 0;
+      for (const [a, b] of [[0, 0], [.9, .9], [.9, -.9], [-.9, .9], [-.9, -.9], [.9, 0], [-.9, 0], [0, .9], [0, -.9]]) { const y = water.surfaceAt(cx * 2 + a, cz * 2 + b)?.y ?? WATER_Y; mn = Math.min(mn, y); mx = Math.max(mx, y); sum += y; }
+      v = mx - mn < .004 ? sum / 9 : null; flatCache.set(k, v);
+    }
+    return v;
+  };
   const surfaceY = (cx, cz, x = cx * 2, z = cz * 2) => {
     const k = cx + ',' + cz;
     if (bridgeInfo.has(k)) return getBridgeSurfaceY(bridgeByCell.get(k), x, z) ?? bridgeInfo.get(k);
@@ -323,7 +339,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (sandH && SAND_SET.has(k)) return sandH(x, z);
     if (SWAMP_SET.has(k)) return 0;
     const t = water.typeAt(cx, cz);
-    if (t === 'river' || t === 'sea') return water.surfaceAt(x, z)?.y ?? WATER_Y;
+    if (t === 'river' || t === 'sea') { const f = flatWaterY(cx, cz); return f !== null ? f : water.surfaceAt(x, z)?.y ?? WATER_Y; }   // 0.84：整格水面是平的就直接用常数（水里 surfaceAt 一次 ~5ms，黄框光圈要采 ~441 个点，点一下海水要卡好几秒）
     return groundY(cx, cz);
   };
   const trees = [], rand = rng(11);

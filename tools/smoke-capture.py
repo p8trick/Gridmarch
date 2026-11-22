@@ -59,7 +59,9 @@ with sync_playwright() as p:
     pg.evaluate('''([id])=>{const B=window.battle,g=B.game,u=g.units.find(o=>o.id===id);import('/src/rules/engine.js').then(E=>{const r=E.reachable(g,u);const k=[...r.keys()].find(k=>k!==u.x+','+u.y);window.__dest=k})}''', [setup['a']['id']])
     pg.wait_for_function('()=>window.__dest', timeout=5000)
     dest = pg.evaluate('()=>window.__dest.split(",").map(Number)')
-    c = setup['a']['c']; tap(*c); tap(*dest)
+    c = setup['a']['c']
+    pg.evaluate('([c])=>{const B=window.battle;B.cam.target.x=B.toWorld(c)[0]*2;B.cam.target.z=B.toWorld(c)[1]*2;B.mark()}', [c]); pg.wait_for_timeout(500)   # 0.84：先把镜头对准这个单位（之前镜头还停在第二座建筑上，换了地图后它可能在屏幕外 / 压在界面下）
+    tap(*c); tap(*dest)
     pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=30000); pg.wait_for_timeout(400)
     r = pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="capRing")n++});return {cap:u.cap,rings:n}}', [setup['a']['id']])
     assert r['cap'] == 0 and r['rings'] == 0, ('走开后进度清零、进度环消失', r)
