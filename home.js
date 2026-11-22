@@ -171,7 +171,7 @@
       return L.preload(urls, function (p) { ld.to(4 + p * 36, 150); }).then(function () { return ld; });
     }).catch(function () { return null; });   // 进度条本身出问题：不影响进入战场，mountBattle 会自己建一个
     ldP.then(function (ld) { return Promise.all([stageP, import('./src/battle/main.js')]).then(function (r) { return [r[0], r[1], ld]; }); }).then(function (r) {
-      return r[1].mountBattle(battleEl, r[0], { seed: seed, debug: PARAMS.has('debug'), onExit: exitBattle, loading: r[2] });
+      return r[1].mountBattle(battleEl, r[0], { seed: seed, army: PARAMS.has('units'), debug: PARAMS.has('debug'), onExit: exitBattle, loading: r[2] });
     }).catch(function (e) {
       exitBattle(); toast('载入战场失败：' + (e && e.message || e));
     });

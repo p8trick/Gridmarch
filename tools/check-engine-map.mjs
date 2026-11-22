@@ -1,6 +1,6 @@
 // 关卡 → 规则引擎适配器检查（0.40）：多个种子下，地形对得上、建筑归属对称、起始部队合法且双方镜像。
 import assert from 'assert';
-import {makeLevel1} from '../src/game/levels/level1.js';
+import {makeLevel1, TEST_ARMY} from '../src/game/levels/level1.js';
 import {createGameFromPreset, MODEL_OF} from '../src/game/engine-map.js';
 import {reachable} from '../src/rules/engine.js';
 import {UNITS, TERRAINS} from '../src/rules/data.js';
@@ -28,9 +28,16 @@ t('建筑归属：红蓝各 1 总部 + 2 兵工厂，中立 2 大 + 6 小城市�
   }
 });
 
-t('起始部队：双方镜像、站在合法格、都有模型、每个单位都能动', () => {
+t('默认开局没有起始单位（0.86：全靠自己生产），双方都能生产；胜负不会一开局就判', () => {
   for (const seed of SEEDS) {
     const p = makeLevel1(seed), {game, specs} = createGameFromPreset(p);
+    assert.equal(game.units.length, 0); assert.equal(specs.length, 0); assert.equal(game.winner, null);
+  }
+});
+
+t('起始部队（网址 &units=1 / TEST_ARMY）：双方镜像、站在合法格、都有模型、每个单位都能动', () => {
+  for (const seed of SEEDS) {
+    const p = makeLevel1(seed, {army: TEST_ARMY}), {game, specs} = createGameFromPreset(p);
     assert.equal(game.units.length, 8); assert.equal(specs.length, 8);
     const seen = new Set();
     for (const u of game.units) {

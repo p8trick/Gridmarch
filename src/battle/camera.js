@@ -24,7 +24,7 @@ export class TacticalCamera {
     this.cam = new THREE.OrthographicCamera();
     this.bounds = bounds;
     this.target = new THREE.Vector3(target[0], 0, target[1]);
-    this.yaw = 0; this.cells = cells; this.cellsGoal = null; this.rot = null; this.aspect = 16 / 9;
+    this.yaw = 0; this.cells = cells; this.cellsGoal = null; this.rot = null; this.glide = null; this.aspect = 16 / 9;
     this.pitch = CAMERA.PITCH;
     this.clampTarget();
   }
@@ -48,6 +48,7 @@ export class TacticalCamera {
 
   // 单指拖动：屏幕位移（像素）→ 地面平移。viewW 为屏幕宽度（像素）
   pan(dxPx, dyPx, viewW) {
+    this.glide = null;   // 手动拖动：打断自动平移
     const dx = dxPx * this.span / viewW, dz = dyPx * this.span / viewW / Math.sin(this.pitch * Math.PI / 180), a = this.camA;
     this.target.x -= dx * Math.cos(a) + dz * Math.sin(a);
     this.target.z += dx * Math.sin(a) - dz * Math.cos(a);
@@ -65,7 +66,10 @@ export class TacticalCamera {
     const base = this.rot ? this.rot.to : this.yaw;
     this.rot = {from: this.yaw, to: base + dir * Math.PI / 2, t: 0};
   }
-  get busy() { return !!this.rot || this.cellsGoal !== null; }
+  // 0.86：镜头平滑平移到某个地面点（找下一个未行动单位用）；用户手动拖动 / 旋转时不打断旋转，拖动会 cancelGlide
+  panTo(x, z, sec = .35) { this.glide = {from: this.target.clone(), x, z, t: 0, sec}; }
+  cancelGlide() { this.glide = null; }
+  get busy() { return !!this.rot || this.cellsGoal !== null || !!this.glide; }
   // 每帧推进动画；返回 true 表示相机变了，需要重绘
   update(dt) {
     let changed = false;
@@ -73,6 +77,11 @@ export class TacticalCamera {
       const r = this.rot; r.t += dt / CAMERA.ROT_SEC;
       if (r.t >= 1) { this.yaw = r.to % (Math.PI * 2); this.rot = null; } else this.yaw = r.from + (r.to - r.from) * ease(r.t);
       changed = true;
+    }
+    if (this.glide) {
+      const g = this.glide; g.t += dt / g.sec; const k = g.t >= 1 ? 1 : ease(g.t);
+      this.target.x = g.from.x + (g.x - g.from.x) * k; this.target.z = g.from.z + (g.z - g.from.z) * k; this.clampTarget();
+      if (g.t >= 1) this.glide = null; changed = true;
     }
     if (this.cellsGoal !== null) {
       this.cells += (this.cellsGoal - this.cells) * Math.min(1, dt * 14);

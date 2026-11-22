@@ -7,7 +7,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width':874,'height':402}); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=7&units=1')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
     # 把某个引擎格换算成屏幕坐标（旋转 / 竖屏时这个测试不适用：视口是横的，舞台没旋转）

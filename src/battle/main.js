@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {buildWorld} from '../game/world.js';
-import {makeLevel1} from '../game/levels/level1.js';
+import {makeLevel1, TEST_ARMY} from '../game/levels/level1.js';
 import {TacticalCamera, CAMERA} from './camera.js';
 import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
@@ -17,6 +17,7 @@ import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineE
 // 舞台（虚拟横屏）由主页创建，全程共用同一个 Stage，这里只借用，不创建、不销毁。
 let current = null;   // 当前挂着的战场（同时只会有一个）
 const ROT_SVG = '<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.9-6.2"/><path d="M20.6 3.6v5.2h-5.2"/></svg>';   // 顺时针旋转图标（0.57：字符 ⟳ 比 ☰ 小，改成 SVG，大小可控）
+const NEXT_SVG = '<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"/></svg>';   // 0.86：准星图标（找下一个还没行动的单位）
 export function unmountBattle() { if (current) { current.destroy(); current = null; } }
 
 // host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit, loading（home.js 已经开始显示的进度条，没有就自己建）}
@@ -28,7 +29,7 @@ export async function mountBattle(host, stage, opts = {}) {
   current = handle;
   host.innerHTML = `<div id="ui">
   <div id="hudL" class="hud"><span id="hDay"></span><i class="sep"></i><span class="team"><i id="hDot" class="dot b"></i><span id="hTeam"></span></span><i class="sep"></i><span class="coin"></span><b id="hFunds"></b><span class="endchip" aria-hidden="true"></span></div>
-  <div id="hudR"><button class="gbtn" id="bRot" aria-label="旋转画面"><span>${ROT_SVG}</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
+  <div id="hudR"><button class="gbtn" id="bNext" aria-label="找下一个还没行动的单位"><span>${NEXT_SVG}<b class="cnt" id="nCnt"></b></span></button><button class="gbtn" id="bRot" aria-label="旋转画面"><span>${ROT_SVG}</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
   <div id="dp" class="dpanel r" hidden><div id="uCard" class="dcard" hidden></div><div id="tCard" class="dcard"></div></div>
   <div id="dbg"></div>
 </div>
@@ -71,7 +72,7 @@ ld.attach(host).label('正在生成战场…');
 
 // ── 关卡：opts.seed 固定地图（网址 index.html?go=battle&seed=N）；不给就每次随机一个种子（左下角会显示，想复现就记下来）──
 const seed = Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 999999)));
-const preset = makeLevel1(seed);
+const preset = makeLevel1(seed, {army: opts.army ? TEST_ARMY : undefined});   // 0.86：默认没有起始单位；网址加 &units=1 给每方 4 个（冒烟测试用）
 const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
 preset.layout.units = specs;
 world = buildWorld({preset});
@@ -88,7 +89,9 @@ const cv = renderer.domElement;
 // ── 相机：棋盘外缘 = 平移范围；开局看蓝方基地一侧 ──
 const bounds = {x0: preset.x[0] * 2 - 1, x1: preset.x[1] * 2 + 1, z0: preset.z[0] * 2 - 1, z1: preset.z[1] * 2 + 1};
 const hq = L.buildings.find(b => b.type === 'bld_hq' && b.owner === 'blue').cell;
-const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: 7});
+const CELLS_KEY = 'gridmarch.camCells';   // 0.86：视距（短边格数）存本地，默认 7 格；双指 / 滚轮缩放后吸附到的档位自动保存
+let camCells = 7; try { const v = parseFloat(localStorage.getItem(CELLS_KEY)); if (v >= CAMERA.CELLS[0] && v <= CAMERA.CELLS[1]) camCells = v; } catch (e) {}
+const cam = new TacticalCamera({bounds, target: [hq[0] * 2 + 10, hq[1] * 2], cells: camCells});
 // 生产（0.55）：兵工厂界面点「生产」→ 引擎 produce（扣钱、标记本回合已造、单位本回合不能动）→ 战场里在这座兵工厂上摆出新单位
 // 0.65：引擎里每个单位的 acted → 战场单位头顶「休」标记（生产、换回合后同步；以后移动 / 待命也走这里）
 const TEAM = ['blue', 'red'];
@@ -299,7 +302,7 @@ const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
 let econBusy = false, econShown = null, econTok = 0, econTimers = [];   // 0.81：回合开始「收入 → 修理」动画期间：econShown = 状态条上显示的资金（null = 跟引擎走），econBusy 挡住操作
-let hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, hudStuck = false, bannerT = 0;
+let cellsSaveT = 0, hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, hudStuck = false, bannerT = 0;
 // 视距提示（0.56）：缩放时右上「旋转」按钮临时变成当前视距（格数），随缩放实时变化；停手 2 秒后淡出，变回旋转图标（双指还按着就继续等）
 const rotSpan = $('bRot').firstElementChild;
 function showZoom() {
@@ -313,18 +316,18 @@ function hideZoom() {
   zoomT = setTimeout(() => { rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; }, 200);
 }
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
-  const t = game.turn, shown = econShown !== null ? econShown : game.funds[t], sig = game.day + '|' + t + '|' + shown;
-  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; }
+  const t = game.turn, shown = econShown !== null ? econShown : game.funds[t], idle = game.winner === null ? game.units.filter(u => u.owner === t && !u.acted).length : 0, sig = game.day + '|' + t + '|' + shown + '|' + idle;
+  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; $('nCnt').textContent = idle || ''; $('bNext').classList.toggle('off', !idle); }
   // 0.69：两档提醒。① 本方单位全部行动完 = 状态条脉冲（可以结束回合了，但可能还想造兵）；② 脉冲的同时再也没有有效操作了（没有能造兵的兵工厂：都造过了 / 被单位占着 / 钱不够最便宜的单位）= 才自动弹出结束确认。
-  const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game);
-  if (ready !== hudReady) { hudReady = ready; $('hudL').classList.toggle('ready', ready); }
+  const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game), pulse = ready && mine.length > 0;   // 0.86：开局没有单位时不脉冲（还没东西可「行动完」），但钱不够造兵 = 无事可做，照样弹确认
+  if (pulse !== hudReady) { hudReady = pulse; $('hudL').classList.toggle('ready', pulse); }
   if (!stuck) hudStuck = false;
   else if (!hudStuck) {   // 刚刚变成「无事可做」的这一刻：弹出确认；兵工厂 / 详细面板 / 暂停菜单开着就先等着（它们关上时会再检查一次）；确认已经开着就不重复弹
     if (!$('endm').hidden) hudStuck = true;
     else if ($('pause').hidden && !ars.isOpen && !detail.isOpen && !econBusy) { hudStuck = true; openEnd(); }
   }
   infoPlace();
-  if (lastCells !== cam.cells) { if (lastCells !== null) showZoom(); lastCells = cam.cells; world.setHpView({k: Math.max(1, cam.cells / 9)}); }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
+  if (lastCells !== cam.cells) { if (lastCells !== null) { showZoom(); clearTimeout(cellsSaveT); cellsSaveT = setTimeout(() => { try { localStorage.setItem(CELLS_KEY, String(Math.round(cam.cells * 100) / 100)); } catch (e) {} }, 500); } lastCells = cam.cells; world.setHpView({k: Math.max(1, cam.cells / 9)}); }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
 // 结束回合（0.58）：点左上状态条 → 状态条下方弹出确认；点「结束回合」才真正结束：引擎 endTurn（换人 / 天数 / 单位恢复 / 收入 / 兵工厂可再生产）→ 中央大横幅「第 N 天」
@@ -401,6 +404,14 @@ $('endm').addEventListener('click', e => {
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
+// 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
+let nextFocus = 0;
+$('bNext').onclick = () => {
+  if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || game.winner !== null) return;
+  const list = game.units.filter(u => u.owner === game.turn && !u.acted).sort((a, b) => a.id - b.id); if (!list.length) return;
+  const u = list.find(q => q.id > nextFocus) || list[0], w = world.unitById(u.id); if (!w) return;
+  nextFocus = u.id; cam.panTo(w.x, w.z); mark();
+};
 $('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 // 画质（0.66）：暂停菜单第二页；目前只有「帧率显示」开关（存 localStorage gridmarch.showFps）
 const FPS_KEY = 'gridmarch.showFps';
@@ -522,7 +533,7 @@ window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (ty
 function destroy() {
   if (!alive) return; alive = false;
   ars.dispose(); detail.dispose();
-  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); econTok++; econTimers.forEach(clearTimeout);
+  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); clearTimeout(cellsSaveT); econTok++; econTimers.forEach(clearTimeout);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
   if (stage.dbg) stage.dbg.close();

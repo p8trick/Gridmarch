@@ -3,7 +3,7 @@
 # 跑两遍：作战动画开（默认）、关（localStorage gridmarch.combatAnim=0）；第二遍把目标血量压到 5 点，验证击杀移除。出错直接 assert。
 from playwright.sync_api import sync_playwright
 def run(pg, anim, kill):
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=7&units=1')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
     pg.evaluate('()=>{window.__dmg=0;new MutationObserver(()=>{if(document.querySelector(".dmg"))window.__dmg++}).observe(document.querySelector("#battle"),{childList:true,subtree:true})}')
@@ -57,7 +57,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
     ctx = b.new_context(viewport={'width':874,'height':402}); errs=[]
     pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e))); pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7'); pg.evaluate('()=>localStorage.setItem("gridmarch.combatAnim","1")')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=7&units=1'); pg.evaluate('()=>localStorage.setItem("gridmarch.combatAnim","1")')
     run(pg, True, False)
     pg.evaluate('()=>localStorage.setItem("gridmarch.combatAnim","0")')
     run(pg, False, True)

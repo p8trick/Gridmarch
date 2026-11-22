@@ -18,9 +18,10 @@ export const LEVEL1 = {x: [-10, 9], z: [-6, 5]};
 
 // 开局设定（0.40，【暂定】随时改）：每方起始资金与起始部队（引擎兵种 id，见 rules/data.js）。
 // 资金：开局资金 0；第 1 天蓝方领一次收入（总部 + 2 兵工厂 = 3000）。起始部队只能用已有模型的兵种。
-export const START = {funds: 0, army: ['inf', 'inf', 'mech', 'tank']};
+export const START = {funds: 0, army: []};   // 0.86：开局不再送随机单位，全靠自己在兵工厂生产（免得到处找不到）
+export const TEST_ARMY = ['inf', 'inf', 'mech', 'tank'];   // 冒烟测试 / 调试用：网址加 &units=1 才会给每方这四个起始单位（以前的默认配置）
 
-function build(seed, attempt) {
+function build(seed, attempt, army = START.army) {
   const rnd = mulberry32(seed * 7919 + attempt * 104729 + 13);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1)), pick = arr => arr[Math.floor(rnd() * arr.length)];
   const [X0, X1] = LEVEL1.x, [Z0, Z1] = LEVEL1.z, board = rect(X0, X1, Z0, Z1);
@@ -227,7 +228,7 @@ function build(seed, attempt) {
     const ok = (x, z) => x <= -2 && west(x, z) && !bld.has(key(x, z)) && !apron.has(key(x, z)) && !featOverlap(key(x, z)) && !riverSet.has(key(x, z)) && key(x, z) !== bridgeKey && !bridgeBKeys.has(key(x, z));
     const cand = board.filter(([x, z]) => { const d = Math.max(Math.abs(x - hqCell[0]), Math.abs(z - hqCell[1])); return d >= 2 && d <= 4 && ok(x, z); })
       .map(c => [rnd(), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
-    for (const type of START.army) {
+    for (const type of army) {
       const c = cand.find(([x, z]) => !used.has(key(x, z)));
       if (!c) throw Error('放不下起始部队'); used.add(key(...c)); startUnits.push({type, owner: 0, c});
     }
@@ -252,8 +253,8 @@ function build(seed, attempt) {
 }
 
 // seed 相同则地图相同；个别 seed 随机结果不合格（放不下、堵路、太稀疏）会自动换一次随机再试
-export function makeLevel1(seed = 1) {
+export function makeLevel1(seed = 1, {army} = {}) {   // army：起始单位清单（默认 START.army = 空；测试传 TEST_ARMY）
   let err;
-  for (let attempt = 0; attempt < 40; attempt++) { try { return build(seed, attempt); } catch (e) { err = e; } }
+  for (let attempt = 0; attempt < 40; attempt++) { try { return build(seed, attempt, army); } catch (e) { err = e; } }
   throw err;
 }

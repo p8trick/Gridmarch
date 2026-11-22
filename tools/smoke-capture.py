@@ -7,7 +7,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width':874,'height':402}); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=7&units=1')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
     pg.evaluate("()=>window.battle.world.setCapStyle('ring')")   # 默认样式是「条+染色」，这里先按「脚下环」数进度环；最后再单独验条 / 染色

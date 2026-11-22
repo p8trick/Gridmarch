@@ -756,7 +756,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
 
   // ───────── 选中 / 移动范围 / 移动 ─────────
   const MOVE = {inf: 3, light: 6, medium: 5, heavy: 4, art: 4};       // 移动力（点数）
-  const SPEED = {inf: 4.5, light: 7.5, medium: 6.6, heavy: 5.4, art: 5.7};  // 动画速度（单位/秒；0.85 整体提速约 1.5 倍：步兵 3.0 → 4.5，机械同比例，等他走半天太拖沓）
+  const SPEED = {inf: 5.4, light: 9.0, medium: 7.9, heavy: 6.5, art: 6.8};  // 动画速度（单位/秒；原来 3.0 / 5.0 / 4.4 / 3.6 / 3.8，0.85 提速 1.5 倍、0.86 提到 1.8 倍：步兵 5.4，机械同比例）
   const tkey = u => u.spec.k === 'tank' ? u.spec.type : u.spec.k;
   const terrainAt = (cx, cz) => bridgeInfo.has(cx + ',' + cz) ? 'bridge' : bldMap.get(cx + ',' + cz)?.type === 'bld_dockyard' ? 'building' : water.typeAt(cx, cz) !== 'land' ? water.typeAt(cx, cz) : bldMap.has(cx + ',' + cz) ? 'building' : mtnSet.has(cx + ',' + cz) ? 'mountain' : SAND_SET.has(cx + ',' + cz) ? 'desert' : SWAMP_SET.has(cx + ',' + cz) ? 'swamp' : forestHas(cx, cz) ? 'forest' : roadSet.has(cx + ',' + cz) ? 'road' : 'plain';
   // 暂定：步兵涉水代价 2（同上山），其余兵种不可进河

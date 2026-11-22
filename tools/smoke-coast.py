@@ -1,14 +1,14 @@
 # 海岸站位 / 步兵角标 / 浮条间距冒烟测试（0.82；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
 # ① 浅滩 / 断崖格：单位站位基本在格心（平均离格心 ≤ 0.15，转角最多推开 0.6）、高度不低于涉水点（-0.4）；
 # ② 步兵 / 反坦克兵血量角标相对脚下的屏幕位置，四个朝向完全一样（背包不影响）；
-# ③ 行动浮条：「待命」和上面的「占领 / 攻击」之间空隙约 15px（0.83 由 35 收到 15），只有「待命」一个按钮时不留空。出错直接 assert。
+# ③ 行动浮条：「待命」和上面的「占领 / 攻击」之间空隙 12px（0.83 由 35 收到 15，0.86 统一成 12），只有「待命」一个按钮时不留空。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
     pg = b.new_page(viewport={'width':874,'height':402}); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=7')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=7&units=1')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(600)
     r = pg.evaluate('''()=>{
@@ -32,6 +32,6 @@ with sync_playwright() as p:
     for t, L in r['badge'].items():
         assert all(abs(q[0]-L[0][0]) < .05 and abs(q[1]-L[0][1]) < .05 for q in L), ('角标位置随朝向变了', t, L)
     gap = r['bar']['full'][1] - r['bar']['full'][0]
-    assert 14 <= gap <= 16, ('待命和攻击的空隙应约 15px', r['bar']); assert r['bar']['solo'] == 0, ('只有待命时不该留空', r['bar'])
+    assert gap == 12, ('待命和攻击的空隙应是 12px（0.86：浮条按钮间距统一 12px）', r['bar']); assert r['bar']['solo'] == 0, ('只有待命时不该留空', r['bar'])
     print('海岸 / 角标 / 浮条冒烟测试通过', 'coast cells', len(r['cells']), 'bar gap', gap, 'errors:', errs)
     b.close()

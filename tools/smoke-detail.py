@@ -12,7 +12,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width':W,'height':H}); errs=[]
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type=='error' else None)
-    pg.goto('http://localhost:8099/index.html?go=battle&seed=11')
+    pg.goto('http://localhost:8099/index.html?go=battle&seed=11&units=1')
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000)
     pg.wait_for_timeout(800)
     scr = lambda c: pg.evaluate('''(c)=>{const b=window.battle,T=b.THREE,w=b.world;const v=new T.Vector3(c[0]*2,w.surfaceY(c[0],c[1])+.1,c[1]*2).project(b.cam.cam);const s=document.querySelector("#stage").getBoundingClientRect();return [(v.x+1)/2*window.__sw,(1-v.y)/2*window.__sh]}''', c)
