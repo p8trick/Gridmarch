@@ -5,7 +5,7 @@ import {planWater, validateLayout} from '../map-builder.js';
 //   · 水域：中央大湖（大小不同）/ 不规则湖 / 左右各一池 / 贴着上缘或下缘的不规则海湾（0.84）/ 没有湖；矩形湖上有时横跨一座跨海桥
 //   · 河流：每一侧可能有一条小河（0.84 起会拐弯、绕圈，不再只是竖线），河上一座公路桥
 //   · 基地行号、城市位置、公路走向、山、沙漠、沼泽、树林
-// 随机只在西半边（蓝方）生成，再镜像到东半边，所以双方地形完全对称、公平。
+// 0.85 起：建筑 / 公路 / 河 / 起始部队只在西半边（蓝方）随机，再镜像到东半边（公平）；山 / 沙漠 / 沼泽 / 树林、两池 / 海湾各自独立生成，东西两边地形不再完全一致。
 // 单位不在这里：开局单位、生产由规则引擎负责。
 const key = (x, z) => x + ',' + z;
 const rect = (x0, x1, z0, z1) => { const o = []; for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) o.push([x, z]); return o; };
@@ -36,7 +36,7 @@ function build(seed, attempt) {
   for (const b of WEST) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) apron.add(key(b.cell[0] + dx, b.cell[1] + dz));
 
   // ── 水域：湖（海岸交给 MT2 规划，西岸浅滩、东岸断崖）──
-  const sea = new Set(), addSea = (x, z) => { sea.add(key(x, z)); sea.add(key(mir(x), z)); };
+  const sea = new Set(), addSea = (x, z) => { sea.add(key(x, z)); sea.add(key(mir(x), z)); }, addSeaSide = (x, z, east) => sea.add(key(east ? mir(x) : x, z));   // addSea：左右镜像；addSeaSide：只加一侧（0.85 两池 / 海湾各自独立）
   const r0 = rnd(), lakeKind = r0 < .30 ? 'rect' : r0 < .50 ? 'blob' : r0 < .65 ? 'twin' : r0 < .90 ? 'edge' : 'none';   // 0.84：新增 edge（贴边海湾），各类占比重新分配
   let rectInfo = null;
   if (lakeKind === 'rect') {   // 居中的矩形湖：半宽 2–3，高 2–3
@@ -50,17 +50,20 @@ function build(seed, attempt) {
       if (nx >= -4 && nx <= -1 && nz >= -3 && nz <= 1 && !cells.some(c => c[0] === nx && c[1] === nz)) cells.push([nx, nz]);
     }
     cells.forEach(([x, z]) => addSea(x, z));
-  } else if (lakeKind === 'twin') {   // 中线两侧各一池（互不相连）
-    const w = ri(2, 3), h = ri(2, 3), x0 = ri(-6, -3 - w + 1), z0 = ri(-4, 1);
-    for (let x = x0; x < x0 + w; x++) for (let z = z0; z < z0 + h; z++) addSea(x, z);
-  }
-  else if (lakeKind === 'edge') {   // 0.84：贴着棋盘上缘或下缘的不规则海湾：从边缘一格长出来，深入不超过 1–3 行；镜像后左右各一个（起点靠近中线时在中线连成一个）
-    const zb = rnd() < .5 ? Z0 : Z1, depth = ri(1, 3), target = ri(5, 11), cells = [[ri(-7, -1), zb]];
-    for (let g = 0; cells.length < target && g < 160; g++) {
-      const [x, z] = pick(cells), [dx, dz] = pick(N4), nx = x + dx, nz = z + dz;
-      if (nx >= -8 && nx <= -1 && nz >= Z0 && nz <= Z1 && Math.abs(nz - zb) <= depth && !apron.has(key(nx, nz)) && !cells.some(c => c[0] === nx && c[1] === nz)) cells.push([nx, nz]);
+  } else if (lakeKind === 'twin') {   // 中线两侧各一池（互不相连）；0.85：东西两池各自独立随机，大小 / 位置不再镜像一致
+    for (const east of [false, true]) {
+      const w = ri(2, 3), h = ri(2, 3), x0 = ri(-6, -3 - w + 1), z0 = ri(-4, 1);
+      for (let x = x0; x < x0 + w; x++) for (let z = z0; z < z0 + h; z++) addSeaSide(x, z, east);
     }
-    cells.forEach(([x, z]) => addSea(x, z));
+  } else if (lakeKind === 'edge') {   // 0.84：贴着棋盘上缘或下缘的不规则海湾：从边缘一格长出来，深入不超过 1–3 行；0.85：东西两个海湾各自独立（形状、上缘还是下缘都可以不同）
+    for (const east of [false, true]) {
+      const zb = rnd() < .5 ? Z0 : Z1, depth = ri(1, 3), target = ri(5, 11), cells = [[ri(-7, -1), zb]];
+      for (let g = 0; cells.length < target && g < 160; g++) {
+        const [x, z] = pick(cells), [dx, dz] = pick(N4), nx = x + dx, nz = z + dz;
+        if (nx >= -8 && nx <= -1 && nz >= Z0 && nz <= Z1 && Math.abs(nz - zb) <= depth && !apron.has(key(nx, nz)) && !cells.some(c => c[0] === nx && c[1] === nz)) cells.push([nx, nz]);
+      }
+      cells.forEach(([x, z]) => addSeaSide(x, z, east));
+    }
   }
   const outside = [...rect(X0 - 1, X0 - 1, Z0 - 1, Z1 + 1), ...rect(X1 + 1, X1 + 1, Z0 - 1, Z1 + 1), ...rect(X0, X1, Z0 - 1, Z0 - 1), ...rect(X0, X1, Z1 + 1, Z1 + 1)];
   const preset = {
@@ -71,7 +74,7 @@ function build(seed, attempt) {
   };
   let plan = planWater(preset);
   const isLand = (x, z) => x >= X0 && x <= X1 && z >= Z0 && z <= Z1 && plan.type.get(key(x, z)) === 'land';
-  const west = (x, z) => x <= -1 && isLand(x, z);
+  const west = (x, z) => x <= -1 && isLand(x, z) && isLand(mir(x), z);   // 0.85：东西两侧的水可以不一样，所以「蓝方这半边的格子」要连镜像那格也是陆地（对称的东西——建筑、公路、起始部队——才不会镜像到水里）
   const bld = new Set(WEST.map(b => key(...b.cell)));
   for (const b of WEST) if (!west(...b.cell)) throw Error('基地被水占了');
 
@@ -92,8 +95,8 @@ function build(seed, attempt) {
     if (cand.length < 6) continue;
     const inR = new Set(cand.map(c => key(...c)));
     const selfTouch = cand.some((c, i) => cand.some((d, j) => j - i >= 3 && Math.max(Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1])) < 2));
-    const ok = !selfTouch && cand.every(([x, z]) => z > Z0 && z < Z1 && x > X0 && !apron.has(key(x, z)) && N8.every(([a, b]) => { const k = key(x + a, z + b); return inR.has(k) || (plan.type.get(k) === 'land' && !bld.has(k)); }));
-    const straight = cand.map((c, i) => i > 0 && i < cand.length - 1 && cand[i - 1][0] === c[0] && cand[i + 1][0] === c[0] && cand[i - 1][1] !== cand[i + 1][1] && isLand(c[0] - 1, c[1]) && isLand(c[0] + 1, c[1]) && !inR.has(key(c[0] - 1, c[1])) && !inR.has(key(c[0] + 1, c[1])) ? i : -1).filter(i => i >= 0);
+    const ok = !selfTouch && cand.every(([x, z]) => z > Z0 && z < Z1 && x > X0 && !apron.has(key(x, z)) && N8.every(([a, b]) => { const k = key(x + a, z + b); return inR.has(k) || (plan.type.get(k) === 'land' && plan.type.get(key(mir(x + a), z + b)) === 'land' && !bld.has(k)); }));
+    const straight = cand.map((c, i) => i > 0 && i < cand.length - 1 && cand[i - 1][0] === c[0] && cand[i + 1][0] === c[0] && cand[i - 1][1] !== cand[i + 1][1] && west(c[0] - 1, c[1]) && west(c[0] + 1, c[1]) && !inR.has(key(c[0] - 1, c[1])) && !inR.has(key(c[0] + 1, c[1])) ? i : -1).filter(i => i >= 0);
     if (ok && straight.length) { river.push(...cand); bridgeA = river[pick(straight)]; }
   }
   const riverSet = new Set(river.map(c => key(...c)));
@@ -165,53 +168,63 @@ function build(seed, attempt) {
   }
   if (bridgeKey) road.delete(bridgeKey);   // 桥格的路面由桥模型负责
 
-  // ── 山、沙漠、沼泽、树：随机游走长出成片的簇，只在西半边 ──
-  const mountain = new Set(), desert = new Set(), swamp = new Set(), forest = new Set(), forestSingle = new Set();
+  // ── 山、沙漠、沼泽、树：随机游走长出成片的簇。0.85：东西两半各自独立生成（东半边在「镜像坐标」里用同一套规则再长一遍，最后翻到东边），
+  //    所以地形不再左右完全一致；公路 / 建筑 / 河 / 起始部队仍然镜像（公平），这些东西占的格子两边都当「已占用」，所以独立生成的地形不会压到它们 ──
   const nearBld = (x, z) => N4.some(([dx, dz]) => bld.has(key(x + dx, z + dz)));
   const nearRiver = (x, z) => N8.some(([dx, dz]) => riverSet.has(key(x + dx, z + dz)));
-  const taken = k => mountain.has(k) || desert.has(k) || swamp.has(k) || forest.has(k) || forestSingle.has(k);
-  const free = (x, z) => west(x, z) && !bld.has(key(x, z)) && !road.has(key(x, z)) && !apron.has(key(x, z)) && !riverSet.has(key(x, z)) && !nearBld(x, z) && !taken(key(x, z));
-  const pool = () => board.filter(([x, z]) => free(x, z));
-  function cluster(set, size, ok = () => true) {
-    const cand = pool().filter(([x, z]) => ok(x, z)), start = pick(cand); if (!start) return [];
-    const got = [start]; set.add(key(...start));
-    for (let guard = 0; got.length < size && guard < 60; guard++) {
-      const [x, z] = pick(got), [dx, dz] = pick(N4), nx = x + dx, nzz = z + dz;
-      if (free(nx, nzz) && ok(nx, nzz)) { got.push([nx, nzz]); set.add(key(nx, nzz)); }
-    }
-    return got;
-  }
-  // 至少长出 min 格：起点选在太挤的地方长不够，就撤销换个起点再试
-  function clusterMin(set, size, min, ok) {
-    for (let t = 0; t < 12; t++) { const got = cluster(set, size, ok); if (got.length >= min) return true; got.forEach(c => set.delete(key(...c))); }
-    return false;
-  }
-  // 山不能把地面部队的路彻底堵死：非山、非水、非河的格子（含镜像后的整张棋盘；河上只有桥格能走）必须保持连成一片
   const mirrorOf = k => { const [x, z] = k.split(',').map(Number); return key(mir(x), z); };
-  const connected = () => {
-    const blocked = k => plan.type.get(k) === 'sea' || ((riverSet.has(k) || riverSet.has(mirrorOf(k))) && k !== bridgeKey && k !== mirrorOf(bridgeKey || '0,0')) || mountain.has(k) || mountain.has(mirrorOf(k));
-    const cells = board.map(c => key(...c)).filter(k => !blocked(k) && !['shoal', 'cliff'].includes(plan.type.get(k)) === true || (!blocked(k) && ['shoal', 'cliff'].includes(plan.type.get(k))));
-    if (!cells.length) return false;
-    const ok = new Set(cells), seen = new Set([cells[0]]), st = [cells[0]];
-    while (st.length) { const [x, z] = st.pop().split(',').map(Number); for (const [dx, dz] of N4) { const k = key(x + dx, z + dz); if (ok.has(k) && !seen.has(k)) { seen.add(k); st.push(k); } } }
-    return seen.size === ok.size;
-  };
-  // 沙漠 / 沼泽：整格自带地表的地块，要离水岸、河、棋盘外缘远一点（接缝只和草格相接），各一片
-  const calm = (x, z) => x > X0 && z > Z0 && z < Z1 && !nearRiver(x, z) && N8.concat([[0, 0]]).every(([dx, dz]) => plan.type.get(key(x + dx, z + dz)) === 'land');
-  clusterMin(desert, 5 + Math.floor(rnd() * 4), 4, calm);
-  clusterMin(swamp, 4 + Math.floor(rnd() * 3), 4, calm);
-  for (let n = 0; n < 4; n++) {
-    const snap = new Set(mountain); cluster(mountain, 2 + Math.floor(rnd() * 4), (x, z) => x > X0 && z > Z0 && z < Z1);   // 山不贴着棋盘外缘长
-    if (!connected()) { mountain.clear(); for (const k of snap) mountain.add(k); }
+  const newFeat = () => ({mountain: new Set(), desert: new Set(), swamp: new Set(), forest: new Set(), forestSingle: new Set()});
+  function genFeatures(east, other) {
+    const F = newFeat(), {mountain, desert, swamp, forest, forestSingle} = F, Wf = east ? other : F, Ef = east ? F : other;
+    const taken = k => mountain.has(k) || desert.has(k) || swamp.has(k) || forest.has(k) || forestSingle.has(k);
+    const free = (x, z) => west(x, z) && !bld.has(key(x, z)) && !road.has(key(x, z)) && !apron.has(key(x, z)) && !riverSet.has(key(x, z)) && !nearBld(x, z) && !taken(key(x, z));
+    const pool = () => board.filter(([x, z]) => free(x, z));
+    function cluster(set, size, ok = () => true) {
+      const cand = pool().filter(([x, z]) => ok(x, z)), start = pick(cand); if (!start) return [];
+      const got = [start]; set.add(key(...start));
+      for (let guard = 0; got.length < size && guard < 60; guard++) {
+        const [x, z] = pick(got), [dx, dz] = pick(N4), nx = x + dx, nzz = z + dz;
+        if (free(nx, nzz) && ok(nx, nzz)) { got.push([nx, nzz]); set.add(key(nx, nzz)); }
+      }
+      return got;
+    }
+    // 至少长出 min 格：起点选在太挤的地方长不够，就撤销换个起点再试
+    function clusterMin(set, size, min, ok) {
+      for (let t = 0; t < 12; t++) { const got = cluster(set, size, ok); if (got.length >= min) return true; got.forEach(c => set.delete(key(...c))); }
+      return false;
+    }
+    // 山不能把地面部队的路彻底堵死：非山、非水、非河的格子（整张棋盘；河上只有桥格能走）必须保持连成一片。
+    // 西半边的格子看西半边的山，东半边的格子（x ≥ 0）看东半边那组山的镜像坐标
+    const connected = () => {
+      const mtn = k => (+k.split(',')[0] <= -1 ? Wf.mountain.has(k) : Ef.mountain.has(mirrorOf(k)));
+      const blocked = k => plan.type.get(k) === 'sea' || ((riverSet.has(k) || riverSet.has(mirrorOf(k))) && k !== bridgeKey && k !== mirrorOf(bridgeKey || '0,0')) || mtn(k);
+      const cells = board.map(c => key(...c)).filter(k => !blocked(k));
+      if (!cells.length) return false;
+      const ok = new Set(cells), seen = new Set([cells[0]]), st = [cells[0]];
+      while (st.length) { const [x, z] = st.pop().split(',').map(Number); for (const [dx, dz] of N4) { const k = key(x + dx, z + dz); if (ok.has(k) && !seen.has(k)) { seen.add(k); st.push(k); } } }
+      return seen.size === ok.size;
+    };
+    // 沙漠 / 沼泽：整格自带地表的地块，要离水岸、河、棋盘外缘远一点（接缝只和草格相接），各一片（两侧的水都要躲开）
+    const land2 = (x, z) => plan.type.get(key(x, z)) === 'land' && plan.type.get(key(mir(x), z)) === 'land';
+    const calm = (x, z) => x > X0 && z > Z0 && z < Z1 && !nearRiver(x, z) && N8.concat([[0, 0]]).every(([dx, dz]) => land2(x + dx, z + dz));
+    clusterMin(desert, 5 + Math.floor(rnd() * 4), 4, calm);
+    clusterMin(swamp, 4 + Math.floor(rnd() * 3), 4, calm);
+    for (let n = 0; n < 4; n++) {
+      const snap = new Set(mountain); cluster(mountain, 2 + Math.floor(rnd() * 4), (x, z) => x > X0 && z > Z0 && z < Z1);   // 山不贴着棋盘外缘长
+      if (!connected()) { mountain.clear(); for (const k of snap) mountain.add(k); }
+    }
+    for (let n = 0; n < 5; n++) cluster(forest, 3 + Math.floor(rnd() * 5));
+    for (let n = 0; n < 3; n++) { const c = pick(pool()); if (c) forestSingle.add(key(...c)); }   // 孤立的单格树林（2–3 棵树）
+    return F;
   }
-  for (let n = 0; n < 5; n++) cluster(forest, 3 + Math.floor(rnd() * 5));
-  for (let n = 0; n < 3; n++) { const c = pick(pool()); if (c) forestSingle.add(key(...c)); }   // 孤立的单格树林（2–3 棵树）
+  const FW = genFeatures(false, newFeat()), FE = genFeatures(true, FW);   // FW = 蓝方（西）这半边，FE = 红方（东）这半边（镜像坐标）
+  const featOverlap = k => FW.mountain.has(k) || FW.desert.has(k) || FW.swamp.has(k) || FE.mountain.has(k) || FE.desert.has(k) || FE.swamp.has(k);   // 起始部队两侧都不能压
 
   // ── 起始部队：蓝方在总部周围 2–4 格内（不占基地一圈、不压山 / 沙漠 / 沼泽 / 河 / 桥），红方镜像 ──
   const hqCell = WEST[0].cell, startUnits = [];
   {
     const used = new Set(), bridgeBKeys = new Set((bridgeB ? bridgeB.cells : []).map(c => key(...c)));
-    const ok = (x, z) => x <= -2 && west(x, z) && !bld.has(key(x, z)) && !apron.has(key(x, z)) && !mountain.has(key(x, z)) && !desert.has(key(x, z)) && !swamp.has(key(x, z)) && !riverSet.has(key(x, z)) && key(x, z) !== bridgeKey && !bridgeBKeys.has(key(x, z));
+    const ok = (x, z) => x <= -2 && west(x, z) && !bld.has(key(x, z)) && !apron.has(key(x, z)) && !featOverlap(key(x, z)) && !riverSet.has(key(x, z)) && key(x, z) !== bridgeKey && !bridgeBKeys.has(key(x, z));
     const cand = board.filter(([x, z]) => { const d = Math.max(Math.abs(x - hqCell[0]), Math.abs(z - hqCell[1])); return d >= 2 && d <= 4 && ok(x, z); })
       .map(c => [rnd(), c]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
     for (const type of START.army) {
@@ -224,15 +237,16 @@ function build(seed, attempt) {
   const mirrorCells = set => [...set].flatMap(k => { const [x, z] = k.split(',').map(Number); return [[x, z], [mir(x), z]]; });
   const uniq = a => { const s = new Set(); return a.filter(c => !s.has(key(...c)) && s.add(key(...c))); };
   const L = preset.layout;
-  L.roads = uniq(mirrorCells(road)); L.mountain = uniq(mirrorCells(mountain)); L.desert = uniq(mirrorCells(desert)); L.swamp = uniq(mirrorCells(swamp));
-  L.forestExtra = uniq(mirrorCells(new Set([...forest, ...forestSingle])));
+  const sides = pick2 => uniq([...[...FW[pick2[0]], ...(pick2[1] ? FW[pick2[1]] : [])].map(k => k.split(',').map(Number)), ...[...FE[pick2[0]], ...(pick2[1] ? FE[pick2[1]] : [])].map(k => { const [x, z] = k.split(',').map(Number); return [mir(x), z]; })]);   // 西半边原样 + 东半边（镜像坐标）翻过去
+  L.roads = uniq(mirrorCells(road)); L.mountain = sides(['mountain']); L.desert = sides(['desert']); L.swamp = sides(['swamp']);
+  L.forestExtra = sides(['forest', 'forestSingle']);
   L.buildings = WEST.flatMap(b => b.owner === 'neutral' ? [b, {...b, cell: [mir(b.cell[0]), b.cell[1]]}]
     : [b, {...b, cell: [mir(b.cell[0]), b.cell[1]], owner: 'red', name: b.name.replace('蓝', '红')}]);
   if (river.length) { preset.river = uniq(mirrorCells(riverSet)); preset.bridges.push({type: 'A', cells: [bridgeA], rotation: 0}, {type: 'A', cells: [[mir(bridgeA[0]), bridgeA[1]]], rotation: 0}); }
   if (bridgeB) preset.bridges.push({type: 'B', cells: bridgeB.cells, rotation: 0});
   preset.start = {funds: [START.funds, START.funds], units: [...startUnits, ...startUnits.map(u => ({type: u.type, owner: 1, c: [mir(u.c[0]), u.c[1]]}))]};
   preset.stats = {lake: lakeKind, roads: L.roads.length, mountain: L.mountain.length, desert: L.desert.length, swamp: L.swamp.length, forest: L.forestExtra.length, river: (preset.river || []).length, bridges: preset.bridges.length, buildings: L.buildings.length};
-  if (L.mountain.length < 8 || L.forestExtra.length < 14 || desert.size < 4 || swamp.size < 4) throw Error('随机结果太稀疏，重试');
+  if (L.mountain.length < 8 || L.forestExtra.length < 14 || FW.desert.size < 4 || FW.swamp.size < 4 || FE.desert.size < 4 || FE.swamp.size < 4) throw Error('随机结果太稀疏，重试');
   validateLayout(preset);
   return preset;
 }

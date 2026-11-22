@@ -322,16 +322,28 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const baseY = (cx, cz) => hills.has(cx + ',' + cz) ? 0 : groundY(cx, cz);
   // 任意点的"可见表面高度"（画格子光圈用）：cx,cz 决定按哪种地形的规则取，x,z 是具体采样点（光圈四角、底色网格都会取）
   //   桥面 → 桥面高度；山体 → 山脚；沙漠 → 沙丘起伏；河 / 海 → 水面；海岸格 → 锚点高度；沼泽 → 0；其余 → 平地 / 建筑底面
-  const flatCache = new Map();   // 整格水面（海 / 河）是不是平的：采 9 个点（中心 + 四角 + 四边中点），高度差 < 0.004 就当平面，返回平均高度；不平返回 null（走精确采样）
-  const flatWaterY = (cx, cz) => {
-    const k = cx + ',' + cz; let v = flatCache.get(k);
+  // 0.85：海 / 河格的水面高度。海是整格平的（-0.3）直接返回常数；河格里河道（-0.3）和两岸堤岸（≈0）高度不同，整格不平，
+  // 但 water.surfaceAt 在水里一次要 ~3–5ms，黄框光圈要采 ~441 个点，逐点查 = 点一下河格卡 1.5 秒。所以每个水格只采一次 5×5 网格（偏移 ±0.9 / ±0.45 / 0，共 25 点），缓存，
+  // 光圈的任意点用双线性插值；先采其中 9 个点（中心 + 四角 + 四边中点）判平整，平就不用采剩下的 16 个。
+  const waterCache = new Map(), WG = [-.9, -.45, 0, .45, .9];
+  const waterShape = (cx, cz) => {
+    const k = cx + ',' + cz; let v = waterCache.get(k);
     if (v === undefined) {
+      const ys = new Array(25), at = (i, j) => { const h = water.surfaceAt(cx * 2 + WG[i], cz * 2 + WG[j]); return h ? h.y : WATER_Y; };
       let mn = 9, mx = -9, sum = 0;
-      for (const [a, b] of [[0, 0], [.9, .9], [.9, -.9], [-.9, .9], [-.9, -.9], [.9, 0], [-.9, 0], [0, .9], [0, -.9]]) { const y = water.surfaceAt(cx * 2 + a, cz * 2 + b)?.y ?? WATER_Y; mn = Math.min(mn, y); mx = Math.max(mx, y); sum += y; }
-      v = mx - mn < .004 ? sum / 9 : null; flatCache.set(k, v);
+      for (const i of [0, 2, 4]) for (const j of [0, 2, 4]) { const y = at(i, j); ys[i * 5 + j] = y; mn = Math.min(mn, y); mx = Math.max(mx, y); sum += y; }
+      if (mx - mn < .004) v = {flat: sum / 9};
+      else { for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) if (ys[i * 5 + j] === undefined) ys[i * 5 + j] = at(i, j); v = {ys}; }
+      waterCache.set(k, v);
     }
     return v;
   };
+  const waterY = (cx, cz, x, z) => {
+    const v = waterShape(cx, cz); if (v.flat !== undefined) return v.flat;
+    const fx = Math.max(0, Math.min(3.9999, (x - cx * 2 + .9) / .45)), fz = Math.max(0, Math.min(3.9999, (z - cz * 2 + .9) / .45)), i = Math.floor(fx), j = Math.floor(fz), a = fx - i, c = fz - j, ys = v.ys;
+    return ys[i * 5 + j] * (1 - a) * (1 - c) + ys[(i + 1) * 5 + j] * a * (1 - c) + ys[i * 5 + j + 1] * (1 - a) * c + ys[(i + 1) * 5 + j + 1] * a * c;
+  };
+  // （试过「进场景 2 秒后逐格预热」：每格在主线程上算 ~85ms，把开局几秒的动画拖慢了，不值；现在只在第一次点到某个水格时现算一次，之后命中缓存）
   const surfaceY = (cx, cz, x = cx * 2, z = cz * 2) => {
     const k = cx + ',' + cz;
     if (bridgeInfo.has(k)) return getBridgeSurfaceY(bridgeByCell.get(k), x, z) ?? bridgeInfo.get(k);
@@ -339,7 +351,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (sandH && SAND_SET.has(k)) return sandH(x, z);
     if (SWAMP_SET.has(k)) return 0;
     const t = water.typeAt(cx, cz);
-    if (t === 'river' || t === 'sea') { const f = flatWaterY(cx, cz); return f !== null ? f : water.surfaceAt(x, z)?.y ?? WATER_Y; }   // 0.84：整格水面是平的就直接用常数（水里 surfaceAt 一次 ~5ms，黄框光圈要采 ~441 个点，点一下海水要卡好几秒）
+    if (t === 'river' || t === 'sea') return waterY(cx, cz, x, z);   // 0.84：整格水面是平的就直接用常数（水里 surfaceAt 一次 ~5ms，黄框光圈要采 ~441 个点，点一下海水要卡好几秒）
     return groundY(cx, cz);
   };
   const trees = [], rand = rng(11);
@@ -744,7 +756,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
 
   // ───────── 选中 / 移动范围 / 移动 ─────────
   const MOVE = {inf: 3, light: 6, medium: 5, heavy: 4, art: 4};       // 移动力（点数）
-  const SPEED = {inf: 3.0, light: 5.0, medium: 4.4, heavy: 3.6, art: 3.8};  // 动画速度（单位/秒）
+  const SPEED = {inf: 4.5, light: 7.5, medium: 6.6, heavy: 5.4, art: 5.7};  // 动画速度（单位/秒；0.85 整体提速约 1.5 倍：步兵 3.0 → 4.5，机械同比例，等他走半天太拖沓）
   const tkey = u => u.spec.k === 'tank' ? u.spec.type : u.spec.k;
   const terrainAt = (cx, cz) => bridgeInfo.has(cx + ',' + cz) ? 'bridge' : bldMap.get(cx + ',' + cz)?.type === 'bld_dockyard' ? 'building' : water.typeAt(cx, cz) !== 'land' ? water.typeAt(cx, cz) : bldMap.has(cx + ',' + cz) ? 'building' : mtnSet.has(cx + ',' + cz) ? 'mountain' : SAND_SET.has(cx + ',' + cz) ? 'desert' : SWAMP_SET.has(cx + ',' + cz) ? 'swamp' : forestHas(cx, cz) ? 'forest' : roadSet.has(cx + ',' + cz) ? 'road' : 'plain';
   // 暂定：步兵涉水代价 2（同上山），其余兵种不可进河

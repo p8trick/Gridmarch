@@ -18,6 +18,7 @@ with sync_playwright() as p:
     rng = lambda: pg.evaluate('()=>{const u=window.battle.world.units.find(o=>o.rangeCells);return u?u.rangeCells.length:0}')
     # 找一个蓝军步兵 + 它能走到的格子（用引擎）
     info = pg.evaluate('''()=>{const g=window.battle.game;const u=g.units.find(o=>o.owner===0&&o.type==="inf"&&!o.moved&&!o.acted);return {id:u.id,x:u.x,y:u.y}}''')
+    pg.evaluate('([x,y])=>{const B=window.battle,c=B.toWorld([x,y]);B.cam.target.x=c[0]*2;B.cam.target.z=c[1]*2;B.mark()}', [info['x'], info['y']]); pg.wait_for_timeout(500)   # 0.85：先把镜头对准这个单位（默认镜头下它可能在屏幕外 / 压在界面下，换地图就点空）
     tap(info['x'], info['y'])
     assert st()['sel'] == info['id'], ('点单位应选中', st())
     n = rng(); assert n >= 3, ('应出蓝格', n)

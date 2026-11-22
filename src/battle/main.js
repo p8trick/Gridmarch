@@ -372,7 +372,7 @@ function playEconomy(r) {
   const repairPhase = () => {
     if (!reps.length && !swamp.length) return finish();
     // 0.83：回血（绿 +N）和沼泽掉血（红 -N，与被打同款；掉到 0 的单位倒下）在同一刻一起演
-    for (const q of swamp) { popup(q.id, '-' + fmtHp(q.damage)); holdHp.delete(q.id); if (q.dead) world.removeUnit(q.id, true); }
+    for (const q of swamp) { popup(q.id, '-' + fmtHp(q.damage), 'hurt'); holdHp.delete(q.id); if (q.dead) world.removeUnit(q.id, true); }
     for (const q of reps) popup(q.id, '+' + fmtHp(q.heal), 'heal');
     for (const q of reps) holdHp.delete(q.id);
     syncActed(); mark();

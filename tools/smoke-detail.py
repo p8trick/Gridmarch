@@ -22,9 +22,10 @@ with sync_playwright() as p:
     def hold(pos, move=None):   # 按住直到面板出现（软件渲染下页面很卡，计时器会被拖后，不能靠固定等待时间；真机上约 0.45 秒触发）
         pg.mouse.move(*pos); pg.mouse.down(); pg.wait_for_selector('.det', state='attached', timeout=30000)
         if move: pg.mouse.move(pos[0]+move, pos[1]+move, steps=4); pg.wait_for_timeout(200)
+    center = lambda c: (pg.evaluate('([x,z])=>{const B=window.battle;B.cam.target.x=x*2;B.cam.target.z=z*2;B.mark()}', c), pg.wait_for_timeout(500))   # 0.85：先把镜头对准要点的格子（默认镜头下它可能在屏幕外 / 压在界面下，换地图就点空）
     # 1 有单位的格子：长按 → 两个盒
     u = pg.evaluate('()=>{const u=window.battle.game.units.find(u=>u.owner===0);return [u.x,u.y,u.type]}')
-    pos = scr(cellOf(u[0], u[1])); cam0 = st()['cam']
+    center(cellOf(u[0], u[1])); pos = scr(cellOf(u[0], u[1])); cam0 = st()['cam']
     hold(pos, move=30); s = st()
     assert s['det'] == 1 and s['boxes'] == 2, ('长按有单位的格子没出两个盒', s)
     assert s['cam'] == cam0, ('长按后手指移动把战场拖动了', cam0, s['cam'])
@@ -74,7 +75,7 @@ with sync_playwright() as p:
     log('兵工厂')
     # 4 自己的兵工厂（本回合一方；0.84：种子换成 11——0.84 改了关卡生成，种子 7 的地图在屏幕左缘正好有个单位，第 78 行「点左缘关面板」会误选它，再点厂就成了「移动到厂上」；厂被占住时本来就打不开生产界面）：长按 → 详细面板，不是生产界面
     f = pg.evaluate('()=>{const b=window.battle,g=b.game;for(const k in g.owners){const [x,y]=k.split(",").map(Number);if(g.terrain[y][x]==="factory"&&g.owners[k]===g.turn&&!g.units.some(u=>u.x===x&&u.y===y))return [x,y]}}')
-    pos3 = scr(cellOf(*f)); hold(pos3); s = st(); assert s['det'] == 1 and s['ars'] == 0, ('长按己方兵工厂应出详细面板而不是生产界面', s)
+    center(cellOf(*f)); pos3 = scr(cellOf(*f)); hold(pos3); s = st(); assert s['det'] == 1 and s['ars'] == 0, ('长按己方兵工厂应出详细面板而不是生产界面', s)
     pg.mouse.up(); pg.wait_for_timeout(300); pg.mouse.click(20, H // 2); pg.wait_for_timeout(300)
     pg.mouse.click(*pos3); pg.wait_for_timeout(500); s = st(); assert s['ars'] == 1 and s['det'] == 0, ('点按己方兵工厂应仍是生产界面', s)
     pg.evaluate('()=>document.querySelector(".ars-close").click()'); pg.wait_for_timeout(300)

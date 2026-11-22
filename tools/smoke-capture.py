@@ -28,16 +28,17 @@ with sync_playwright() as p:
     def capture(info):
         c = info['c']
         tap(*c); assert st()['sel'] == info['id'], ('点单位应选中', st())
-        tap(*c); pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=30000); pg.wait_for_timeout(300)
+        tap(*c); pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=90000); pg.wait_for_timeout(300)
         assert pg.is_visible('#abar') and st()['acting'] == info['id'], '原地待命应出浮条'
         assert pg.is_visible('#abar [data-act=capture]'), '站在中立建筑上应出「占领」'
         pg.click('#abar [data-act=capture]')
+    pg.evaluate("()=>{window.__pop=[];new MutationObserver(ms=>ms.forEach(m=>m.addedNodes.forEach(n=>{if(n.classList&&n.classList.contains('dmg')&&n.classList.contains('cap'))window.__pop.push(n.textContent)}))).observe(document.querySelector('#battle')||document.body,{childList:true,subtree:true})}")
     # ① 第一次：10/20，只累加
     capture(setup['a'])
-    pg.wait_for_function("()=>[...document.querySelectorAll('.dmg.cap')].some(e=>e.textContent==='占领 10/20')", timeout=3000)   # 头顶应飘「占领 10/20」
+    pg.wait_for_function("()=>window.__pop.includes('占领 10/20')", timeout=8000, polling=100)   # 头顶应飘「占领 10/20」（0.85：用 MutationObserver 记录，不靠轮询 DOM——无头软件渲染只有 ~2 帧/秒，飘字只活 1.3 秒，按帧轮询会漏）
     pg.wait_for_timeout(300); pg.screenshot(path='/tmp/cap_mid.png')
     assert pg.evaluate('()=>window.battle.world.busy()'), '占领动画期间 world.busy() 应为真（挡住点击）'
-    pg.wait_for_function('()=>!window.battle.world.busy()', timeout=15000); pg.wait_for_timeout(300)
+    pg.wait_for_function('()=>!window.battle.world.busy()', timeout=90000); pg.wait_for_timeout(300)
     r = pg.evaluate('([id,c])=>{const B=window.battle,u=B.game.units.find(o=>o.id===id),[ex,ey]=B.toEngine(B.toWorld(c));return {cap:u.cap,acted:u.acted,owner:B.game.owners[c[0]+","+c[1]]}}', [setup['a']['id'], setup['a']['c']])
     assert r['cap'] == 10 and r['acted'] and r['owner'] is None, ('第一次占领只累加 10 点、仍是中立', r)
     rings = pg.evaluate('()=>{let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="capRing")n++});return n}')
@@ -48,7 +49,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(500)
     capture(setup['b'])
     pg.wait_for_timeout(700); pg.screenshot(path='/tmp/cap_flash.png')
-    pg.wait_for_function('()=>!window.battle.world.busy()', timeout=15000); pg.wait_for_timeout(400)
+    pg.wait_for_function('()=>!window.battle.world.busy()', timeout=90000); pg.wait_for_timeout(400)
     r = pg.evaluate('([id,c])=>{const B=window.battle,u=B.game.units.find(o=>o.id===id),b=B.world.buildings.find(x=>x.cell[0]===B.toWorld(c)[0]&&x.cell[1]===B.toWorld(c)[1]);return {cap:u.cap,acted:u.acted,owner:B.game.owners[c[0]+","+c[1]],visual:b&&b.owner}}', [setup['b']['id'], setup['b']['c']])
     assert r['owner'] == 0 and r['visual'] == 'blue' and r['cap'] == 0 and r['acted'], ('占满 20 点应易主（引擎 + 战场）', r)
     pg.screenshot(path='/tmp/cap_done.png')
@@ -62,7 +63,7 @@ with sync_playwright() as p:
     c = setup['a']['c']
     pg.evaluate('([c])=>{const B=window.battle;B.cam.target.x=B.toWorld(c)[0]*2;B.cam.target.z=B.toWorld(c)[1]*2;B.mark()}', [c]); pg.wait_for_timeout(500)   # 0.84：先把镜头对准这个单位（之前镜头还停在第二座建筑上，换了地图后它可能在屏幕外 / 压在界面下）
     tap(*c); tap(*dest)
-    pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=30000); pg.wait_for_timeout(400)
+    pg.wait_for_function('()=>window.battle.world.units.every(u=>!u.path)', timeout=90000); pg.wait_for_timeout(400)
     r = pg.evaluate('([id])=>{const u=window.battle.game.units.find(o=>o.id===id);let n=0;window.battle.world.scene.traverse(m=>{if(m.name==="capRing")n++});return {cap:u.cap,rings:n}}', [setup['a']['id']])
     assert r['cap'] == 0 and r['rings'] == 0, ('走开后进度清零、进度环消失', r)
     # ④ 已行动单位变灰（grayT = 1）；复位后 grayT = 0

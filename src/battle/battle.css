@@ -255,6 +255,7 @@
 #battle .dmg.cap{color:#fff;-webkit-text-stroke:3px #0d3a78;text-shadow:0 3px 0 rgba(13,58,120,.7)}
 #battle .dmg.cap.r{-webkit-text-stroke:3px #7a1c10;text-shadow:0 3px 0 rgba(122,28,16,.7)}
 #battle .dmg{position:absolute;z-index:6;transform:translate(-50%,-50%);pointer-events:none;font:900 26px/1 var(--font);color:#ffd45a;letter-spacing:.02em;-webkit-text-stroke:3px #5a1608;paint-order:stroke fill;text-shadow:0 3px 0 rgba(90,22,8,.7);animation:dmgrise 1.2s ease-out forwards}
+#battle .dmg.hurt{color:#ff6a5a;-webkit-text-stroke:3px #4a0a06;text-shadow:0 3px 0 rgba(74,10,6,.75)}   /* 0.85：沼泽掉血飘字用红色，和默认的金黄色（被攻击的伤害）区分 */
 #battle .dmg.heal{color:#eaffd0;-webkit-text-stroke:3px #1b6b2a;text-shadow:0 3px 0 rgba(27,107,42,.7)}   /* 0.81：回血飘字，和伤害飘字同一套动画，只换成绿色加号 */
 #battle .fxm{position:absolute;z-index:7;transform:translate(-50%,0);pointer-events:none;font:900 24px/1 var(--font);letter-spacing:.03em;paint-order:stroke fill;animation:fxmrise 1.4s ease-out forwards;will-change:transform,opacity}   /* 0.81：状态条下方的资金变动数字（收入 / 修理费） */
 #battle .fxm.in{color:#ffe27a;-webkit-text-stroke:3px #5a3a08;text-shadow:0 3px 0 rgba(90,58,8,.7)}
