@@ -338,10 +338,13 @@ const closeEnd = () => { $('endm').hidden = true; };
 function doEndTurn() {
   const r = engineEndTurn(game); if (!r.ok) return;
   hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
-  const fx = combatOn && ((r.income || 0) > 0 || (r.repairs && r.repairs.length > 0));   // 关了「作战动画」就不演，直接到账
-  if (fx) { econShown = r.fundsBefore; econBusy = true; for (const q of r.repairs) holdHp.add(q.id); }
-  syncActed(); hud(); infoUpdate(); mark(); playBanner();
-  if (fx) playEconomy(r);
+  const swamp = r.swamp || [], reps = r.repairs || [];
+  const fx = combatOn && ((r.income || 0) > 0 || reps.length > 0 || swamp.length > 0);   // 关了「作战动画」就不演，直接到账
+  if (fx) { if (r.fundsBefore !== undefined) econShown = r.fundsBefore; econBusy = true; for (const q of reps) holdHp.add(q.id); for (const q of swamp) if (!q.dead) holdHp.add(q.id); }
+  else for (const q of swamp) if (q.dead) world.removeUnit(q.id, false);   // 沼泽扣死的单位：引擎里已经没了，画面里也要拿掉
+  syncActed(); hud(); infoUpdate(); mark();
+  if (game.winner === null) playBanner();   // 沼泽扣光对方：不换人，没有「第 N 天」横幅，演完直接报胜负
+  if (fx) playEconomy(r); else if (game.winner !== null) showWinner();
 }
 // 0.81 回合开始的经济动画（规则在 engineEndTurn 里已经结算好，这里只是演）：横幅快滑出时 → 状态条下方飘「+收入」，资金数字滚动涨上去 →
 // 然后所有在己方建筑上回血的单位「同时」飘绿色「+N」（和被打时的伤害飘字同一套动画，只是变成加），同时状态条下方飘「-修理费合计」，资金数字同步滚动扣下来。
@@ -364,18 +367,20 @@ function tweenFunds(from, to, ms, done) {
 }
 function playEconomy(r) {
   const tok = ++econTok, later = (fn, ms) => econTimers.push(setTimeout(() => { if (alive && tok === econTok) fn(); }, ms));
-  const after = (r.income || 0) > 0 ? r.fundsBefore + r.income : r.fundsBefore, reps = r.repairs || [];
-  const finish = () => { econShown = null; econBusy = false; holdHp.clear(); syncActed(); hud(); infoUpdate(); mark(); };
+  const after = (r.income || 0) > 0 ? r.fundsBefore + r.income : r.fundsBefore, reps = r.repairs || [], swamp = r.swamp || [];
+  const finish = () => { econShown = null; econBusy = false; holdHp.clear(); syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
   const repairPhase = () => {
-    if (!reps.length) return finish();
+    if (!reps.length && !swamp.length) return finish();
+    // 0.83：回血（绿 +N）和沼泽掉血（红 -N，与被打同款；掉到 0 的单位倒下）在同一刻一起演
+    for (const q of swamp) { popup(q.id, '-' + fmtHp(q.damage)); holdHp.delete(q.id); if (q.dead) world.removeUnit(q.id, true); }
     for (const q of reps) popup(q.id, '+' + fmtHp(q.heal), 'heal');
     for (const q of reps) holdHp.delete(q.id);
     syncActed(); mark();
     if (r.repairCost > 0) { fxMoney('-' + r.repairCost, 'out'); later(() => tweenFunds(after, after - r.repairCost, 700, () => later(finish, 350)), 250); }
-    else later(finish, 900);
+    else later(finish, 1000);
   };
   const incomePhase = () => {
-    if (!(r.income > 0)) return repairPhase();
+    if (!(r.income > 0)) return repairPhase();   // （沼泽扣光对方时 income 是 undefined，直接进下一段）
     fxMoney('+' + r.income, 'in');
     later(() => tweenFunds(r.fundsBefore, after, 700, () => later(repairPhase, 450)), 250);
   };

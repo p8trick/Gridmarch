@@ -213,18 +213,21 @@ function checkWinner(g) {
 // 结束当前玩家的回合：沼泽掉血 → 换人 → 对方单位恢复行动
 export function endTurn(g) {
   if (g.winner !== null) return {ok: false, err: '游戏已结束'};
+  const swamp = [];   // 0.83：沼泽掉血清单 [{id, damage, dead}]，战场据此演飘字 / 倒下（damage = 实际掉的血量点数）
   if (g.config.swampDamage) {
-    for (const u of g.units) if (u.owner === g.turn && TERRAINS[g.terrain[u.y][u.x]].hazard) u.hp -= g.config.swampDamage;
+    const hit = g.units.filter(u => u.owner === g.turn && TERRAINS[g.terrain[u.y][u.x]].hazard).map(u => ({u, before: u.hp}));
+    for (const {u} of hit) u.hp -= g.config.swampDamage;
     g.units = g.units.filter(u => u.hp > 0 || !g.config.swampKills);
     for (const u of g.units) if (u.hp < 1) u.hp = 1;                // 不致死时至少留 1 点
-    checkWinner(g); if (g.winner !== null) return {ok: true};
+    for (const {u, before} of hit) { const dead = !g.units.includes(u); swamp.push({id: u.id, damage: before - (dead ? 0 : u.hp), dead}); }
+    checkWinner(g); if (g.winner !== null) return {ok: true, swamp};
   }
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
   for (const u of g.units) if (u.owner === g.turn) { u.moved = u.acted = false; delete u.origin; }
   const before = g.funds[g.turn];
   collectIncome(g);
   const income = g.funds[g.turn] - before, repairs = repairUnits(g);
-  return {ok: true, income, fundsBefore: before, repairs, repairCost: repairs.reduce((a, r) => a + r.cost, 0)};   // 0.81：战场用这份清单演「收入 → 修理」动画
+  return {ok: true, income, fundsBefore: before, repairs, repairCost: repairs.reduce((a, r) => a + r.cost, 0), swamp};   // 0.81：战场用这份清单演「收入 → 修理」动画；0.83 +swamp：沼泽掉血与修理同时演
 }
 
 export {dispHp};

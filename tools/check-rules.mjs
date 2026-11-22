@@ -253,4 +253,14 @@ t('断崖 / 浅滩（0.82）：全部陆军单位都能走上去（消耗 1）�
   }
 });
 
+t('沼泽掉血清单（0.83）：endTurn 返回 swamp [{id, damage, dead}]，战场据此演飘字 / 倒下', () => {
+  const mk = hp => createGame({terrain: map(4, 1).map(r => { r[1] = 'swamp'; return r; }), units: [{type: 'inf', owner: 0, x: 1, y: 0, hp}, {type: 'inf', owner: 0, x: 0, y: 0, hp: 50}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  let g = mk(50), r = endTurn(g);
+  assert.deepEqual(r.swamp, [{id: 1, damage: 10, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 40);   // 平地上的单位不在清单里
+  g = mk(10); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 10, dead: true}]); assert.equal(unitAt(g, 1, 0), undefined);
+  g = mk(5); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 5, dead: true}]);   // 只剩 5 点：实际只掉 5
+  g = createGame({terrain: map(4, 1).map(r2 => { r2[1] = 'swamp'; return r2; }), config: {swampKills: false}, units: [{type: 'inf', owner: 0, x: 1, y: 0, hp: 5}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 4, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 1);   // 不致死：留 1 点，实际掉 4
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);

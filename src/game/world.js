@@ -276,21 +276,25 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
   }
   rebuildBoard();
-  // 浅滩/断崖格：格内约 3/4 是陆地、其余是水，单位站在格心会悬在水面上。0.82：站位取「格内陆地部分的中心」（在格内按 0.22 间距采样地表，高于水面的点取重心；
-  // 重心若正好落在水里 / 凹处，就取离重心最近的陆地采样点），这样单位在陆地上居中，而不是被固定推开 0.4 / 贴到岸边；高度取该点真实地表。不依赖美术组件的 groundAnchor（那个按「最高处」挑点，不居中）
-  const coastOff = new Map(), coastY = new Map(), LAND_Y = -.28;
+  // 浅滩/断崖格：格内约 3/4 是陆地、其余是水。0.83：站位「尽量贴格心」——在格内按 0.1 间距采样地表，取离格心最近的合格点：
+  //   断崖：合格 = 站得住（高于水面）且离最近的水面 / 无地面采样点 ≥ CLIFF_EDGE（脚边留一点，单位贴着悬崖边缘站，格心离崖边够远时就站在正中）；
+  //   浅滩：合格 = 沙面，或离沙面不超过 WADE_REACH 的浅水（涉水站着也不违和）；水深一律不低于水面。
+  // 这样大多数海岸格单位就在格心，只有转角 / 窄岸才被推向陆地。高度取该点真实地表（不低于水面）。不依赖美术组件的 groundAnchor（它按「最高处」挑点）。
+  const coastOff = new Map(), coastY = new Map(), LAND_Y = -.28, CLIFF_EDGE = .22, WADE_REACH = .3;
   const coastOffset = (cx, cz) => {
     const k = cx + ',' + cz; let o = coastOff.get(k);
     if (!o) {
-      const pts = []; let sx = 0, sz = 0;
-      for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) { const dx = i * .22, dz = j * .22, h = water.surfaceAt(cx * 2 + dx, cz * 2 + dz); if (h && h.y >= LAND_Y) { pts.push([dx, dz]); sx += dx; sz += dz; } }
-      if (!pts.length) o = [0, 0];
-      else {
-        const mx = sx / pts.length, mz = sz / pts.length, h = water.surfaceAt(cx * 2 + mx, cz * 2 + mz);
-        if (h && h.y >= LAND_Y) o = [mx, mz];
-        else { let best = pts[0], bd = 1e9; for (const q of pts) { const d = Math.hypot(q[0] - mx, q[1] - mz); if (d < bd) { bd = d; best = q; } } o = [best[0], best[1]]; }
+      const cliff = water.typeAt(cx, cz) === 'cliff', S = .1, N = 9, pts = [], dry = [], wet = [];
+      for (let i = -N; i <= N; i++) for (let j = -N; j <= N; j++) {
+        const dx = i * S, dz = j * S, h = water.surfaceAt(cx * 2 + dx, cz * 2 + dz), p = [dx, dz, Math.hypot(dx, dz)];
+        if (h && h.y >= LAND_Y) { pts.push(p); dry.push(p); } else { wet.push(p); if (h) p.water = true; }
       }
-      coastOff.set(k, o);
+      const near = (p, set, r) => { for (const q of set) if (Math.hypot(p[0] - q[0], p[1] - q[1]) < r) return true; return false; };
+      let best = null;
+      if (cliff) { for (const p of dry) if (!near(p, wet, CLIFF_EDGE) && (!best || p[2] < best[2])) best = p; }
+      else { for (const p of pts) if (!best || p[2] < best[2]) best = p; for (const p of wet) if (p.water && near(p, dry, WADE_REACH) && (!best || p[2] < best[2])) best = p; }
+      if (!best) { for (const p of dry) { let m = 9; for (const q of wet) m = Math.min(m, Math.hypot(p[0] - q[0], p[1] - q[1])); p.m = m; if (!best || p.m > best.m) best = p; } }   // 窄岸：取离水最远的陆地点
+      o = best ? [best[0], best[1]] : [0, 0]; coastOff.set(k, o);
     }
     return o;
   };
@@ -302,7 +306,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (sandH && SAND_SET.has(cx + ',' + cz)) return sandH(cx * 2, cz * 2);   // 沙漠：格心处的沙丘高度（每格不同）
     if (SWAMP_SET.has(cx + ',' + cz)) return -mireDepth(cx, cz, u);          // 沼泽：陷进泥里一点（每格深浅不同）
     if (water.typeAt(cx, cz) === 'river') return WATER_Y - WADE_DEPTH * (u?.topOff || 1.8);   // 河里没有河床几何：水面不透明，沉下去的下半身被水面遮住
-    if (isCoast(cx, cz)) { const k = cx + ',' + cz; if (!coastY.has(k)) { const o = coastOffset(cx, cz); coastY.set(k, water.surfaceAt(cx * 2 + o[0], cz * 2 + o[1])?.y ?? water.anchorAt?.(cx, cz)?.[1] ?? 0); } return coastY.get(k); }
+    // 涉水站位（浅滩外沿的浅水点）：脚略沉进水面下，和河里涉水同理
+    if (isCoast(cx, cz)) { const k = cx + ',' + cz; if (!coastY.has(k)) { const o = coastOffset(cx, cz); { const h = water.surfaceAt(cx * 2 + o[0], cz * 2 + o[1])?.y ?? water.anchorAt?.(cx, cz)?.[1] ?? 0; coastY.set(k, h < LAND_Y ? WATER_Y - .1 : h); } } return coastY.get(k); }
     { const bb = bldMap.get(cx + ',' + cz); if (bb?.dockAnchor) return bb.dockAnchor.y; return bb?.y || 0; }
   };
 
@@ -379,7 +384,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   });
   const bq = () => state.bldFollow ? state.viewQuarter : 0;
   const bTheta = b => b.follow === false ? 0 : bq() * Math.PI / 2;
-  // 海岸格站位：陆地部分的中心（coastOffset；0.82 起不再用 MT2 的 anchorAt，它偏向最高处、不居中）
+  // 海岸格站位：尽量贴格心的合格点（coastOffset；0.83）；不再用 MT2 的 anchorAt（它偏向最高处、不居中）
   const standPos = (cx, cz) => {
     const b = bldMap.get(cx + ',' + cz), mh = hills.get(cx + ',' + cz);
     if (mh) { const p = getMountainStandPoint(mh.hill); return [p.x, p.z]; }   // 山格：驻扎锚点（随朝向旋转，偏离格心一点）

@@ -248,7 +248,7 @@
 #battle .ahint{align-self:center;padding:4px 9px;border-radius:7px;background:rgba(9,24,46,.62);font-size:11px;line-height:1;letter-spacing:.08em;color:rgba(255,255,255,.88);pointer-events:none;white-space:nowrap}
 /* 0.70 攻击：选目标时浮条只剩提示；伤害数字上飘 */
 #battle .abtn[hidden]{display:none}
-#battle .abar .abtn[data-act=capture]:not([hidden])~.abtn[data-act=wait],#battle .abar .abtn[data-act=attack]:not([hidden])~.abtn[data-act=wait]{margin-top:26px}   /* 0.82：「待命」和上面的「占领 / 攻击」拉开一大段，免得点错；只有待命一个按钮时不留空 */
+#battle .abar .abtn[data-act=capture]:not([hidden])~.abtn[data-act=wait],#battle .abar .abtn[data-act=attack]:not([hidden])~.abtn[data-act=wait]{margin-top:6px}   /* 0.83：「待命」和上面的「占领 / 攻击」之间总空隙 15px（9 + 6）；0.82 的 35px 太夸张；只有待命一个按钮时不留空 */
 #battle .abar .ahint.t{display:none}
 #battle .abar.pick .abtn,#battle .abar.pick .ahint.u{display:none}
 #battle .abar.pick .ahint.t{display:block}

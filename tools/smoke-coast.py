@@ -1,7 +1,7 @@
 # 海岸站位 / 步兵角标 / 浮条间距冒烟测试（0.82；同 smoke-endturn.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# ① 浅滩 / 断崖格：单位站位离格心不超过 0.5、站位高度在水面之上（-0.3），不会悬在海里；断崖格对陆军可走（规则层已有测试，这里查第一关真实地图里的引擎地形）；
+# ① 浅滩 / 断崖格：单位站位基本在格心（平均离格心 ≤ 0.15，转角最多推开 0.6）、高度不低于涉水点（-0.4）；
 # ② 步兵 / 反坦克兵血量角标相对脚下的屏幕位置，四个朝向完全一样（背包不影响）；
-# ③ 行动浮条：「待命」和上面的「占领 / 攻击」之间留出至少 20px 空隙（防误触），只有「待命」一个按钮时不留空。出错直接 assert。
+# ③ 行动浮条：「待命」和上面的「占领 / 攻击」之间空隙约 15px（0.83 由 35 收到 15），只有「待命」一个按钮时不留空。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
@@ -27,10 +27,11 @@ with sync_playwright() as p:
       return out;}''')
     assert len(r['cells']) >= 6, ('第一关应有浅滩 / 断崖格', len(r['cells']))
     for t, d, y in r['cells']:
-        assert d <= .5, ('站位离格心太远', t, d); assert y > -.3, ('站位悬在水面下', t, y)
+        assert d <= .6, ('站位离格心太远', t, d); assert y >= -.41, ('站位陷得太深', t, y)   # 涉水点 = 水面 -0.3 再沉 0.1
+    avg = sum(d for _, d, _ in r['cells']) / len(r['cells']); assert avg <= .15, ('海岸格站位应基本在格心（只有转角才推开）', avg)
     for t, L in r['badge'].items():
         assert all(abs(q[0]-L[0][0]) < .05 and abs(q[1]-L[0][1]) < .05 for q in L), ('角标位置随朝向变了', t, L)
     gap = r['bar']['full'][1] - r['bar']['full'][0]
-    assert gap >= 20, ('待命离攻击太近', r['bar']); assert r['bar']['solo'] == 0, ('只有待命时不该留空', r['bar'])
+    assert 14 <= gap <= 16, ('待命和攻击的空隙应约 15px', r['bar']); assert r['bar']['solo'] == 0, ('只有待命时不该留空', r['bar'])
     print('海岸 / 角标 / 浮条冒烟测试通过', 'coast cells', len(r['cells']), 'bar gap', gap, 'errors:', errs)
     b.close()
