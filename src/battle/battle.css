@@ -22,12 +22,13 @@
 #battle .hud.ready .endchip{animation:chipBob .55s ease-in-out infinite alternate}
 @keyframes hudReady{0%,100%{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.2),inset 0 1px 0 rgba(255,255,255,.28),0 3px 0 rgba(2,10,22,.55),0 0 0 0 rgba(255,200,60,0)}50%{box-shadow:inset 0 0 0 2px var(--gold-hi),inset 0 1px 0 rgba(255,255,255,.4),0 3px 0 rgba(2,10,22,.55),0 0 14px 3px rgba(255,200,60,.65)}}
 @keyframes chipBob{to{transform:translateX(4px)}}
-#battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:10px;pointer-events:auto}
+#battle #hudR{position:absolute;right:var(--pad-l);top:10px;display:flex;gap:12px;pointer-events:auto}   /* 0.87：三个按钮（找单位 / 旋转 / 菜单）间距 10 → 12px（+20%）；菜单按钮在最右边，位置不变，另外两个向左挪 */
 #battle .gbtn{position:relative;width:44px;height:36px;padding:0;border:0;background:none;color:#fff;border-radius:9px;transform:skewX(-10deg);font:inherit;touch-action:manipulation;-webkit-appearance:none;appearance:none;cursor:pointer}
 #battle .gbtn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo));box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 3px 0 var(--brown);opacity:0}
 #battle .gbtn>span{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;height:100%;transform:skewX(10deg);font-size:21px;line-height:1;transition:opacity .2s}
 #battle .gbtn.off{opacity:.45}
-#battle .gbtn .cnt{position:absolute;right:-1px;top:-1px;min-width:15px;padding:1px 3px;border-radius:8px;background:#ffd45a;color:#5a1608;font:900 11px/13px var(--font);text-align:center;box-shadow:0 1px 0 rgba(0,0,0,.4)}   /* 0.86：未行动单位数量角标 */
+#battle .gbtn .cnt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:900 14px/1 var(--font);color:#ffd45a;text-shadow:0 1px 0 rgba(0,0,0,.55);letter-spacing:-.02em}   /* 0.87：未行动单位数放在准星圆圈正中；两位数缩小字号（圆圈内径约 22px，12px 的两位数宽约 14px，放得下；超过 99 显示 99） */
+#battle .gbtn .cnt.two{font-size:12px;letter-spacing:-.06em}
 #battle .gbtn .cnt:empty{display:none}
 #battle .gbtn>span.zoom{font:800 15px/1 var(--font);letter-spacing:0;color:#ffd45a}   /* 缩放时旋转按钮临时显示视距数字 */
 #battle .gbtn:active{transform:skewX(-10deg) translateY(2px);color:#2b1700}

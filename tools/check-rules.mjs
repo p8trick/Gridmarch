@@ -264,4 +264,14 @@ t('沼泽掉血清单（0.83 / 0.84）：轮回自己那次 endTurn 返回 swamp
   endTurn(g); r = endTurn(g); assert.deepEqual(r.swamp, [{id: 1, damage: 4, dead: false}]); assert.equal(unitAt(g, 1, 0).hp, 1);   // 不致死：留 1 点，实际掉 4
 });
 
+t('歼灭只在「生产出第一个单位之后」才生效（0.87）：零单位开局双方都不会被判；某一方造出单位后被全歼才出局', () => {
+  const g = createGame({terrain: [['plain', 'factory', 'plain', 'factory', 'plain']], owners: {'1,0': 0, '3,0': 1}, funds: [3000, 3000]});
+  assert.equal(g.winner, null); endTurn(g); endTurn(g); endTurn(g); assert.equal(g.winner, null);   // 双方一个单位都没造过：怎么过回合都不判
+  while (g.turn !== 0) endTurn(g);
+  const b = produce(g, 1, 0, 'inf'); assert(b.ok); assert.equal(g.winner, null);   // 蓝军有了单位，红军还没造过 → 红军不算被歼灭
+  endTurn(g); const r = produce(g, 3, 0, 'inf'); assert(r.ok); r.unit.hp = 5; assert.equal(g.winner, null);   // 红军造出第一个单位
+  endTurn(g); assert(move(g, b.unit.id, 2, 0).ok); assert(attack(g, b.unit.id, r.unit.id).ok);
+  assert.equal(g.winner, 0);   // 红军造过单位、现在一个不剩 → 蓝军胜
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);

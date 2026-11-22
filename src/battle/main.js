@@ -17,7 +17,7 @@ import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineE
 // 舞台（虚拟横屏）由主页创建，全程共用同一个 Stage，这里只借用，不创建、不销毁。
 let current = null;   // 当前挂着的战场（同时只会有一个）
 const ROT_SVG = '<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.9-6.2"/><path d="M20.6 3.6v5.2h-5.2"/></svg>';   // 顺时针旋转图标（0.57：字符 ⟳ 比 ☰ 小，改成 SVG，大小可控）
-const NEXT_SVG = '<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"/></svg>';   // 0.86：准星图标（找下一个还没行动的单位）
+const NEXT_SVG = '<svg viewBox="0 0 24 24" width="33" height="33" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 1.5V5M12 19v3.5M1.5 12H5M19 12h3.5"/></svg>';   // 0.86 准星图标；0.87 放大（33px）、去掉中心点——未行动单位的数字放进圆圈正中
 export function unmountBattle() { if (current) { current.destroy(); current = null; } }
 
 // host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit, loading（home.js 已经开始显示的进度条，没有就自己建）}
@@ -317,7 +317,7 @@ function hideZoom() {
 }
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
   const t = game.turn, shown = econShown !== null ? econShown : game.funds[t], idle = game.winner === null ? game.units.filter(u => u.owner === t && !u.acted).length : 0, sig = game.day + '|' + t + '|' + shown + '|' + idle;
-  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; $('nCnt').textContent = idle || ''; $('bNext').classList.toggle('off', !idle); }
+  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; $('nCnt').textContent = idle > 99 ? '99' : (idle || ''); $('nCnt').classList.toggle('two', idle > 9); $('bNext').classList.toggle('off', !idle); }
   // 0.69：两档提醒。① 本方单位全部行动完 = 状态条脉冲（可以结束回合了，但可能还想造兵）；② 脉冲的同时再也没有有效操作了（没有能造兵的兵工厂：都造过了 / 被单位占着 / 钱不够最便宜的单位）= 才自动弹出结束确认。
   const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game), pulse = ready && mine.length > 0;   // 0.86：开局没有单位时不脉冲（还没东西可「行动完」），但钱不够造兵 = 无事可做，照样弹确认
   if (pulse !== hudReady) { hudReady = pulse; $('hudL').classList.toggle('ready', pulse); }
@@ -341,6 +341,7 @@ const closeEnd = () => { $('endm').hidden = true; };
 function doEndTurn() {
   const r = engineEndTurn(game); if (!r.ok) return;
   hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
+  nextFocus = 0; cycleHome = null;
   const swamp = r.swamp || [], reps = r.repairs || [];
   const fx = combatOn && ((r.income || 0) > 0 || reps.length > 0 || swamp.length > 0);   // 关了「作战动画」就不演，直接到账
   if (fx) { if (r.fundsBefore !== undefined) econShown = r.fundsBefore; econBusy = true; for (const q of reps) holdHp.add(q.id); for (const q of swamp) if (!q.dead) holdHp.add(q.id); }
@@ -405,11 +406,14 @@ $('endm').addEventListener('click', e => {
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
 // 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
-let nextFocus = 0;
+let nextFocus = 0, cycleHome = null;   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
 $('bNext').onclick = () => {
   if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || game.winner !== null) return;
   const list = game.units.filter(u => u.owner === game.turn && !u.acted).sort((a, b) => a.id - b.id); if (!list.length) return;
-  const u = list.find(q => q.id > nextFocus) || list[0], w = world.unitById(u.id); if (!w) return;
+  const u = list.find(q => q.id > nextFocus);
+  if (!u) { if (cycleHome) { cam.panTo(cycleHome.x, cycleHome.z); mark(); } nextFocus = 0; cycleHome = null; return; }   // 轮完一圈：回到开始前的镜头位置
+  const w = world.unitById(u.id); if (!w) return;
+  if (!cycleHome) cycleHome = {x: cam.target.x, z: cam.target.z};
   nextFocus = u.id; cam.panTo(w.x, w.z); mark();
 };
 $('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
@@ -481,7 +485,7 @@ cv.onpointermove = e => {
   if (pts.size === 2) {
     const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
     pinched = true; if (prevD) cam.zoomBy(prevD / d); prevD = d; hud(); mark();
-  } else { cam.pan(p.x - old[0], p.y - old[1], stage.w); mark(); }   // 位移 < 8px 且很快抬手算点按（见 endPointer）
+  } else { cam.pan(p.x - old[0], p.y - old[1], stage.w); cycleHome = null; nextFocus = 0; mark(); }   // 手动拖动镜头 = 轮流重新开始（旧的「回到原位」作废）   // 位移 < 8px 且很快抬手算点按（见 endPointer）
 };
 const endPointer = (e, allowTap) => {
   lpClear(); const t = tap; pts.delete(e.pointerId); prevD = 0; tap = null;
