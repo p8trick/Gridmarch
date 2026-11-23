@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast, atUnitCap} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast, atUnitCap, join as engineJoin, joinTargetOf} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -54,7 +54,7 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="abar" class="abar" hidden><button class="abtn" data-act="capture" hidden><span>占领</span></button><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="join" hidden><span>合流</span></button><button class="abtn" data-act="capture" hidden><span>占领</span></button><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
 ld.attach(host).label('正在生成战场…');
@@ -155,7 +155,9 @@ function startMove(ex, ey) {
   world.moveAlong(w, path.map(toWorld), () => { if (acting === u) { showBar(); mark(); } });
 }
 const bar = $('abar');
-function showBar() { bar.querySelector('[data-act=capture]').hidden = !canCapture(game, acting); bar.querySelector('[data-act=attack]').hidden = !targetsOf(game, acting).length; bar.classList.remove('pick'); bar.hidden = false; barPlace(); }
+function showBar() {   // 0.89：走到「可合流」的友军格上 = 浮条只有「合流」（这格不能待命 / 占领 / 攻击）；撤销照旧（点别处）
+  const jt = joinTargetOf(game, acting); bar.querySelector('[data-act=join]').hidden = !jt; bar.querySelector('[data-act=wait]').hidden = !!jt;
+  bar.querySelector('[data-act=capture]').hidden = !!jt || !canCapture(game, acting); bar.querySelector('[data-act=attack]').hidden = !!jt || !targetsOf(game, acting).length; bar.classList.remove('pick'); bar.hidden = false; barPlace(); }
 function hideBar() { bar.hidden = true; }
 function barPlace() {   // 浮条贴在单位右边（单位在屏幕右侧 40% 时放左边），相机移动 / 旋转后跟着走
   if (bar.hidden || !acting) return;
@@ -230,8 +232,24 @@ function doCapture() {
   if (combatOn) world.playCapture(cell, {team, from, f0: (r.cap - r.gain) / r.need, f1: r.done ? 1 : r.cap / r.need, need: r.need, done: r.done}, fin);
   else { if (r.done) world.setBuildingOwner(cell, team); fin(); }
 }
+// 0.89 合流：规则立刻结算（engineJoin），画面演：移动的单位拿掉（并进目标了），目标头顶飘绿色「+N」（和回血同款）、血量角标更新；
+// 超出 100 的血量折成资金退还时，状态条下方飘金色「+退款」，资金数字滚上去（和回合开始收入同一套）
+function playRefund(from, gain) {
+  const tok = ++econTok; econBusy = true; econShown = from; hud(); fxMoney('+' + gain, 'in');
+  econTimers.push(setTimeout(() => { if (alive && tok === econTok) tweenFunds(from, from + gain, 600, () => { econShown = null; econBusy = false; hud(); mark(); }); }, 250));
+}
+function doJoin() {
+  const u = acting, id = u.id, t = joinTargetOf(game, u), f0 = game.funds[u.owner]; if (!t) return;
+  const r = engineJoin(game, id); if (!r.ok) return;
+  hideBar(); acting = null;
+  if (r.gained > 0) popup(r.targetId, '+' + fmtHp(r.gained), 'heal');
+  world.removeUnit(id, false);
+  syncActed(); hud(); infoUpdate(); mark();
+  if (r.refund > 0 && combatOn) playRefund(f0, r.refund);
+}
 bar.addEventListener('click', e => {
   const b = e.target.closest('.abtn'); if (!b || !acting) return;
+  if (b.dataset.act === 'join') { doJoin(); return; }
   if (b.dataset.act === 'capture') { doCapture(); return; }
   if (b.dataset.act === 'attack') { enterTargeting(); return; }
   if (b.dataset.act === 'wait') { engineWait(game, acting.id); clearAct(); syncActed(); hud(); infoUpdate(); mark(); }
@@ -351,6 +369,7 @@ function toast(text) {   // 0.88：屏幕上方一条短提示（红色底，1.8
   el.textContent = text; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1900);
 }
 function doEndTurn() {
+  if (acting && joinTargetOf(game, acting)) undoMove();   // 停在合流格上没点合流就结束回合：先把画面里的单位退回原位（引擎的 endTurn 也会退）
   const prev = game.turn, r = engineEndTurn(game); if (!r.ok) return;
   camMem[prev] = cycleHome ? {...cycleHome} : {x: cam.target.x, z: cam.target.z};
   if (game.winner === null) { const m = camMem[game.turn] || homeCam(game.turn); if (m) cam.panTo(m.x, m.z, .7); }

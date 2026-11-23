@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf} from '../src/rules/engine.js';
+import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf, join, joinTargetOf, canJoinInto} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -280,6 +280,30 @@ t('单位上限（0.88）：每方 40 个，到上限不能再生产（兵工厂
   let g = mk(40); const f0 = g.funds[0]; assert.equal(g.config.maxUnits, 40); assert(!canProduce(g)); const r = produce(g, 0, 0, 'inf');
   assert(!r.ok && r.err.includes('上限'), r.err); assert.equal(g.funds[0], f0);   // 没扣钱
   g = mk(39); assert(canProduce(g)); assert(produce(g, 0, 0, 'inf').ok);   // 39 个 → 还能造第 40 个
+});
+
+t('合流（0.89）：走到残血同类型友军格上才能合流；血量相加、超出折成资金、弹药相加；目标行动状态不变', () => {
+  const mk = (extra = {}) => createGame({terrain: map(5, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0, hp: 60, ammo: 3}, {type: 'tank', owner: 0, x: 2, y: 0, hp: 70, ammo: 4}, {type: 'inf', owner: 0, x: 1, y: 0, hp: 30}, {type: 'tank', owner: 1, x: 4, y: 0}], ...extra});
+  const g = mk(), a = unitAt(g, 0, 0), b = unitAt(g, 2, 0), f0 = g.funds[0];
+  const r = reachable(g, a); assert(r.has('2,0'), '残血同类型友军格可到达'); assert(!r.has('1,0'), '不同类型友军格仍不能停');   // 步兵格（不同类型）可穿过不可停
+  assert(move(g, a.id, 2, 0).ok); assert.equal(joinTargetOf(g, a), b); assert(!wait(g, a.id).ok, '合流格上不能待命');
+  const j = join(g, a.id); assert(j.ok); assert.equal(j.targetId, b.id); assert.equal(j.gained, 30); assert.equal(j.over, 30);   // 60 + 70 = 130 → 100，超出 30
+  assert.equal(j.refund, 2100); assert.equal(g.funds[0], f0 + 2100);   // 轻坦 7000 × 30%
+  assert.equal(b.hp, 100); assert.equal(b.ammo, 7); assert(!g.units.includes(a)); assert.equal(g.units.filter(u => u.type === 'tank' && u.owner === 0).length, 1);
+  assert.equal(b.acted, false);   // 目标原来没行动过，合流后还能行动
+});
+
+t('合流：满血目标 / 不同类型 / 敌军 / config.join=false 都不行；停在合流格上结束回合 = 自动退回原位', () => {
+  const g = createGame({terrain: map(4, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 0, x: 2, y: 0, hp: 100}, {type: 'tank', owner: 1, x: 3, y: 0, hp: 50}]});
+  assert(!reachable(g, unitAt(g, 0, 0)).has('2,0'), '满血友军不能合流');
+  const h = createGame({terrain: map(4, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 0, x: 2, y: 0, hp: 50}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  assert(canJoinInto(h, unitAt(h, 0, 0), unitAt(h, 2, 0)));
+  const a = unitAt(h, 0, 0), b = unitAt(h, 2, 0); assert(move(h, a.id, 2, 0).ok);
+  endTurn(h); assert.equal(a.x, 0); assert.equal(a.moved, false); assert.equal(b.hp, 50); assert.equal(h.units.length, 3);   // 退回原位，谁也没变
+  const k = createGame({terrain: map(4, 1), funds: [0, 0], config: {join: false}, units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 0, x: 2, y: 0, hp: 50}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  assert(!reachable(k, unitAt(k, 0, 0)).has('2,0'));
+  const e = createGame({terrain: map(4, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 2, y: 0, hp: 50}]});
+  assert(!reachable(e, unitAt(e, 0, 0)).has('2,0'), '敌军不能合流');
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);

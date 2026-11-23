@@ -121,10 +121,15 @@ function costMap(g, unit) {
   return best;
 }
 
-// 可到达（能停下）的格子：Map('x,y' → 已花的移动力）。友方可穿过但不能停在上面。
+// 合流（0.89）：mover 能不能并进 other——同一方、同类型、other 血量没满（高战：被并入的一方没满血才行）
+export const canJoinInto = (g, mover, other) => !!(g.config.join && other && other !== mover && other.owner === mover.owner && other.type === mover.type && other.hp < 100);
+// 单位现在站的格子上，有没有可以合流的友军（走到「合流」格 = 两个单位暂时同格，等玩家点「合流」；撤销 / 结束回合会自动退回）
+export const joinTargetOf = (g, u) => g.units.find(o => o !== u && o.x === u.x && o.y === u.y && canJoinInto(g, u, o)) || null;
+
+// 可到达（能停下）的格子：Map('x,y' → 已花的移动力）。友方可穿过但不能停在上面——除了「可以合流」的同类型残血友军所在格（0.89）。
 export function reachable(g, unit) {
   const best = costMap(g, unit);
-  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number), o = unitAt(g, x, y); if (o && o !== unit) best.delete(k); }
+  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number), o = unitAt(g, x, y); if (o && o !== unit && !canJoinInto(g, unit, o)) best.delete(k); }
   return best;
 }
 
@@ -204,8 +209,22 @@ export function capture(g, id) {
   return out;
 }
 
+// 合流（0.89）：u 已经走到了可合流的友军格上 → u 并进目标：血量相加（最多 100），超出的部分按造价折成资金退还（CONFIG.joinRefund），弹药 / 燃料相加（不超过满值）；
+// u 消失；目标保持原来的行动状态（没行动过的还能行动）。返回 {ok, targetId, hp, gained, over, refund}
+export function join(g, id) {
+  const u = getUnit(g, id); if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
+  if (!u.moved || u.acted) return {ok: false, err: '现在不能合流'};
+  const t = joinTargetOf(g, u); if (!t) return {ok: false, err: '这里没有可以合流的单位'};
+  const spec = UNITS[t.type], total = t.hp + u.hp, hp = Math.min(100, total), over = total - hp, gained = hp - t.hp;
+  const refund = g.config.joinRefund ? Math.floor(spec.cost * over / 100) : 0;
+  t.hp = hp; t.ammo = Math.min(spec.ammo, t.ammo + u.ammo); t.fuel = Math.min(spec.fuel, t.fuel + u.fuel); g.funds[u.owner] += refund;
+  g.units = g.units.filter(o => o !== u);
+  return {ok: true, targetId: t.id, hp, gained, over, refund};
+}
+
 export function wait(g, id) {
   const u = getUnit(g, id); if (!u || u.owner !== g.turn) return {ok: false, err: '不能操作'};
+  if (joinTargetOf(g, u)) return {ok: false, err: '这里只能合流，不能待命'};
   u.moved = u.acted = true; delete u.origin; return {ok: true};
 }
 
@@ -218,6 +237,7 @@ function checkWinner(g) {
 // 结束当前玩家的回合：换人 → 对方单位恢复行动 → 收入 → 修理 → 沼泽掉血（轮到的这一方）
 export function endTurn(g) {
   if (g.winner !== null) return {ok: false, err: '游戏已结束'};
+  for (const u of g.units) if (u.owner === g.turn && u.moved && !u.acted && u.origin && joinTargetOf(g, u)) undoMove(g, u.id);   // 0.89：停在「合流格」上还没点合流就结束回合 = 这次移动作废，退回原位（不能留下两个单位同格）
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
   for (const u of g.units) if (u.owner === g.turn) { u.moved = u.acted = false; delete u.origin; }
   const before = g.funds[g.turn];
