@@ -210,14 +210,14 @@ export function capture(g, id) {
 }
 
 // 合流（0.89）：u 已经走到了可合流的友军格上 → u 并进目标：血量相加（最多 100），超出的部分按造价折成资金退还（CONFIG.joinRefund），弹药 / 燃料相加（不超过满值）；
-// u 消失；目标保持原来的行动状态（没行动过的还能行动）。返回 {ok, targetId, hp, gained, over, refund}
+// u 消失；合流后的单位本回合行动结束（0.90：高战规则，和被并入单位合流前有没有行动过无关）。返回 {ok, targetId, hp, gained, over, refund}
 export function join(g, id) {
   const u = getUnit(g, id); if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
   if (!u.moved || u.acted) return {ok: false, err: '现在不能合流'};
   const t = joinTargetOf(g, u); if (!t) return {ok: false, err: '这里没有可以合流的单位'};
   const spec = UNITS[t.type], total = t.hp + u.hp, hp = Math.min(100, total), over = total - hp, gained = hp - t.hp;
   const refund = g.config.joinRefund ? Math.floor(spec.cost * over / 100) : 0;
-  t.hp = hp; t.ammo = Math.min(spec.ammo, t.ammo + u.ammo); t.fuel = Math.min(spec.fuel, t.fuel + u.fuel); g.funds[u.owner] += refund;
+  t.hp = hp; t.ammo = Math.min(spec.ammo, t.ammo + u.ammo); t.fuel = Math.min(spec.fuel, t.fuel + u.fuel); g.funds[u.owner] += refund; t.moved = t.acted = true; delete t.origin;
   g.units = g.units.filter(o => o !== u);
   return {ok: true, targetId: t.id, hp, gained, over, refund};
 }

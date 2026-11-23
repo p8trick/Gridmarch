@@ -28,6 +28,7 @@ with sync_playwright() as p:
     s = pg.evaluate('([a,t])=>{const g=window.battle.game,A=g.units.find(u=>u.id===a[0]),T=g.units.find(u=>u.id===t[0]);return {ax:A.x,ay:A.y,am:A.moved,tx:T.x,ty:T.y,thp:T.hp,n:g.units.length}}', [info['a'], info['t']])
     assert (s['ax'], s['ay'], s['am'], s['n'], s['thp']) == (info['a'][1], info['a'][2], False, info['n'], 40), ('点别处应撤销、两个单位原样', s)
     # ② 真合流
+    tris0 = pg.evaluate("async()=>(await import('/src/game/units/infantry-actors.js')).infantryTriCount()")
     pg.wait_for_function('()=>!window.battle.world.busy()', timeout=60000, polling=100)
     assert pg.evaluate('()=>window.battle.state().sel') == info['a'][0], '撤销后应回到选中状态'
     tap(info['t'][1:]); wait_bar(); pg.click('[data-act=join]')   # 撤销后单位仍是选中的，直接点残血友军格
@@ -35,5 +36,13 @@ with sync_playwright() as p:
     r = pg.evaluate('([a,t])=>{const B=window.battle,g=B.game;return {n:g.units.length,aGone:!g.units.some(u=>u.id===a[0])&&!B.world.unitById(a[0]),thp:g.units.find(u=>u.id===t[0]).hp,funds:g.funds[0]}}', [info['a'], info['t']])
     assert r['aGone'] and r['n'] == info['n'] - 1 and r['thp'] == 100 and r['funds'] == info['funds'] + 400, ('合流后：移动的单位消失、目标满血、退款 400', r, info)
     pg.wait_for_function('()=>document.querySelector("#hFunds").textContent===String(window.battle.game.funds[0])', timeout=60000, polling=100)
+    tris1 = pg.evaluate("async()=>(await import('/src/game/units/infantry-actors.js')).infantryTriCount()")
+    assert tris1 < tris0, ('合流后被并入的步兵模型应从画面里消失（0.90 修残影）', tris0, tris1)
+    assert pg.evaluate('([t])=>{const u=window.battle.game.units.find(o=>o.id===t[0]);return u.acted&&u.moved}', [info['t']]), '合流后的单位应行动结束（高战规则）'
+    # ③ 批容量不会因为「造了又拿掉」而耗尽：造 + 拿掉 120 个步兵（0.90 之前每个都永久占一个实例位，80 个就报 Capacity exceeded）
+    n = pg.evaluate('''()=>{const B=window.battle,g=B.game;let fx=null;for(const k in g.owners){const [x,y]=k.split(',').map(Number);if(g.owners[k]===0&&g.terrain[y][x]==='factory'&&!fx)fx=[x,y]}
+      let made=0;for(let i=0;i<120;i++){g.funds[0]=9999;g.built.clear();const r=B.produce('inf',fx[0],fx[1]);if(!r.ok)break;made++;g.units=g.units.filter(u=>u!==r.unit);B.world.removeUnit(r.unit.id,false)}return made}''')
+    assert n == 120, ('造了又拿掉 120 个步兵应都成功', n)
+    tris2 = pg.evaluate("async()=>(await import('/src/game/units/infantry-actors.js')).infantryTriCount()"); assert tris2 == tris1, ('拿掉的步兵不该留在画面里', tris1, tris2)
     assert not errs, errs
     print('合流冒烟测试通过', 'errors:', errs); b.close()

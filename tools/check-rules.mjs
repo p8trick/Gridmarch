@@ -282,7 +282,7 @@ t('单位上限（0.88）：每方 40 个，到上限不能再生产（兵工厂
   g = mk(39); assert(canProduce(g)); assert(produce(g, 0, 0, 'inf').ok);   // 39 个 → 还能造第 40 个
 });
 
-t('合流（0.89）：走到残血同类型友军格上才能合流；血量相加、超出折成资金、弹药相加；目标行动状态不变', () => {
+t('合流（0.89 / 0.90）：走到残血同类型友军格上才能合流；血量相加、超出折成资金、弹药相加；合流后行动结束', () => {
   const mk = (extra = {}) => createGame({terrain: map(5, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0, hp: 60, ammo: 3}, {type: 'tank', owner: 0, x: 2, y: 0, hp: 70, ammo: 4}, {type: 'inf', owner: 0, x: 1, y: 0, hp: 30}, {type: 'tank', owner: 1, x: 4, y: 0}], ...extra});
   const g = mk(), a = unitAt(g, 0, 0), b = unitAt(g, 2, 0), f0 = g.funds[0];
   const r = reachable(g, a); assert(r.has('2,0'), '残血同类型友军格可到达'); assert(!r.has('1,0'), '不同类型友军格仍不能停');   // 步兵格（不同类型）可穿过不可停
@@ -290,7 +290,7 @@ t('合流（0.89）：走到残血同类型友军格上才能合流；血量相�
   const j = join(g, a.id); assert(j.ok); assert.equal(j.targetId, b.id); assert.equal(j.gained, 30); assert.equal(j.over, 30);   // 60 + 70 = 130 → 100，超出 30
   assert.equal(j.refund, 2100); assert.equal(g.funds[0], f0 + 2100);   // 轻坦 7000 × 30%
   assert.equal(b.hp, 100); assert.equal(b.ammo, 7); assert(!g.units.includes(a)); assert.equal(g.units.filter(u => u.type === 'tank' && u.owner === 0).length, 1);
-  assert.equal(b.acted, false);   // 目标原来没行动过，合流后还能行动
+  assert.equal(b.acted, true); assert.equal(b.moved, true);   // 0.90：合流后的单位本回合行动结束（高战规则），不管它合流前有没有行动过
 });
 
 t('合流：满血目标 / 不同类型 / 敌军 / config.join=false 都不行；停在合流格上结束回合 = 自动退回原位', () => {

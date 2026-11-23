@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {createTank, TRACK_GAUGE} from './units/tank-family.js';
 import {createArtillery} from '../art/units/artillery-v2_0.js';
 import {patchGrayTree, setMatGray} from '../art/gray.js';
-import {createInfantryActor, resetInfantryBatches, syncInfantryBatches, infantryTriCount} from './units/infantry-actors.js';
+import {createInfantryActor, releaseInfantryActor, resetInfantryBatches, syncInfantryBatches, infantryTriCount} from './units/infantry-actors.js';
 import {createTreePine, createTreeBroad} from '../art/terrain/forest/forest-original.js';   // 树林包 V1.0：与原树型逐面一致
 import {createForestRegion, disposeForest} from '../art/terrain/forest/forest-performance.js';
 import {createMountainRegion, createRoadStraight, createRoadBend, createRoadT, createRoadCross, createRoadEnd} from '../art/terrain/terrain-nature.js';
@@ -855,7 +855,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   // 单位被打掉：animate 为真时缩小消失（.5 秒），否则直接移除
   function disposeUnit(u) {
     if (state.selected === u) deselect();
-    unitsGroup.remove(u.holder); rings.remove(u.ring);
+    unitsGroup.remove(u.holder); rings.remove(u.ring); if (u.actors) for (const a of u.actors) releaseInfantryActor(a);   // 0.90：步兵的实例批不会随 holder 消失，要 release（否则留残影、还占批容量）
     for (const o of [u.badge, u.tbadge, u.amark, u.hpBadge]) if (o) scene.remove(o);
     const i = units.indexOf(u); if (i >= 0) units.splice(i, 1);
     refreshBuildings();
