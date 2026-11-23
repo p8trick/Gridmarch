@@ -210,7 +210,9 @@ function showWinner() {   // 胜负已分：先放换回合横幅样式的「胜
   const b = $('banner'); $('bDay').textContent = w < 0 ? '同归于尽' : '胜利'; $('bTeam').textContent = w < 0 ? '双方全灭' : OWN[w] + '获胜';
   $('bDot').className = 'dot ' + (w === 1 ? 'r' : 'b'); b.className = 'banner ' + (w === 1 ? 'r' : 'b'); b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
-  syncActed(); if (game.winCell) { const c = toWorld(game.winCell); cam.panTo(c[0] * 2, c[1] * 2, .8); }
+  syncActed();
+  const wc = game.winCell || (w >= 0 && (game.units.find(u => u.owner === w) || {}).x !== undefined ? [game.units.find(u => u.owner === w).x, game.units.find(u => u.owner === w).y] : null);   // 0.92：占领 = 被占总部；歼灭 = 打出最后一击的我方单位；沼泽拖垮没有「最后一击」= 随便一个胜方单位
+  if (wc) { const c = toWorld(wc); cam.panTo(c[0] * 2, c[1] * 2, .8); }
   orbitOn = true; resT = setTimeout(() => result.open(), 1500); mark();
 }
 function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按顺序演：攻击方开火 → 伤害数字 / 目标倒下 → 目标反击 → 伤害数字 / 攻击方倒下

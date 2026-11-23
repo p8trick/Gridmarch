@@ -328,4 +328,9 @@ t('统计表（0.91）：生产记 built / spent，收入累计，占领总部�
   assert.equal(g.winner, 1); assert.equal(g.winReason, 'hq'); assert.deepEqual(g.winCell, [0, 0]); assert.equal(g.stats[1].captured, 1);
 });
 
+t('歼灭获胜（0.92）：winReason wipe，winCell = 打出最后一击的我方单位；被反击全歼则是守方', () => {
+  const g = createGame({terrain: map(4, 1), units: [{type: 'tank', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 2, y: 0, hp: 10}]});
+  attack(g, 1, 2); assert.equal(g.winner, 0); assert.equal(g.winReason, 'wipe'); assert.deepEqual(g.winCell, [1, 0]);
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);

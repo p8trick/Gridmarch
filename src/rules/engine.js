@@ -191,7 +191,9 @@ export function attack(g, id, targetId) {
   if (d.hp <= 0) { g.stats[a.owner].killed++; g.stats[d.owner].lost++; }   // 0.91
   if (a.hp <= 0) { g.stats[d.owner].killed++; g.stats[a.owner].lost++; }
   g.units = g.units.filter(u => u.hp > 0);
-  checkWinner(g); return out;
+  checkWinner(g);
+  if (g.winner !== null && g.winner >= 0 && g.winReason === 'wipe' && !g.winCell) { const k = g.winner === a.owner ? a : d; g.winCell = [k.x, k.y]; }   // 0.92：歼灭 = 镜头对准打出最后一击的我方单位（反击击毁则是守方）
+  return out;
 }
 
 // ── 占领（0.77，高战规则）──
