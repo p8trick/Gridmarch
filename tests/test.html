@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="PWA顶栏测试v2" />
   <meta name="theme-color" content="#0b1021" id="meta-theme" />
-  <title>PWA 顶栏测试 v2</title>
+  <title>PWA 顶栏社区偏方测试 v3</title>
   <link rel="manifest" id="pwa-manifest" />
   <style>
     * { box-sizing: border-box; }
@@ -19,33 +19,63 @@
       color: #f1f5f9;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    /* 顶部最上沿色条：专门看灵动岛两侧是否被模糊/发白 */
+
+    /* 顶部高对比彩条：紧贴屏幕最上沿，专门观察灵动岛两侧模糊/发白 */
     .top-strip {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
-      height: 44px;
+      height: 56px;
       z-index: 10;
       pointer-events: none;
       background: linear-gradient(90deg, #ef4444 0%, #f59e0b 25%, #10b981 50%, #3b82f6 75%, #ec4899 100%);
     }
-    /* 偏方 1：顶部安全区微透明遮罩层 */
-    #top-shield {
+
+    /* 偏方 A：动态位移 + 实心绘制节点（32px 高度，带实心背景绘制） */
+    #anim-node {
+      position: fixed;
+      top: 40px;
+      left: 0;
+      right: 0;
+      height: 32px;
+      background: rgba(11, 16, 33, 0.08);
+      z-index: 22;
+      pointer-events: none;
+      opacity: 0;
+      transition: top 0.35s ease, opacity 0.2s ease, background 0.2s ease;
+    }
+
+    /* 偏方 B：抽屉/面板滑入滑出重绘触发器 */
+    #drawer-probe {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
-      height: env(safe-area-inset-top, 0px);
+      height: 44px;
+      background: rgba(56, 189, 248, 0.12);
+      transform: translateY(-100%);
+      transition: transform 0.28s ease;
+      z-index: 25;
+      pointer-events: none;
+    }
+
+    /* 偏方 C：较高高度（48px）微弱层测试 */
+    #tall-shield {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 0px;
       background: transparent;
       z-index: 20;
       pointer-events: none;
     }
-    /* 控制区：放在正常文档流中，不搞嵌套滚动死锁 */
+
     .wrap {
       position: relative;
       z-index: 30;
-      padding: calc(env(safe-area-inset-top, 0px) + 54px) 14px 40px;
+      padding: calc(env(safe-area-inset-top, 0px) + 64px) 14px 48px;
     }
     .card {
       background: #1e293b;
@@ -59,6 +89,12 @@
       font-weight: 700;
       margin-bottom: 8px;
       color: #7dd3fc;
+    }
+    .desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      line-height: 1.45;
     }
     button {
       appearance: none;
@@ -86,33 +122,45 @@
 </head>
 <body>
   <div class="top-strip"></div>
-  <div id="top-shield"></div>
+  <div id="anim-node"></div>
+  <div id="drawer-probe"></div>
+  <div id="tall-shield"></div>
 
   <div class="wrap">
     <div class="card">
-      <div class="title">当前状态与点击反馈</div>
-      <div id="log">等待点击测试...</div>
+      <div class="title">v3 社区偏方验证状态</div>
+      <div id="log">等待点击偏方按钮...</div>
     </div>
 
     <div class="card">
-      <div class="title">1. 顶部安全区遮罩（偏方 1）</div>
-      <button id="b-off" class="on" onclick="setShield('transparent', 'env(safe-area-inset-top, 0px)', 'b-off')">关闭(全透)</button>
-      <button id="b-002" onclick="setShield('rgba(0,0,0,0.02)', 'env(safe-area-inset-top, 0px)', 'b-002')">黑 0.02</button>
-      <button id="b-01" onclick="setShield('rgba(0,0,0,0.1)', 'env(safe-area-inset-top, 0px)', 'b-01')">黑 0.10</button>
-      <button id="b-black" onclick="setShield('#000000', 'env(safe-area-inset-top, 0px)', 'b-black')">纯黑</button>
+      <div class="title">偏方 A：动态位移 + 实心绘制（32px 高）</div>
+      <div class="desc">先从下方移到顶部停留，观察首屏静态节点被忽略时，动态位移能否让顶部模糊消失。</div>
+      <button onclick="runAnimShift(0)">位移到 top: 0 (8%黑)</button>
+      <button onclick="runAnimShift(4)">位移到 top: 4px (8%黑)</button>
+      <button onclick="runAnimShift(0, 'rgba(11,16,33,0.22)')">位移到 top: 0 (22%深蓝)</button>
+      <button onclick="hideAnimNode()">隐藏位移节点</button>
     </div>
 
     <div class="card">
-      <div class="title">2. 改写 theme-color（偏方 2）</div>
-      <button onclick="setTheme('#010101')">改 #010101</button>
-      <button onclick="setTheme('#0b1021')">改 #0b1021</button>
-      <button onclick="setTheme('#dc2626')">改红色</button>
+      <div class="title">偏方 B：模拟抽屉滑入滑出重绘</div>
+      <div class="desc">短暂停留后滑出，测试动画/图层切换是否会顺带清掉顶部残留的毛玻璃。</div>
+      <button onclick="runDrawerSweep(600)">滑入停留 0.6s 后滑出</button>
+      <button onclick="runDrawerSweep(2000)">滑入停留 2.0s 后滑出</button>
     </div>
 
     <div class="card">
-      <div class="title">3. 背景明暗切换</div>
-      <button id="bg-dark" class="on" onclick="setBg('#0b1021', '#f1f5f9', 'bg-dark')">深色背景</button>
-      <button id="bg-light" onclick="setBg('#ffffff', '#0f172a', 'bg-light')">纯白背景</button>
+      <div class="title">偏方 C：拉高覆盖高度（36px / 48px）</div>
+      <div class="desc">测试高度达到 36px～48px 时的微弱遮罩效果（不走纯黑）。</div>
+      <button onclick="setTallShield(36, 'rgba(0,0,0,0.05)')">36px 高 / 5%黑</button>
+      <button onclick="setTallShield(48, 'rgba(0,0,0,0.08)')">48px 高 / 8%黑</button>
+      <button onclick="setTallShield(48, 'rgba(11,16,33,0.18)')">48px 高 / 18%深蓝</button>
+      <button onclick="setTallShield(0, 'transparent')">关闭该层</button>
+    </div>
+
+    <div class="card">
+      <div class="title">背景明暗切换</div>
+      <button onclick="setBg('#0b1021', '#f1f5f9')">深色背景</button>
+      <button onclick="setBg('#ffffff', '#0f172a')">纯白背景</button>
     </div>
   </div>
 
@@ -133,43 +181,55 @@
     })();
 
     function logMsg(txt) {
-      var sat = getComputedStyle(document.documentElement).getPropertyValue("padding-top");
       var mode = window.navigator.standalone ? "Standalone" : "Safari";
       document.getElementById("log").innerHTML =
         "模式: <b>" + mode + "</b> | 窗口: " + innerWidth + "x" + innerHeight + "<br>" +
         "最近操作: <b>" + txt + "</b>";
     }
 
-    function markGroup(btnId, prefix) {
-      var btns = document.querySelectorAll("button[id^='" + prefix + "']");
-      for (var i = 0; i < btns.length; i++) btns[i].classList.remove("on");
-      var cur = document.getElementById(btnId);
-      if (cur) cur.classList.add("on");
+    function runAnimShift(targetTop, bg) {
+      var el = document.getElementById("anim-node");
+      el.style.transition = "none";
+      el.style.top = "36px";
+      el.style.opacity = "1";
+      el.style.background = bg || "rgba(11, 16, 33, 0.08)";
+      void el.offsetHeight;
+      el.style.transition = "top 0.35s ease, opacity 0.2s ease, background 0.2s ease";
+      el.style.top = targetTop + "px";
+      logMsg("偏方A: 32px节点位移至 top:" + targetTop + "px");
     }
 
-    function setShield(bg, h, btnId) {
-      var el = document.getElementById("top-shield");
-      el.style.background = bg;
-      el.style.height = h;
-      markGroup(btnId, "b-");
-      logMsg("顶栏遮罩 -> " + bg);
+    function hideAnimNode() {
+      var el = document.getElementById("anim-node");
+      el.style.opacity = "0";
+      logMsg("偏方A: 隐藏位移节点");
     }
 
-    function setTheme(color) {
-      var meta = document.getElementById("meta-theme");
-      if (meta) meta.setAttribute("content", color);
-      logMsg("theme-color -> " + color);
+    function runDrawerSweep(holdMs) {
+      var d = document.getElementById("drawer-probe");
+      d.style.transform = "translateY(0%)";
+      logMsg("偏方B: 面板滑入，停留 " + holdMs + "ms 后滑出");
+      setTimeout(function () {
+        d.style.transform = "translateY(-100%)";
+        logMsg("偏方B: 面板已滑出，观察顶部是否变清");
+      }, holdMs);
     }
 
-    function setBg(bg, fg, btnId) {
+    function setTallShield(h, bg) {
+      var s = document.getElementById("tall-shield");
+      s.style.height = h + "px";
+      s.style.background = bg;
+      logMsg("偏方C: 高度=" + h + "px, 背景=" + bg);
+    }
+
+    function setBg(bg, fg) {
       document.documentElement.style.background = bg;
       document.body.style.background = bg;
       document.body.style.color = fg;
-      markGroup(btnId, "bg-");
-      logMsg("背景色 -> " + bg);
+      logMsg("背景 -> " + bg);
     }
 
-    logMsg("页面已就绪");
+    logMsg("v3 偏方测试页已就绪");
   </script>
 </body>
 </html>
