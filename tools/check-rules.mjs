@@ -2,7 +2,7 @@
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf, join, joinTargetOf, canJoinInto} from '../src/rules/engine.js';
+import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf, join, joinTargetOf, canJoinInto, summaryOf} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -304,6 +304,28 @@ t('合流：满血目标 / 不同类型 / 敌军 / config.join=false 都不行�
   assert(!reachable(k, unitAt(k, 0, 0)).has('2,0'));
   const e = createGame({terrain: map(4, 1), funds: [0, 0], units: [{type: 'tank', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 2, y: 0, hp: 50}]});
   assert(!reachable(e, unitAt(e, 0, 0)).has('2,0'), '敌军不能合流');
+});
+
+t('统计表（0.91）：击毁 / 损失 / 反击击毁 / 生产 / 收入 / 军费 / 占领；预估不改统计；歼灭有 winReason', () => {
+  const g = createGame({terrain: map(5, 1), units: [{type: 'tank', owner: 0, x: 1, y: 0, hp: 100}, {type: 'inf', owner: 1, x: 2, y: 0, hp: 20}, {type: 'inf', owner: 1, x: 4, y: 0}]});
+  forecast(g, 1, 2); assert.deepEqual(g.stats[0], {built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0});
+  attack(g, 1, 2);
+  assert.equal(g.stats[0].killed, 1); assert.equal(g.stats[1].lost, 1); assert.equal(g.winner, null);
+  const s = summaryOf(g); assert.equal(s.sides[0].units, 1); assert.equal(s.sides[1].units, 1); assert.equal(s.neutral, 0);
+});
+
+t('统计表（0.91）：生产记 built / spent，收入累计，占领总部记 captured + winReason hq + winCell', () => {
+  const terrain = map(4, 1); terrain[0][0] = 'hq'; terrain[0][3] = 'hq'; terrain[0][1] = 'factory';
+  const g = createGame({terrain, owners: {'0,0': 0, '3,0': 1, '1,0': 0}, funds: [5000, 0], units: [{type: 'inf', owner: 0, x: 0, y: 0}, {type: 'inf', owner: 1, x: 3, y: 0}]});
+  assert.equal(g.stats[0].income, 2000);   // 开局先手方领一次收入（总部 + 兵工厂）
+  const cost = UNITS.inf.cost; assert(produce(g, 1, 0, 'inf').ok);
+  assert.equal(g.stats[0].built, 1); assert.equal(g.stats[0].spent, cost);
+  endTurn(g); assert.equal(g.stats[1].income, 1000);
+  const u = unitAt(g, 3, 0), blue = unitAt(g, 0, 0); blue.x = 2; u.x = 0;   // 把红步兵挪到蓝总部上、蓝步兵让开（只测统计）
+  assert(capture(g, u.id).ok); assert(capture(g, u.id).ok === false);
+  endTurn(g); endTurn(g);
+  const u2 = unitAt(g, 0, 0); assert(u2 && u2.owner === 1); capture(g, u2.id);
+  assert.equal(g.winner, 1); assert.equal(g.winReason, 'hq'); assert.deepEqual(g.winCell, [0, 0]); assert.equal(g.stats[1].captured, 1);
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);

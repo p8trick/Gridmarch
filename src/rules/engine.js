@@ -6,6 +6,8 @@ import {strike, dispHp} from './combat.js';
 
 const key = (x, y) => x + ',' + y;
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+// 0.91 统计表（胜利结算 / 战场情报共用）：每方累计 built 生产数 · lost 损失数 · killed 击毁数 · captured 占领数 · income 累计收入 · spent 累计军费（造兵 + 修理）
+const newStats = () => ({built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0});
 
 // terrain：二维数组 terrain[y][x]，值是 TERRAINS 里的 id；
 // units：[{type, owner, x, y, hp?, ammo?, fuel?}]；players：[{style}]（默认两个均衡型军队）
@@ -17,6 +19,7 @@ export function createGame({terrain, units = [], players, config = {}, owners = 
     players: players || [{style: DEFAULT_STYLE}, {style: DEFAULT_STYLE}],
     units: [], turn: 0, day: 1, winner: null, nextId: 1,
     owners: {...owners}, funds: funds ? [...funds] : [], built: new Set(), everHad: [],
+    stats: (players || [0, 1]).map(newStats), winReason: null, winCell: null,   // 0.91：winReason 'hq' | 'wipe' | 'draw'；winCell = 占领总部的那一格 [x, y]
   };
   while (g.funds.length < g.players.length) g.funds.push(0);
   for (const u of units) addUnit(g, u);
@@ -44,7 +47,7 @@ export function incomeOf(g, player) {
   }
   return Math.floor(sum * g.config.incomeMul);
 }
-function collectIncome(g) { g.funds[g.turn] += incomeOf(g, g.turn); g.built = new Set(); }
+function collectIncome(g) { const inc = incomeOf(g, g.turn); g.funds[g.turn] += inc; g.stats[g.turn].income += inc; g.built = new Set(); }
 
 // 0.81 修理 / 补给：回合开始、收完收入之后，轮到的这一方站在「己方可修理建筑」上的陆军：血量回复 CONFIG.repairHp 点（不超过 100），
 // 修理费 = 造价 × 回复点数 / 100，从这一方资金里扣；钱不够就跳过这个单位（按单位编号顺序先到先得）；弹药 / 燃料补满，不收费。
@@ -58,7 +61,7 @@ function repairUnits(g) {
     const t = UNITS[u.type], heal = Math.min(g.config.repairHp, 100 - u.hp);
     if (heal > 0) {
       const cost = Math.floor(t.cost * heal / 100);
-      if (g.funds[g.turn] >= cost) { g.funds[g.turn] -= cost; u.hp += heal; out.push({id: u.id, heal, cost}); }
+      if (g.funds[g.turn] >= cost) { g.funds[g.turn] -= cost; g.stats[g.turn].spent += cost; u.hp += heal; out.push({id: u.id, heal, cost}); }
     }
     u.ammo = t.ammo; u.fuel = t.fuel;
   }
@@ -67,7 +70,7 @@ function repairUnits(g) {
 
 // 开打前的伤害预估（0.73）：在复制出来的单位上把真正的 attack 跑一遍，所以和实际结算一定一致，而且不改动 g。伤害是血量点数（0–100），counter = 反击伤害（0 = 不反击）
 export function forecast(g, id, targetId) {
-  const g2 = {...g, units: g.units.map(u => ({...u}))};
+  const g2 = {...g, units: g.units.map(u => ({...u})), stats: g.stats.map(s => ({...s}))};   // 0.91：统计表也要复制，预估不能改到真的
   const out = attack(g2, id, targetId); if (!out.ok) return null;
   const counter = out.counter ? out.counter.damage : 0;
   return {damage: out.hit.damage, counter, kill: out.hp0.d - out.hit.damage <= 0, counterKill: out.hp0.a - counter <= 0};
@@ -98,7 +101,7 @@ export function produce(g, x, y, type) {
   if (g.built.has(key(x, y))) return {ok: false, err: '这座兵工厂本回合已经生产过'};
   if (unitAt(g, x, y)) return {ok: false, err: '兵工厂上有单位'};
   if (g.funds[g.turn] < t.cost) return {ok: false, err: '资金不足'};
-  g.funds[g.turn] -= t.cost; g.built.add(key(x, y));
+  g.funds[g.turn] -= t.cost; g.built.add(key(x, y)); g.stats[g.turn].built++; g.stats[g.turn].spent += t.cost;
   const u = addUnit(g, {type, owner: g.turn, x, y}); u.moved = u.acted = true;   // 新单位本回合不能行动
   return {ok: true, unit: u};
 }
@@ -185,6 +188,8 @@ export function attack(g, id, targetId) {
     if (s2) { spend(d, s2); a.hp = Math.max(0, a.hp - s2.damage); out.counter = s2; }
   }
   a.moved = a.acted = true; delete a.origin;
+  if (d.hp <= 0) { g.stats[a.owner].killed++; g.stats[d.owner].lost++; }   // 0.91
+  if (a.hp <= 0) { g.stats[d.owner].killed++; g.stats[a.owner].lost++; }
   g.units = g.units.filter(u => u.hp > 0);
   checkWinner(g); return out;
 }
@@ -203,8 +208,8 @@ export function capture(g, id) {
   u.cap = (u.cap || 0) + gain; u.moved = u.acted = true; delete u.origin;
   const out = {ok: true, key: k, terrain: g.terrain[u.y][u.x], prev, gain, cap: u.cap, need: tr.capture, done: false};
   if (u.cap >= tr.capture) {
-    g.owners[k] = u.owner; u.cap = 0; out.done = true; out.cap = tr.capture;
-    if (g.config.hqWin && g.terrain[u.y][u.x] === 'hq') g.winner = u.owner;
+    g.owners[k] = u.owner; u.cap = 0; out.done = true; out.cap = tr.capture; g.stats[u.owner].captured++;
+    if (g.config.hqWin && g.terrain[u.y][u.x] === 'hq') { g.winner = u.owner; g.winReason = 'hq'; g.winCell = [u.x, u.y]; }
   }
   return out;
 }
@@ -231,7 +236,7 @@ export function wait(g, id) {
 // 歼灭：曾经有过单位、现在一个不剩的玩家出局（一开始就没有单位的不算，比如只测经济的场景）
 function checkWinner(g) {
   const left = g.players.map((_, i) => i).filter(i => !g.everHad[i] || g.units.some(u => u.owner === i));
-  if (left.length === 1) g.winner = left[0]; else if (left.length === 0) g.winner = -1;   // -1 = 同归于尽
+  if (left.length === 1) { g.winner = left[0]; g.winReason = 'wipe'; } else if (left.length === 0) { g.winner = -1; g.winReason = 'draw'; }   // -1 = 同归于尽
 }
 
 // 结束当前玩家的回合：换人 → 对方单位恢复行动 → 收入 → 修理 → 沼泽掉血（轮到的这一方）
@@ -251,10 +256,22 @@ export function endTurn(g) {
     for (const {u} of hit) u.hp -= g.config.swampDamage;
     g.units = g.units.filter(u => u.hp > 0 || !g.config.swampKills);
     for (const u of g.units) if (u.hp < 1) u.hp = 1;                // 不致死时至少留 1 点
-    for (const {u, before} of hit) { const dead = !g.units.includes(u); swamp.push({id: u.id, damage: before - (dead ? 0 : u.hp), dead}); }
+    for (const {u, before} of hit) { const dead = !g.units.includes(u); if (dead) g.stats[u.owner].lost++; swamp.push({id: u.id, damage: before - (dead ? 0 : u.hp), dead}); }
     checkWinner(g);
   }
   return {ok: true, income, fundsBefore: before, repairs, repairCost: repairs.reduce((a, r) => a + r.cost, 0), swamp};   // 0.81：战场用这份清单演「收入 → 修理」动画；0.83 +swamp：沼泽掉血与修理同时演
+}
+
+// 0.91 汇总（胜利结算 / 战场情报用）：每方 {built, lost, killed, captured, income, spent, funds, units 现存, props 现有据点数, byType 各类据点数} + neutral 中立据点数 / neutralByType
+export function summaryOf(g) {
+  const sides = g.players.map((_, i) => ({...g.stats[i], funds: g.funds[i], units: g.units.filter(u => u.owner === i).length, props: 0, byType: {}})), neutralByType = {};
+  let neutral = 0;
+  for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
+    const id = g.terrain[y][x]; if (!TERRAINS[id].property) continue;
+    const o = g.owners[key(x, y)];
+    if (o === undefined) { neutral++; neutralByType[id] = (neutralByType[id] || 0) + 1; } else { sides[o].props++; sides[o].byType[id] = (sides[o].byType[id] || 0) + 1; }
+  }
+  return {sides, neutral, neutralByType, day: g.day, winner: g.winner, reason: g.winReason, winCell: g.winCell};
 }
 
 export {dispHp};

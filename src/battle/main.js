@@ -6,6 +6,7 @@ import {stageDebug, onLongPress} from './stage.js';
 import {createCursor} from './cursor.js';
 import {createArsenal} from './arsenal.js';
 import {createDetail} from './detail.js';
+import {createResult} from './result.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -98,13 +99,16 @@ const TEAM = ['blue', 'red'];
 // 0.77：占领进度同步到战场（建筑脚下的进度环 + 灯带渐变）：引擎里 cap > 0 的单位 = 正在占领；单位走开 / 被打死 / 占完后进度归零，这里会自动把建筑恢复本色
 const syncCaps = () => world.setCaptureMarks(game.units.filter(u => u.cap > 0).map(u => { const o = game.owners[u.x + ',' + u.y]; return {cell: toWorld([u.x, u.y]), f: u.cap / RULE_TERRAINS[game.terrain[u.y][u.x]].capture, cap: u.cap, need: RULE_TERRAINS[game.terrain[u.y][u.x]].capture, team: TEAM[u.owner], from: o === undefined ? 'neutral' : TEAM[o]}; }));
 const holdHp = new Set();   // 0.81：回合开始修理动画还没演到的单位，血量角标先不更新（飘 +N 的那一刻才变）
-const syncActed = () => { for (const u of game.units) { world.setActed(u.id, u.acted && u.owner === game.turn); if (!holdHp.has(u.id)) world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）
+const syncActed = () => { for (const u of game.units) { world.setActed(u.id, game.winner !== null ? game.winner >= 0 && u.owner !== game.winner : u.acted && u.owner === game.turn); if (!holdHp.has(u.id)) world.setHp(u.id, dispHp(u.hp)); } syncCaps(); };   // 0.73：同时同步血量角标（显示血量 < 10 才挂数字牌）；0.91：胜负已分 = 败方全部压灰、胜方恢复原色
 const produceHere = (type, cell) => {
   const [ex, ey] = toEngine(cell), r = engineProduce(game, ex, ey, type);
   if (r.ok) { const spec = specOfUnit(r.unit, toWorld); if (spec) world.addUnit(spec); syncActed(); hud(); infoUpdate(); mark(); }
   return r;
 };
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
+const result = createResult({host, game,   // 0.91 胜利结算面板（右盒数据来自引擎统计表 summaryOf）；再来一局 = 同一张图重开，回主页 = 退出战场
+  onAgain: () => mountBattle(host, stage, {...opts, loading: null, seed}),
+  onHome: () => { unmountBattle(); if (opts.onExit) opts.onExit(); }});
 const showCursor = c => cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz));
 // 长按详细面板（0.60；0.61 加展示窗：面板开着时光圈先藏起来——光圈有动画会让战场每秒重画 30 次，展示窗不需要）
 const detail = createDetail({THREE, renderer, host, stage, game, toEngine,
@@ -201,11 +205,13 @@ function popup(id, text, cls = '') {   // 单位头顶飘一个伤害数字（�
   const el = document.createElement('div'); el.className = 'dmg ' + cls; el.textContent = text; const [x, y] = unitScreen(w);
   el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'; host.appendChild(el); setTimeout(() => el.remove(), 1300);
 }
-function showWinner() {   // 胜负已分（先用换回合横幅的样式提示一下；结算界面以后再做）
-  const w = game.winner; if (w === null) return;
+function showWinner() {   // 胜负已分：先放换回合横幅样式的「胜利」，败方压灰 + 镜头平移到被占的总部 + 缓缓绕场，1.5 秒后弹出结算面板（0.91）
+  const w = game.winner; if (w === null || result.exists) return;
   const b = $('banner'); $('bDay').textContent = w < 0 ? '同归于尽' : '胜利'; $('bTeam').textContent = w < 0 ? '双方全灭' : OWN[w] + '获胜';
   $('bDot').className = 'dot ' + (w === 1 ? 'r' : 'b'); b.className = 'banner ' + (w === 1 ? 'r' : 'b'); b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
+  syncActed(); if (game.winCell) { const c = toWorld(game.winCell); cam.panTo(c[0] * 2, c[1] * 2, .8); }
+  orbitOn = true; resT = setTimeout(() => result.open(), 1500); mark();
 }
 function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按顺序演：攻击方开火 → 伤害数字 / 目标倒下 → 目标反击 → 伤害数字 / 攻击方倒下
   const att = acting, aid = att.id, tid = tgt.id, r = engineAttack(game, aid, tid);
@@ -320,6 +326,7 @@ const debug = !!opts.debug;
 let fps = 0, frames = 0, t0 = performance.now();
 const cellsTxt = () => Math.round(cam.cells * 10) / 10;
 let econBusy = false, econShown = null, econTok = 0, econTimers = [];   // 0.81：回合开始「收入 → 修理」动画期间：econShown = 状态条上显示的资金（null = 跟引擎走），econBusy 挡住操作
+let orbitOn = false, orbitAcc = 0, resT = 0;   // 0.91：胜负分出后镜头缓慢绕场（用户一碰战场 / 点旋转就停）；resT = 结算面板延迟弹出的计时
 let cellsSaveT = 0, hudSig = '', lastCells = null, zoomT = 0, zoomOn = false, hudReady = false, hudStuck = false, bannerT = 0;
 // 视距提示（0.56）：缩放时右上「旋转」按钮临时变成当前视距（格数），随缩放实时变化；停手 2 秒后淡出，变回旋转图标（双指还按着就继续等）
 const rotSpan = $('bRot').firstElementChild;
@@ -429,7 +436,7 @@ function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
-$('hudL').onclick = () => { if (!world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
+$('hudL').onclick = () => { if (game.winner !== null) return; if (!world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
@@ -449,7 +456,7 @@ $('bNext').onclick = () => {
   if (!cycleHome) cycleHome = {x: cam.target.x, z: cam.target.z};
   nextFocus = u.id; cam.panTo(w.x, w.z); mark();
 };
-$('bRot').onclick = () => { if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
+$('bRot').onclick = () => { orbitOn = false; if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 // 画质（0.66）：暂停菜单第二页；目前只有「帧率显示」开关（存 localStorage gridmarch.showFps）
 const FPS_KEY = 'gridmarch.showFps';
 let fpsOn = false; try { fpsOn = localStorage.getItem(FPS_KEY) === '1'; } catch (e) {}
@@ -541,7 +548,8 @@ function loop(now) {
   if (!alive) return;
   raf = requestAnimationFrame(loop);
   const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
-  const camChanged = cam.update(dt);
+  let camChanged = cam.update(dt);
+  if (!orbitOn) orbitAcc = 0; else if (!cam.rot && !cam.glide && (orbitAcc += dt) > .033) { cam.yaw += orbitAcc * .1; orbitAcc = 0; camChanged = true; }   // 0.91：约 30 帧 / 秒、每秒转 ~6°
   if (camChanged) { applyView(); hud(); barPlace(); dirty = true; }
   const up = world.update(dt, cam.camA); if (up.moving) dirty = true;
   let cursorOnly = false;
@@ -564,12 +572,13 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+host.addEventListener('pointerdown', e => { if (orbitOn && result.minimized && !e.target.closest('.res-tag')) orbitOn = false; }, true);   // 0.91：看战场时一碰棋盘就停下绕场
+window.battle = {result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
   if (!alive) return; alive = false;
-  ars.dispose(); detail.dispose();
+  ars.dispose(); detail.dispose(); result.dispose(); clearTimeout(resT);
   cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); clearTimeout(cellsSaveT); clearTimeout(toastT); econTok++; econTimers.forEach(clearTimeout);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
