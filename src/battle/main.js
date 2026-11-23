@@ -9,7 +9,7 @@ import {createDetail} from './detail.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast, atUnitCap} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -260,7 +260,7 @@ function handleTap(px, py) {
     if (sel && reach.has(ex + ',' + ey)) { startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
     clearSel();
     if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) pickUnit(eu);
-    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) ars.open(c, game.turn === 0 ? 'blue' : 'red');
+    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) toast('已达到单位上限（' + game.config.maxUnits + '）'); else ars.open(c, game.turn === 0 ? 'blue' : 'red'); }   // 0.88：满员不开生产界面，直接提示
   } else clearSel();
   infoUpdate(); hud(); mark();
 }
@@ -338,8 +338,22 @@ function openEnd() {
   $('endm').hidden = false;
 }
 const closeEnd = () => { $('endm').hidden = true; };
+// 0.88 每一方记住自己上次的镜头位置：结束回合时存下结束方的镜头（正在「找单位」轮流时存轮流之前的位置），换边后镜头平滑移到新一方上次的位置；
+// 还没存过的一方（红军第一回合）去自己的总部附近。这样换边后不用再手动把镜头拖回自己阵营才好操作。
+const camMem = [null, null];
+const homeCam = side => {
+  const k = Object.keys(game.owners).find(q => game.owners[q] === side && game.terrain[+q.split(',')[1]][+q.split(',')[0]] === 'hq'); if (!k) return null;
+  const [x, y] = k.split(',').map(Number), c = toWorld([x, y]); return {x: c[0] * 2 + (x < game.w / 2 ? 10 : -10), z: c[1] * 2};
+};
+let toastT = 0;
+function toast(text) {   // 0.88：屏幕上方一条短提示（红色底，1.8 秒后淡出）
+  let el = $('gmToast'); if (!el) { el = document.createElement('div'); el.id = 'gmToast'; $('hudL').parentNode.appendChild(el); }
+  el.textContent = text; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1900);
+}
 function doEndTurn() {
-  const r = engineEndTurn(game); if (!r.ok) return;
+  const prev = game.turn, r = engineEndTurn(game); if (!r.ok) return;
+  camMem[prev] = cycleHome ? {...cycleHome} : {x: cam.target.x, z: cam.target.z};
+  if (game.winner === null) { const m = camMem[game.turn] || homeCam(game.turn); if (m) cam.panTo(m.x, m.z, .7); }
   hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
   nextFocus = 0; cycleHome = null;
   const swamp = r.swamp || [], reps = r.repairs || [];
@@ -531,13 +545,13 @@ function loop(now) {
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
-window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
   if (!alive) return; alive = false;
   ars.dispose(); detail.dispose();
-  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); clearTimeout(cellsSaveT); econTok++; econTimers.forEach(clearTimeout);
+  cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); clearTimeout(cellsSaveT); clearTimeout(toastT); econTok++; econTimers.forEach(clearTimeout);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);
   if (stage.dbg) stage.dbg.close();

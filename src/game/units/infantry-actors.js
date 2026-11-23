@@ -10,7 +10,7 @@ import {createInfantryFire} from '../../art/units/infantry/infantry-fire.js';
 import {prepareAntiTankPerformance, createPerformanceAntiTank, createPerformanceAntiTankFire} from '../../art/units/infantry/anti-tank-performance.js';
 import {createAntiTankBatch} from '../../art/units/infantry/anti-tank-batch.js';
 
-const CAPACITY = 24;   // 每类最多同屏 24 个（包的约定容量；超出会抛错）
+const CAPACITY = 80;   // 每类最多同屏 80 个（0.88：每方单位上限 40 × 两方，最坏情况全是同一类步兵；批的容量超出会抛 'Capacity exceeded'，0.87 及以前是 24，造到约 20 个步兵就红色横幅报错）
 const batches = {}, actors = []; let sceneRef = null, prepared = false;
 
 export function resetInfantryBatches(scene) {   // 每次建世界先清空旧批

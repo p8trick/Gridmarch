@@ -76,6 +76,7 @@ export function forecast(g, id, targetId) {
 // 这一方现在还能不能生产（0.69）：有一座自己的、本回合没造过、上面没单位的兵工厂，并且钱够造最便宜的可生产单位。
 // 战场用它判断「是不是真的无事可做」：单位全行动完但还能造兵 = 只脉冲提醒，不弹结束回合确认。
 export function canProduce(g, player = g.turn) {
+  if (atUnitCap(g, player)) return false;
   const costs = UNIT_IDS.filter(id => UNITS[id].buildable !== false && UNITS[id].cost !== null).map(id => UNITS[id].cost);
   if (!costs.length || g.funds[player] < Math.min(...costs)) return false;
   return Object.keys(g.owners).some(k => {
@@ -85,11 +86,15 @@ export function canProduce(g, player = g.turn) {
   });
 }
 
+// 0.88：这一方的单位数已到上限（CONFIG.maxUnits，高战 40）
+export const atUnitCap = (g, player = g.turn) => g.units.filter(u => u.owner === player).length >= g.config.maxUnits;
+
 export function produce(g, x, y, type) {
   const t = UNITS[type], tr = TERRAINS[g.terrain[y]?.[x]];
   if (!t || !tr || g.winner !== null) return {ok: false, err: '不能操作'};
   if (tr !== TERRAINS.factory || g.owners[key(x, y)] !== g.turn) return {ok: false, err: '这里不是你的兵工厂'};
   if (t.buildable === false || t.cost === null) return {ok: false, err: '这个单位暂不可生产'};
+  if (atUnitCap(g)) return {ok: false, err: '已达到单位上限（' + g.config.maxUnits + '）'};
   if (g.built.has(key(x, y))) return {ok: false, err: '这座兵工厂本回合已经生产过'};
   if (unitAt(g, x, y)) return {ok: false, err: '兵工厂上有单位'};
   if (g.funds[g.turn] < t.cost) return {ok: false, err: '资金不足'};

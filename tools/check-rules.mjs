@@ -274,4 +274,12 @@ t('歼灭只在「生产出第一个单位之后」才生效（0.87）：零单�
   assert.equal(g.winner, 0);   // 红军造过单位、现在一个不剩 → 蓝军胜
 });
 
+t('单位上限（0.88）：每方 40 个，到上限不能再生产（兵工厂提示），canProduce 为 false；红方不受影响', () => {
+  const mk = n => createGame({terrain: [['factory', ...Array(n + 2).fill('plain')]], owners: {'0,0': 0}, funds: [9000, 9000],
+    units: [...Array.from({length: n}, (_, i) => ({type: 'inf', owner: 0, x: i + 1, y: 0})), {type: 'inf', owner: 1, x: n + 1, y: 0}]});
+  let g = mk(40); const f0 = g.funds[0]; assert.equal(g.config.maxUnits, 40); assert(!canProduce(g)); const r = produce(g, 0, 0, 'inf');
+  assert(!r.ok && r.err.includes('上限'), r.err); assert.equal(g.funds[0], f0);   // 没扣钱
+  g = mk(39); assert(canProduce(g)); assert(produce(g, 0, 0, 'inf').ok);   // 39 个 → 还能造第 40 个
+});
+
 console.log(`✓ 规则测试 ${n} 项全部通过`);

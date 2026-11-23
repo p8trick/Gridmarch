@@ -4,6 +4,14 @@
 > 每次交付的更新包里也有 `更新说明.md`，写的是相对上一版的改动；累计包会注明"从 vN 升级"。
 > 更新后别忘了把 `index.html` 里的 `GM_VERSION` 加一位（避开手机旧缓存）。
 
+## 0.88
+
+- **每方单位上限 40**（`CONFIG.maxUnits`，高战规则）：`engine.produce` 到上限返回「已达到单位上限（40）」、不扣钱；`canProduce` 到上限为 false；新增 `atUnitCap`。满员时**点自己的兵工厂不开生产界面**，屏幕上方弹红色提示 1.9 秒（新增 `toast`，元素 id `gmToast`——页面里已有别的 `#toast`，不能重名）
+- **修了「造到约 20 个单位红色横幅报错」**：根因是步兵 / 反坦克兵的实例批容量只有 24（两方共用，`Capacity exceeded`），改成 80（`infantry-actors.js` 的 `CAPACITY`，每类最坏 = 两方 40 × 2）。实测一方造满 40 个步兵无任何报错
+- **各方记住自己的镜头位置**：结束回合时存下结束方的镜头位置（正在「找单位」轮流时存轮流前的位置），换边后镜头平滑移到新一方上次的位置；没存过的一方（红军第一回合）去自己总部附近（`homeCam`）。镜头只记平移位置，视距 / 旋转不变
+- 测试：`check-rules.mjs` +1 项（31 项：满员不能生产且不扣钱、39 个还能造）；新增 `tools/smoke-cap.py`（造满 40 个步兵无报错、第 41 个被拒、满员点兵工厂有提示不开生产界面、三次换边镜头位置对应）
+- `src/rules/data.js`、`src/rules/engine.js`、`src/game/units/infantry-actors.js`、`src/battle/main.js`、`src/battle/battle.css`、`tools/check-rules.mjs`、`tools/smoke-cap.py`；`index.html`：`GM_VERSION` `0.87` → `0.88`
+
 ## 0.87
 
 - **右上角三个按钮（找单位 / 旋转 / 菜单）间距 10 → 12px（+20%）**：菜单按钮在最右边，位置不变，另外两个向左各挪 2px / 4px。行动浮条（占领 / 攻击 / 待命）间距保持 12px 不变
