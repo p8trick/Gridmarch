@@ -1,337 +1,175 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="lock-scroll dark-bg">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  
-  <!-- iOS PWA 核心配置 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="PWA顶栏测试" />
-  <meta name="theme-color" content="#0b1021" id="meta-theme-color" />
-
-  <title>iOS 27 PWA 顶栏毛玻璃偏方测试</title>
-
-  <!-- 内联 Manifest：无需额外上传 manifest.json 文件 -->
-  <link rel="manifest" id="inline-manifest" />
-
+  <meta name="apple-mobile-web-app-title" content="PWA顶栏测试v2" />
+  <meta name="theme-color" content="#0b1021" id="meta-theme" />
+  <title>PWA 顶栏测试 v2</title>
+  <link rel="manifest" id="pwa-manifest" />
   <style>
-    :root {
-      --sat: env(safe-area-inset-top, 0px);
-      --sab: env(safe-area-inset-bottom, 0px);
-    }
-
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-    }
-
+    * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
-      width: 100%;
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      min-height: 100%;
+      background: #0b1021;
       color: #f1f5f9;
-      transition: background-color 0.2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
-    /* 偏方 3A：深色底层背景（防止透出白底） */
-    html.dark-bg, body.dark-bg {
-      background-color: #0b1021;
-    }
-    html.light-bg, body.light-bg {
-      background-color: #ffffff;
-    }
-
-    /* 偏方 3B：彻底锁死根容器滚动（防止触发 Liquid Glass 滚动边缘模糊） */
-    html.lock-scroll, body.lock-scroll {
-      overflow: hidden;
-      overscroll-behavior: none;
-      position: fixed;
-      inset: 0;
-    }
-
-    /* 模拟全屏游戏画面（延伸到屏幕最顶部） */
-    #game-canvas-sim {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 1;
-      background-color: #0b1021;
-      /* 高对比度网格+斜纹，方便观察顶部是否被模糊 */
-      background-image:
-        linear-gradient(to right, rgba(56, 189, 248, 0.28) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(56, 189, 248, 0.28) 1px, transparent 1px),
-        radial-gradient(circle at 50% 12%, rgba(244, 63, 94, 0.55), rgba(14, 165, 233, 0.35) 45%, #0b1021 85%);
-      background-size: 28px 28px, 28px 28px, 100% 100%;
-    }
-
-    /* 顶部边界刻度线：紧贴屏幕最上沿，用于检测模糊程度 */
-    .top-ruler {
+    /* 顶部最上沿色条：专门看灵动岛两侧是否被模糊/发白 */
+    .top-strip {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 64px;
-      z-index: 2;
+      right: 0;
+      height: 44px;
+      z-index: 10;
       pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      background: linear-gradient(90deg, #ef4444 0%, #f59e0b 25%, #10b981 50%, #3b82f6 75%, #ec4899 100%);
     }
-    .top-ruler-bar {
-      height: 6px;
-      width: 100%;
-      background: repeating-linear-gradient(
-        90deg,
-        #ef4444 0px,
-        #ef4444 16px,
-        #facc15 16px,
-        #facc15 32px,
-        #22c55e 32px,
-        #22c55e 48px
-      );
-    }
-    .safe-area-line {
-      position: fixed;
-      top: env(safe-area-inset-top, 0px);
-      left: 0;
-      width: 100%;
-      border-top: 1px dashed #38bdf8;
-      font-size: 10px;
-      color: #38bdf8;
-      padding: 2px 8px;
-      z-index: 3;
-      pointer-events: none;
-    }
-
-    /* 偏方 1：顶部安全区欺骗盾牌 */
-    #ios-top-shield {
+    /* 偏方 1：顶部安全区微透明遮罩层 */
+    #top-shield {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
+      right: 0;
       height: env(safe-area-inset-top, 0px);
-      background: rgba(0, 0, 0, 0.02);
+      background: transparent;
+      z-index: 20;
       pointer-events: none;
-      z-index: 9999;
-      transition: all 0.2s ease;
     }
-
-    /* 控制面板 */
-    .panel {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-      z-index: 100;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      border-radius: 16px;
-      padding: 14px;
-      max-height: 72vh;
-      overflow-y: auto;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    /* 控制区：放在正常文档流中，不搞嵌套滚动死锁 */
+    .wrap {
+      position: relative;
+      z-index: 30;
+      padding: calc(env(safe-area-inset-top, 0px) + 54px) 14px 40px;
     }
-
-    .panel h1 {
-      font-size: 15px;
-      margin: 0 0 8px 0;
-      color: #38bdf8;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .status-box {
-      font-size: 11px;
-      line-height: 1.5;
-      background: rgba(2, 6, 23, 0.65);
-      padding: 8px 10px;
-      border-radius: 10px;
-      margin-bottom: 10px;
-      color: #cbd5e1;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    }
-
-    .group {
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-    }
-    .group:last-child {
-      border-bottom: none;
-      margin-bottom: 0;
-      padding-bottom: 0;
-    }
-    .group-title {
-      font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #e2e8f0;
-    }
-
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    button {
+    .card {
       background: #1e293b;
-      color: #e2e8f0;
       border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
     }
-    button.active {
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #7dd3fc;
+    }
+    button {
+      appearance: none;
+      -webkit-appearance: none;
+      background: #0f172a;
+      color: #fff;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin: 0 6px 6px 0;
+      font-size: 13px;
+      touch-action: manipulation;
+    }
+    button.on {
       background: #0284c7;
       border-color: #38bdf8;
-      color: #ffffff;
-      font-weight: 600;
     }
-    .tip {
-      font-size: 11px;
-      color: #94a3b8;
-      margin-top: 6px;
-      line-height: 1.4;
+    #log {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      word-break: break-all;
     }
   </style>
 </head>
-<body class="lock-scroll dark-bg">
+<body>
+  <div class="top-strip"></div>
+  <div id="top-shield"></div>
 
-  <!-- 模拟游戏全屏画布 -->
-  <div id="game-canvas-sim"></div>
-
-  <!-- 顶部高对比彩条 + 安全区参考线 -->
-  <div class="top-ruler">
-    <div class="top-ruler-bar"></div>
-  </div>
-  <div class="safe-area-line" id="safe-line">safe-area-inset-top 边界线</div>
-
-  <!-- 偏方 1：顶部隐形安全区盾牌 -->
-  <div id="ios-top-shield"></div>
-
-  <!-- 调试控制面板 -->
-  <div class="panel">
-    <h1>
-      <span>《方寸战线》iOS 顶栏毛玻璃实验室</span>
-      <span id="mode-badge" style="font-size:11px;padding:2px 6px;border-radius:6px;background:#334155;">检测中</span>
-    </h1>
-
-    <div class="status-box" id="env-info">加载环境信息中...</div>
-
-    <!-- 偏方 1 -->
-    <div class="group">
-      <div class="group-title">偏方 1：顶部安全区“伪实心盾牌” (骗过合成器)</div>
-      <div class="btn-row" id="shield-btns">
-        <button data-bg="transparent" data-h="env(safe-area-inset-top, 0px)">关闭(全透)</button>
-        <button data-bg="rgba(0,0,0,0.02)" data-h="env(safe-area-inset-top, 0px)" class="active">2%黑(默认)</button>
-        <button data-bg="rgba(0,0,0,0.15)" data-h="env(safe-area-inset-top, 0px)">15%暗角</button>
-        <button data-bg="rgba(0,0,0,0.02)" data-h="calc(env(safe-area-inset-top, 0px) + 12px)">2%黑+多盖12px</button>
-        <button data-bg="#000000" data-h="env(safe-area-inset-top, 0px)">100%纯黑条</button>
-      </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">当前状态与点击反馈</div>
+      <div id="log">等待点击测试...</div>
     </div>
 
-    <!-- 偏方 2 -->
-    <div class="group">
-      <div class="group-title">偏方 2：动态改写 theme-color (强制刷新顶栏合成层)</div>
-      <div class="btn-row">
-        <button onclick="changeThemeColor('#010101')">改为 #010101</button>
-        <button onclick="changeThemeColor('#0b1021')">改为 #0b1021</button>
-        <button onclick="changeThemeColor('#dc2626')">改为红色(测反应)</button>
-        <button onclick="removeThemeColor()">移除 theme-color</button>
-      </div>
+    <div class="card">
+      <div class="title">1. 顶部安全区遮罩（偏方 1）</div>
+      <button id="b-off" class="on" onclick="setShield('transparent', 'env(safe-area-inset-top, 0px)', 'b-off')">关闭(全透)</button>
+      <button id="b-002" onclick="setShield('rgba(0,0,0,0.02)', 'env(safe-area-inset-top, 0px)', 'b-002')">黑 0.02</button>
+      <button id="b-01" onclick="setShield('rgba(0,0,0,0.1)', 'env(safe-area-inset-top, 0px)', 'b-01')">黑 0.10</button>
+      <button id="b-black" onclick="setShield('#000000', 'env(safe-area-inset-top, 0px)', 'b-black')">纯黑</button>
     </div>
 
-    <!-- 偏方 3 -->
-    <div class="group">
-      <div class="group-title">偏方 3：根容器滚动锁死 & 底层背景色</div>
-      <div class="btn-row">
-        <button id="btn-lock" class="active" onclick="toggleScrollLock()">已锁死滚动(fixed)</button>
-        <button id="btn-bg" class="active" onclick="toggleRootBg()">底层: 深色(#0b1021)</button>
-      </div>
+    <div class="card">
+      <div class="title">2. 改写 theme-color（偏方 2）</div>
+      <button onclick="setTheme('#010101')">改 #010101</button>
+      <button onclick="setTheme('#0b1021')">改 #0b1021</button>
+      <button onclick="setTheme('#dc2626')">改红色</button>
     </div>
 
-    <!-- 画布背景切换 -->
-    <div class="group">
-      <div class="group-title">背景画面测试（观察顶栏在不同亮度下的模糊表现）</div>
-      <div class="btn-row">
-        <button onclick="setCanvasTheme('dark')">深色战棋网格</button>
-        <button onclick="setCanvasTheme('bright')">高对比亮色</button>
-        <button onclick="setCanvasTheme('sky')">浅蓝天空色</button>
-      </div>
-      <div class="tip">
-        提示：请点击 Safari 底部「分享」→「添加到主屏幕」，然后从桌面图标打开测试。观察屏幕最顶端的红黄绿彩条和蓝虚线是否变模糊或发白。
-      </div>
+    <div class="card">
+      <div class="title">3. 背景明暗切换</div>
+      <button id="bg-dark" class="on" onclick="setBg('#0b1021', '#f1f5f9', 'bg-dark')">深色背景</button>
+      <button id="bg-light" onclick="setBg('#ffffff', '#0f172a', 'bg-light')">纯白背景</button>
     </div>
   </div>
 
   <script>
-    // 1. 动态生成并注入内联 manifest.json，使单文件即可作为 standalone PWA 安装
-    (function injectManifest() {
-      const manifest = {
-        name: "PWA顶栏毛玻璃测试",
-        short_name: "顶栏测试",
-        start_url: location.href,
-        display: "standalone",
-        background_color: "#0b1021",
-        theme_color: "#0b1021",
-        orientation: "portrait"
-      };
-      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-      document.getElementById('inline-manifest').href = URL.createObjectURL(blob);
+    (function () {
+      try {
+        var m = {
+          name: "顶栏测试v2",
+          short_name: "顶栏测试v2",
+          start_url: location.href,
+          display: "standalone",
+          background_color: "#0b1021",
+          theme_color: "#0b1021"
+        };
+        var blob = new Blob([JSON.stringify(m)], { type: "application/manifest+json" });
+        document.getElementById("pwa-manifest").href = URL.createObjectURL(blob);
+      } catch (e) {}
     })();
 
-    // 2. 环境与安全区探针
-    function updateEnvInfo() {
-      const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-      const badge = document.getElementById('mode-badge');
-      badge.textContent = isStandalone ? 'PWA 独立全屏模式' : '普通浏览器标签页';
-      badge.style.background = isStandalone ? '#15803d' : '#b45309';
-
-      const sat = getComputedStyle(document.documentElement).getPropertyValue('--sat').trim();
-      document.getElementById('safe-line').textContent = `safe-area-inset-top (${sat}) 边界线`;
-
-      const metaTheme = document.querySelector('meta[name="theme-color"]');
-      document.getElementById('env-info').innerHTML =
-        `模式: <b>${isStandalone ? 'Standalone PWA' : 'Safari 浏览器'}</b> | 视口: ${window.innerWidth}×${window.innerHeight}<br>` +
-        `顶部安全区(sat): <b>${sat}</b> | theme-color: <b>${metaTheme ? metaTheme.content : '无'}</b>`;
+    function logMsg(txt) {
+      var sat = getComputedStyle(document.documentElement).getPropertyValue("padding-top");
+      var mode = window.navigator.standalone ? "Standalone" : "Safari";
+      document.getElementById("log").innerHTML =
+        "模式: <b>" + mode + "</b> | 窗口: " + innerWidth + "x" + innerHeight + "<br>" +
+        "最近操作: <b>" + txt + "</b>";
     }
 
-    // 3. 偏方 1 控制
-    const shield = document.getElementById('ios-top-shield');
-    document.getElementById('shield-btns').addEventListener('click', (e) => {
-      if (e.target.tagName !== 'BUTTON') return;
-      document.querySelectorAll('#shield-btns button').forEach(b => b.classList.remove('active'));
-      e.target.classList.add('active');
-      shield.style.background = e.target.dataset.bg;
-      shield.style.height = e.target.dataset.h;
-    });
-
-    // 4. 偏方 2 控制
-    function changeThemeColor(color) {
-      let meta = document.querySelector('meta[name="theme-color"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'theme-color';
-        document.head.appendChild(meta);
-      }
-      meta.setAttribute('content', color);
-      updateEnvInfo();
-    }
-    function removeThemeColor() {
-      const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.remove();
-      updateEnvInfo();
+    function markGroup(btnId, prefix) {
+      var btns = document.querySelectorAll("button[id^='" + prefix + "']");
+      for (var i = 0; i < btns.length; i++) btns[i].classList.remove("on");
+      var cur = document.getElementById(btnId);
+      if (cur) cur.classList.add("on");
     }
 
-    // 5. 偏方 3 控制
-    let isLocked = true;
-    function toggleScrollLock() {
+    function setShield(bg, h, btnId) {
+      var el = document.getElementById("top-shield");
+      el.style.background = bg;
+      el.style.height = h;
+      markGroup(btnId, "b-");
+      logMsg("顶栏遮罩 -> " + bg);
+    }
+
+    function setTheme(color) {
+      var meta = document.getElementById("meta-theme");
+      if (meta) meta.setAttribute("content", color);
+      logMsg("theme-color -> " + color);
+    }
+
+    function setBg(bg, fg, btnId) {
+      document.documentElement.style.background = bg;
+      document.body.style.background = bg;
+      document.body.style.color = fg;
+      markGroup(btnId, "bg-");
+      logMsg("背景色 -> " + bg);
+    }
+
+    logMsg("页面已就绪");
+  </script>
+</body>
+</html>
