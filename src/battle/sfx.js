@@ -4,7 +4,7 @@
 // 点棋盘（canvas）不出声；灰着的按钮不出声。iOS 要用户手势才能发声：首次 pointerdown 时建立并唤醒 AudioContext。
 // 开关存本机（localStorage gridmarch.sfx，'0' = 关）：主页设置的「音量」行、战场暂停菜单第二页的「音效」都读写它。
 const KEY = 'gridmarch.sfx', VOL = .75, AC = window.AudioContext || window.webkitAudioContext;
-let ctx = null, master = null, noiseBuf = null, last = 0, installed = false, on = true;
+let ctx = null, master = null, noiseBuf = null, noiseLong = null, last = 0, installed = false, on = true;
 try { on = localStorage.getItem(KEY) !== '0'; } catch (e) {}
 
 function ensure() {
@@ -33,6 +33,14 @@ function click(t, freq, dur, gain) {
   const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.2;
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur); s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + .01);
 }
+// 一段滤波噪声（可扫频）：爆炸的「轰」、火箭的「嗖」、步枪的「啪」都靠它。type：lowpass（闷）/ bandpass（脆）；f0 → f1 指数扫频，gain 峰值，随后指数衰减
+function noise(t, dur, f0, f1, gain, type = 'lowpass', q = 0.9) {
+  if (!noiseLong) { noiseLong = ctx.createBuffer(1, ctx.sampleRate * 1.2, ctx.sampleRate); const d = noiseLong.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = noiseLong; f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, t); if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + .006); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random() * .2); s.stop(t + dur + .02);
+}
 // 两套声音，名字一一对应（ui 里没有的名字就不出声）：
 //   ui   = 菜单（主页 / 设置 / 暂停菜单 / 结算面板）：圆润的「啵」，玩具盒质感
 //   game = 真正的游戏内操作（棋盘点按、选单位、浮条、兵工厂、详细面板、战场情报、右上角按钮）：军事机械味——开关咔嗒、电台哔哔、冲压盖章、棘轮上膛
@@ -55,17 +63,39 @@ const BANKS = {
     back(t) { tone(t, 420, 260, .06, 'square', .05, 2500); click(t, 1800, .015, .06); },                                           // 取消 / 撤销 / 点面板外
     open(t) { click(t, 2000, .06, .08); tone(t + .04, 990, 990, .07, 'square', .05, 3500); tone(t + .1, 1320, 1320, .09, 'square', .05, 3500); },   // 电台静电 + 一声「滴」：打开详细面板 / 情报 / 兵工厂
     deny(t) { tone(t, 160, 120, .1, 'square', .07, 900); tone(t + .11, 150, 110, .13, 'square', .07, 900); },
+    // ── 战斗（0.97）：开火 / 命中 / 被消灭。合成的「玩具战争」味，不追求写实 ──
+    mg(t) { for (let i = 0; i < 6; i++) { const u = t + i * .062 + Math.random() * .008, f = 2300 + Math.random() * 1400; noise(u, .045, f, f * .6, .17, 'bandpass', 1.4); tone(u, 150, 70, .03, 'square', .06, 900); } },   // 机枪：一串 6 发点射（步兵 / 反坦克兵副武器 / 坦克副武器）
+    rocket(t) { noise(t, .38, 500, 3200, .2, 'bandpass', .8); tone(t, 220, 80, .07, 'sine', .3); noise(t, .05, 1800, 900, .12, 'lowpass'); },   // 火箭筒：「嗖」（反坦克兵主武器）
+    cannon(t) { click(t, 1900, .02, .3); tone(t, 120, 38, .3, 'sine', .55); noise(t, .28, 900, 140, .34, 'lowpass'); tone(t + .02, 880, 700, .09, 'triangle', .05); },   // 坦克炮：脆响 + 低沉轰 + 一点金属余音
+    howitzer(t) { click(t, 1400, .03, .3); tone(t, 85, 28, .45, 'sine', .6); noise(t, .4, 700, 110, .38, 'lowpass'); tone(t + .12, 1900, 520, .32, 'sine', .05); },   // 自行火炮：更低更长的轰 + 炮弹飞行的下落哨音
+    hitl(t) { for (let i = 0; i < 3; i++) { const u = t + i * .05 + Math.random() * .01; click(u, 3600 + Math.random() * 900, .02, .13); tone(u, 1500, 900, .05, 'triangle', .04); } },   // 机枪命中：几下叮叮的弹着点
+    hith(t) { tone(t, 95, 42, .24, 'sine', .45); noise(t, .22, 1100, 160, .3, 'lowpass'); click(t, 2400, .02, .12); },   // 炮弹 / 火箭命中：中型爆炸
+    blast(t) { tone(t, 70, 28, .55, 'sine', .6); noise(t, .6, 800, 90, .42, 'lowpass'); tone(t + .02, 640, 560, .14, 'triangle', .07); tone(t + .03, 910, 780, .11, 'triangle', .05); for (let i = 0; i < 4; i++) click(t + .12 + i * .07 + Math.random() * .03, 2200 + Math.random() * 1500, .02, .09); },   // 机械单位被消灭：大爆炸 + 金属碎裂 + 碎片落地
+    poof(t) { tone(t, 520, 150, .12, 'sine', .2); noise(t, .09, 1300, 700, .12, 'bandpass', .7); tone(t + .05, 700, 200, .2, 'triangle', .07); },   // 步兵被消灭：不血腥，卡通的「噗」+ 一点下坠音
   },
 };
+const COMBAT = new Set(['mg', 'rocket', 'cannon', 'howitzer', 'hitl', 'hith', 'blast', 'poof']);   // 战斗音不走 35ms 去抖（命中和被消灭几乎同时发生）
+
+// 引擎兵种 + 本次用的武器 → 开火声（main.js 结算攻击时用）。直瞄步兵机枪；反坦克兵主武器火箭、副武器机枪；坦克 / 侦察车主炮 / 副机枪；炮类主炮
+export function weaponSound(type, weapon) {
+  if (type === 'inf') return 'mg';
+  if (type === 'mech') return weapon === 'primary' ? 'rocket' : 'mg';
+  if (type === 'arty' || type === 'rocket' || type === 'missile') return 'howitzer';
+  return weapon === 'primary' ? 'cannon' : 'mg';
+}
+export const hitSound = name => name === 'mg' ? 'hitl' : 'hith';
+export const deathSound = type => type === 'inf' || type === 'mech' ? 'poof' : 'blast';
 
 export const sfx = {
   last: null,   // 最近一次出声的 {bank, name}（冒烟测试用）
-  play(name, bank = 'ui') {
+  log: [],      // 最近 40 次出声（冒烟测试用，看顺序）
+  play(name, bank = 'ui', delay = 0) {
     if (!on) return;
     const fn = BANKS[bank] && BANKS[bank][name]; if (!fn) return;
-    const now = performance.now(); if (now - last0 < 35) return; last0 = now;
+    if (!(delay > 0) && !COMBAT.has(name)) { const now = performance.now(); if (now - last0 < 35) return; last0 = now; }
     const c = ensure(); if (!c) return;
-    this.last = {bank, name}; fn(c.currentTime + .005);
+    this.last = {bank, name}; this.log.push(name); if (this.log.length > 40) this.log.shift();
+    fn(c.currentTime + .005 + Math.max(0, delay));
   },
   get enabled() { return on; },
   setEnabled(v) { on = !!v; try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {} if (on) this.play('tap'); },

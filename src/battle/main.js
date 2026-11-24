@@ -8,7 +8,7 @@ import {createArsenal} from './arsenal.js';
 import {createDetail} from './detail.js';
 import {createResult} from './result.js';
 import {createIntel} from './intel.js';
-import {sfx} from './sfx.js';
+import {sfx, weaponSound, hitSound, deathSound} from './sfx.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -79,7 +79,7 @@ const seed = Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 
 const preset = makeLevel1(seed, {army: opts.army ? TEST_ARMY : undefined});   // 0.86：默认没有起始单位；网址加 &units=1 给每方 4 个（冒烟测试用）
 const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
 preset.layout.units = specs;
-world = buildWorld({preset});
+world = buildWorld({preset}); world.setOnFire((name, delay) => sfx.play(name, 'game', delay));   // 0.97 开火声由世界在开火那一刻回调
 const L = preset.layout;
 world.setShadowRadius(33);   // 视距 11 格时画面对角约 ±22：阴影范围放大到 ±33（2048 贴图下约每格 62 像素；原 9 格 ±27 时是 80）
 
@@ -225,14 +225,15 @@ function doAttack(tgt) {   // 规则立刻结算（engineAttack），画面按�
   if (!r.ok) { exitTargeting(); return; }
   exitTargeting(); hideBar();
   const anim = combatOn, tdead = tgt.hp <= 0, adead = att.hp <= 0, fmt = d => '-' + fmtHp(d);
+  const sndA = weaponSound(att.type, r.hit.weapon), sndD = r.counter ? weaponSound(tgt.type, r.counter.weapon) : null;   // 0.97 战斗音：开火声按兵种 + 武器；命中 = 机枪叮叮 / 炮火爆炸；被消灭 = 机械大爆炸 / 步兵「噗」
   const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
   const counter = () => {
     if (!r.counter) return fin();
-    const go = () => { popup(aid, fmt(r.counter.damage)); syncActed(); if (adead) world.removeUnit(aid, anim); fin(); };
-    anim ? world.playAttack(tid, aid, go) : go();
+    const go = () => { popup(aid, fmt(r.counter.damage)); sfx.play(hitSound(sndD), 'game', anim ? 0 : .14); if (adead) sfx.play(deathSound(att.type), 'game', anim ? .1 : .26); syncActed(); if (adead) world.removeUnit(aid, anim); fin(); };
+    if (anim) world.playAttack(tid, aid, go, sndD); else { sfx.play(sndD, 'game'); go(); }
   };
-  const first = () => { popup(tid, fmt(r.hit.damage)); syncActed(); if (tdead) world.removeUnit(tid, anim); counter(); };
-  anim ? world.playAttack(aid, tid, first) : first();
+  const first = () => { popup(tid, fmt(r.hit.damage)); sfx.play(hitSound(sndA), 'game', anim ? 0 : .14); if (tdead) sfx.play(deathSound(tgt.type), 'game', anim ? .1 : .26); syncActed(); if (tdead) world.removeUnit(tid, anim); counter(); };
+  if (anim) world.playAttack(aid, tid, first, sndA); else { sfx.play(sndA, 'game'); first(); }
 }
 // 0.77 占领：规则立刻结算（engineCapture），画面演：进度环从旧进度走到新进度、灯带颜色渐变 + 头顶飘「占领 x/20」；占满 = 灯带闪白换色 + 冲击波 + 「占领成功！」。占领总部 = 获胜（见 CONFIG.hqWin）
 function doCapture() {

@@ -844,12 +844,15 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   }
   const clearRange = () => clearHighlights();
   // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
-  function playAttack(aId, tId, onDone) {
+  // 0.97：snd = 开火声的名字（main.js 按兵种 + 武器选好传进来）；步兵 / 炮类开火那一刻就响，坦克等炮管真的开火（update 里 m.fire() 成功）时才响，经 onFire(名字, 延迟秒) 交给战场去出声
+  let onFire = null;
+  function playAttack(aId, tId, onDone, snd) {
     const a = unitById(aId), t = unitById(tId);
     if (!a || !t) { onDone(); return; }
     const ang = Math.atan2(t.x - a.x, t.z - a.z);
-    if (a.actors) { a.yaw = ang; syncUnit(a); a.actors.forEach((ac, i) => { ac.setMode(state.infPose === 'kneel' ? 'kneel' : 'aim'); ac.shoot(2, i * .07); }); }
-    else if (a.spec.k === 'tank') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; }
+    if (a.actors) { a.yaw = ang; syncUnit(a); a.actors.forEach((ac, i) => { ac.setMode(state.infPose === 'kneel' ? 'kneel' : 'aim'); ac.shoot(2, i * .07); }); if (onFire && snd) onFire(snd, .12); }
+    else if (a.spec.k === 'tank') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; a.fireSnd = snd || null; }
+    else if (onFire && snd) onFire(snd, .05);
     a.atk = {t: 0, onDone};
   }
   // 单位被打掉：animate 为真时缩小消失（.5 秒），否则直接移除
@@ -928,7 +931,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     for (const u of units) if (u.actors) { let b = false; for (const a of u.actors) if (a.update(dt)) b = true; u.fireBusy = b; if (b) moving = true; }   // 步兵开火动画
     for (const u of units) if (u.spec.k === 'tank') {                                                      // 坦克：排队的炮击逐发开，特效播放期间保持渲染
       const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) { u.fireBusy = false; continue; }
-      if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) u.fireQ--;
+      if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) { u.fireQ--; if (u.fireSnd && onFire) { onFire(u.fireSnd, 0); u.fireSnd = null; } }
       m.updateFire(dt); u.fireBusy = m.fireState().active || u.fireQ > 0; if (u.fireBusy) moving = true;
     }
     // 0.70：攻击放完检测 + 死亡缩小
@@ -1078,7 +1081,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    setOnFire: fn => { onFire = fn; }, unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,
