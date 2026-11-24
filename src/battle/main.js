@@ -80,6 +80,10 @@ const preset = makeLevel1(seed, {army: opts.army ? TEST_ARMY : undefined});   //
 const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
 preset.layout.units = specs;
 world = buildWorld({preset}); world.setOnFire((name, delay) => sfx.play(name, 'game', delay));   // 0.97 开火声由世界在开火那一刻回调
+const PITCH = {light: 1.1, medium: 1, heavy: .85, art: .95};   // 0.98 移动声：重型更低沉
+world.setOnMove((ev, u) => { const k = u.spec.k, v = PITCH[u.spec.type] || (k === 'art' ? PITCH.art : 1);
+  if (k === 'inf') { if (ev === 'step') sfx.play('foot', 'game'); }
+  else if (ev === 'step') sfx.play('tread', 'game', 0, v); else if (ev === 'start') sfx.play('rev', 'game', 0, v); else sfx.play('settle', 'game', 0, v); });
 const L = preset.layout;
 world.setShadowRadius(33);   // 视距 11 格时画面对角约 ±22：阴影范围放大到 ±33（2048 贴图下约每格 62 像素；原 9 格 ±27 时是 80）
 
@@ -292,7 +296,7 @@ function handleTap(px, py) {
     if (sel && reach.has(ex + ',' + ey)) { sfx.play('go', 'game'); startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
     const wasSel = !!sel; clearSel();   // 0.95 棋盘点按的游戏音效：选单位 / 点格 / 取消选中 / 走 / 撤销 / 开兵工厂（和菜单的声音是两套，见 sfx.js）
     if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) { pickUnit(eu); sfx.play('select', 'game'); }
-    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) { toast('已达到单位上限（' + game.config.maxUnits + '）'); sfx.play('deny', 'game'); } else { sfx.play('open', 'game'); ars.open(c, game.turn === 0 ? 'blue' : 'red'); } }
+    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) { toast('已达到单位上限（' + game.config.maxUnits + '）'); sfx.play('deny', 'game'); } else { sfx.play('gear', 'game'); ars.open(c, game.turn === 0 ? 'blue' : 'red'); } }   // 0.98 兵工厂打开 = 齿轮机械声
     else sfx.play(wasSel ? 'back' : 'cell', 'game');   // 0.88：满员不开生产界面，直接提示
   } else { if (sel) sfx.play('back', 'game'); clearSel(); }
   infoUpdate(); hud(); mark();

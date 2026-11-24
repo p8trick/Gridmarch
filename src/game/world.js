@@ -845,7 +845,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const clearRange = () => clearHighlights();
   // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
   // 0.97：snd = 开火声的名字（main.js 按兵种 + 武器选好传进来）；步兵 / 炮类开火那一刻就响，坦克等炮管真的开火（update 里 m.fire() 成功）时才响，经 onFire(名字, 延迟秒) 交给战场去出声
-  let onFire = null;
+  let onFire = null, onMove = null;   // 0.98 onMove('start' | 'step' | 'end', 单位)：战场据此出脚步 / 履带 / 发动机声（'step' 按走过的距离触发，步兵每秒约 3~4 步、坦克约 6 下）
   function playAttack(aId, tId, onDone, snd) {
     const a = unitById(aId), t = unitById(tId);
     if (!a || !t) { onDone(); return; }
@@ -883,14 +883,16 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function moveAlong(u, cells, onArrive) {   // cells：世界格路线，第一格 = 单位现在的格；原地（只有一格）直接回调
     u.rangeCells = null; deselect();
     if (cells.length < 2) { if (onArrive) onArrive(u); return true; }
-    u.path = cells; u.dist = 0; u.curY = groundY(u.cell[0], u.cell[1], u); u.onArrive = onArrive || null;
+    u.path = cells; u.dist = 0; u.stepAcc = 0; u.curY = groundY(u.cell[0], u.cell[1], u); u.onArrive = onArrive || null;
+    if (onMove) onMove('start', u);
     refreshBuildings(); return true;
   }
   function canMoveTo(u, cell) { const R = u.reach || reachable(u), k = key(cell[0], cell[1]); return R.dist.has(k) && k !== R.start && !R.occ.has(k); }
   function pathTo(u, cell) { const R = u.reach || reachable(u); const out = []; let k = key(cell[0], cell[1]); while (k && k !== R.start) { out.push(k.split(',').map(Number)); const p = R.prev.get(k); k = p ? key(p[0], p[1]) : null; } out.push([...u.cell]); return out.reverse(); }
   function moveTo(u, cell) {
     if (!canMoveTo(u, cell)) return false;
-    u.path = pathTo(u, cell); u.dist = 0; u.curY = groundY(u.cell[0], u.cell[1], u);
+    u.path = pathTo(u, cell); u.dist = 0; u.stepAcc = 0; u.curY = groundY(u.cell[0], u.cell[1], u);
+    if (onMove) onMove('start', u);
     clearHighlights(); refreshBuildings(); return true;
   }
   let treeEasing = false;
@@ -906,6 +908,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
         const rate = Math.min(3, spd / (clip.speed * sc));
         for (const a of u.actors) { if (a.mode !== gait) a.setMode(gait); a.advance(dt, rate); }
       }
+      if (onMove) { const per = u.actors ? (state.infGait === 'run' ? 3.8 : 3.0) : 6.5; u.stepAcc = (u.stepAcc || 0) + spd * dt; const stride = spd / per; for (let n = 0; n < 3 && u.stepAcc >= stride; n++) { u.stepAcc -= stride; onMove('step', u); } }
       const total = (u.path.length - 1) * 2; u.dist += spd * dt;
       const d = Math.min(u.dist, total), i = Math.min(Math.floor(d / 2), u.path.length - 2), f = (d - i * 2) / 2;
       const a = u.path[i], b = u.path[i + 1];
@@ -921,6 +924,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
         u.model.advanceMotion(ds - arc, ds + arc); u.aimLock = false;
       }
       if (u.dist >= total) {
+        if (onMove) onMove('end', u);
         u.cell = [...u.path[u.path.length - 1]]; u.path = null; if (u.actors) for (const a of u.actors) a.setMode(state.infPose); [u.x, u.z] = standPos(u.cell[0], u.cell[1]); u.baseY = groundY(u.cell[0], u.cell[1], u); refreshBuildings();
         if (state.selected === u) deselect();
         if (u.onArrive) arrivals.push(u);
@@ -1081,7 +1085,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    setOnFire: fn => { onFire = fn; }, unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    setOnFire: fn => { onFire = fn; }, setOnMove: fn => { onMove = fn; }, unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

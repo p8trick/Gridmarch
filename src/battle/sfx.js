@@ -71,10 +71,16 @@ const BANKS = {
     hitl(t) { for (let i = 0; i < 3; i++) { const u = t + i * .05 + Math.random() * .01; click(u, 3600 + Math.random() * 900, .02, .13); tone(u, 1500, 900, .05, 'triangle', .04); } },   // 机枪命中：几下叮叮的弹着点
     hith(t) { tone(t, 95, 42, .24, 'sine', .45); noise(t, .22, 1100, 160, .3, 'lowpass'); click(t, 2400, .02, .12); },   // 炮弹 / 火箭命中：中型爆炸
     blast(t) { tone(t, 70, 28, .55, 'sine', .6); noise(t, .6, 800, 90, .42, 'lowpass'); tone(t + .02, 640, 560, .14, 'triangle', .07); tone(t + .03, 910, 780, .11, 'triangle', .05); for (let i = 0; i < 4; i++) click(t + .12 + i * .07 + Math.random() * .03, 2200 + Math.random() * 1500, .02, .09); },   // 机械单位被消灭：大爆炸 + 金属碎裂 + 碎片落地
+    // ── 移动 / 机械（0.98）。v = 音高倍率（重型更低）──
+    foot(t, v = 1) { const k = (.94 + Math.random() * .12) * v; tone(t, 150 * k, 70 * k, .055, 'sine', .13); noise(t, .045, 950 * k, 600, .09, 'bandpass', .8); },   // 步兵脚步：软软的「踏」+ 一点地面擦声，每一步音高略不同
+    tread(t, v = 1) { const k = (.95 + Math.random() * .1) * v; noise(t, .1, 280, 150, .13, 'lowpass'); tone(t, 75 * k, 52 * k, .09, 'sawtooth', .05, 320); click(t, 1900, .012, .05); },   // 履带：低沉「咔隆」，每走一小段响一下
+    rev(t, v = 1) { tone(t, 58 * v, 135 * v, .3, 'sawtooth', .17, 520); noise(t, .26, 320, 520, .1, 'lowpass'); click(t, 1500, .015, .06); },   // 发动机起步：低吼一下
+    settle(t, v = 1) { tone(t, 125 * v, 55 * v, .22, 'sawtooth', .11, 420); click(t, 1600, .012, .05); },   // 到位熄火：轰鸣降下来
+    gear(t) { noise(t, .13, 1300, 2700, .1, 'bandpass', 1.2); tone(t, 380, 760, .11, 'square', .045, 2600); click(t + .045, 3200, .01, .08); click(t + .09, 2800, .01, .08); tone(t + .14, 180, 95, .09, 'sine', .32); click(t + .14, 2400, .02, .12); },   // 兵工厂打开：齿轮「嗞嗞」转两下 + 一声沉重的「咣」
     poof(t) { tone(t, 520, 150, .12, 'sine', .2); noise(t, .09, 1300, 700, .12, 'bandpass', .7); tone(t + .05, 700, 200, .2, 'triangle', .07); },   // 步兵被消灭：不血腥，卡通的「噗」+ 一点下坠音
   },
 };
-const COMBAT = new Set(['mg', 'rocket', 'cannon', 'howitzer', 'hitl', 'hith', 'blast', 'poof']);   // 战斗音不走 35ms 去抖（命中和被消灭几乎同时发生）
+const NOLIMIT = new Set(['mg', 'rocket', 'cannon', 'howitzer', 'hitl', 'hith', 'blast', 'poof', 'foot', 'tread', 'rev', 'settle', 'gear']);   // 战斗音 / 移动音 / 机械音不走 35ms 去抖（命中和被消灭几乎同时发生；脚步、履带本来就是连续的）
 
 // 引擎兵种 + 本次用的武器 → 开火声（main.js 结算攻击时用）。直瞄步兵机枪；反坦克兵主武器火箭、副武器机枪；坦克 / 侦察车主炮 / 副机枪；炮类主炮
 export function weaponSound(type, weapon) {
@@ -89,13 +95,13 @@ export const deathSound = type => type === 'inf' || type === 'mech' ? 'poof' : '
 export const sfx = {
   last: null,   // 最近一次出声的 {bank, name}（冒烟测试用）
   log: [],      // 最近 40 次出声（冒烟测试用，看顺序）
-  play(name, bank = 'ui', delay = 0) {
+  play(name, bank = 'ui', delay = 0, v = 1) {
     if (!on) return;
     const fn = BANKS[bank] && BANKS[bank][name]; if (!fn) return;
-    if (!(delay > 0) && !COMBAT.has(name)) { const now = performance.now(); if (now - last0 < 35) return; last0 = now; }
+    if (!(delay > 0) && !NOLIMIT.has(name)) { const now = performance.now(); if (now - last0 < 35) return; last0 = now; }
     const c = ensure(); if (!c) return;
-    this.last = {bank, name}; this.log.push(name); if (this.log.length > 40) this.log.shift();
-    fn(c.currentTime + .005 + Math.max(0, delay));
+    this.last = {bank, name}; this.log.push(name); if (this.log.length > 60) this.log.shift();
+    fn(c.currentTime + .005 + Math.max(0, delay), v);
   },
   get enabled() { return on; },
   setEnabled(v) { on = !!v; try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {} if (on) this.play('tap'); },
