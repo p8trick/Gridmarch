@@ -8,6 +8,7 @@ import {createArsenal} from './arsenal.js';
 import {createDetail} from './detail.js';
 import {createResult} from './result.js';
 import {createIntel} from './intel.js';
+import {sfx} from './sfx.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -40,6 +41,7 @@ export async function mountBattle(host, stage, opts = {}) {
   <ul class="pmenu" id="pMain">
     <li><button class="item" data-act="resume"><span class="txt"><span class="main">继续</span><span class="sub">RESUME</span></span></button></li>
     <li><button class="item" data-act="quality"><span class="txt"><span class="main">画质</span><span class="sub">GRAPHICS</span></span></button></li>
+    <li><button class="item" data-act="sfx"><span class="txt"><span class="main">界面音效</span><span class="pst" id="pSfxSt">开</span></span></button></li>
     <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
     <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图</span><span class="sub">NEW MAP</span></span></button></li>
     <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
@@ -297,7 +299,7 @@ function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，�
   if (econBusy) return;
   const c = selectAt(px, py);
   infoUpdate(); hud(); mark();
-  if (c) detail.open(c);
+  if (c) { sfx.play('open'); detail.open(c); }
 }
 
 // ── 详细信息面板（0.57）：点格子后，面板出现在光圈所在位置的【另一侧】（光圈在左半屏 → 面板在右下，反之亦然；中间 46%–54% 不切换，免得抖）。
@@ -456,7 +458,7 @@ let nextFocus = 0, cycleHome = null;   // cycleHome：开始轮流找单位那�
 let intelLp = 0, intelFired = false; const bNext = $('bNext');
 const canIntel = () => !world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen && game.winner === null;
 const intelEnd = () => { clearTimeout(intelLp); intelLp = 0; bNext.classList.remove('charge'); };
-bNext.addEventListener('pointerdown', () => { intelFired = false; intelEnd(); if (!canIntel()) return; bNext.classList.add('charge'); intelLp = setTimeout(() => { intelLp = 0; bNext.classList.remove('charge'); if (!alive || !canIntel()) return; intelFired = true; intel.open(); }, 450); });
+bNext.addEventListener('pointerdown', () => { intelFired = false; intelEnd(); if (!canIntel()) return; bNext.classList.add('charge'); intelLp = setTimeout(() => { intelLp = 0; bNext.classList.remove('charge'); if (!alive || !canIntel()) return; intelFired = true; sfx.play('open'); intel.open(); }, 450); });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => bNext.addEventListener(t, intelEnd));
 bNext.oncontextmenu = e => e.preventDefault();
 $('bNext').onclick = () => {
@@ -498,6 +500,7 @@ const TUCK_KEY = 'gridmarch.hpTuck', TUCKS = [0, 25, 40, 50];
 let tuckPct = 40; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.includes(v) && localStorage.getItem(TUCK_KEY) !== null) tuckPct = v; } catch (e) {}
 const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
 tuckRender();
+const sfxRender = () => { $('pSfxSt').textContent = sfx.enabled ? '开' : '关'; $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
 function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
@@ -512,6 +515,7 @@ pause.addEventListener('click', e => {
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
+  else if (a === 'sfx') { sfx.setEnabled(!sfx.enabled); sfxRender(); }   // 0.94 界面音效开关（同主页设置里的「音效」）
   else if (a === 'side') stage.toggleSide();
   else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
   else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }

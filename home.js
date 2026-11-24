@@ -8,6 +8,7 @@
   var DEV_URL = 'tests/units-terrain.html?v=' + VER;   // 开发入口：连点标题 5 次 → 单位×地形测试页
   var SAVE_KEY = 'gridmarch.save';            // 有这个键就视为有存档
   var LANG_KEY = 'gridmarch.lang';
+  var SFX_KEY = 'gridmarch.sfx';              // 界面音效开关（src/battle/sfx.js 读同一个键；'0' = 关）
 
   var MENU = [
     { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { toast: 'soon' } },
@@ -22,8 +23,8 @@
     en: { src: 'assets/title/title-en.webp', alt: 'Gridmarch' }
   };
   var STR = {
-    zh: { settings: '设置', language: '语言', quality: '画质', volume: '音量', soon: '即将开放', close: '关闭', doc: '方寸战线 · Gridmarch' },
-    en: { settings: 'Settings', language: 'Language', quality: 'Graphics', volume: 'Volume', soon: 'Coming soon', close: 'Close', doc: 'Gridmarch' }
+    zh: { settings: '设置', language: '语言', quality: '画质', volume: '音效', on: '开', off: '关', soon: '即将开放', close: '关闭', doc: '方寸战线 · Gridmarch' },
+    en: { settings: 'Settings', language: 'Language', quality: 'Graphics', volume: 'Sound', on: 'On', off: 'Off', soon: 'Coming soon', close: 'Close', doc: 'Gridmarch' }
   };
 
   /* ===== 工具 ===== */
@@ -35,6 +36,9 @@
   var lang = load(LANG_KEY) === 'en' ? 'en' : 'zh';
   var hasSave = !!load(SAVE_KEY);
   var items = [], sel = -1, toastTimer = 0;
+  /* 界面音效（0.94）：合成音，没有音频文件；主页 + 战场所有按钮的点击声都在 sfx.js 里统一挂（document 捕获阶段），这里只负责设置里的开关 */
+  var sfxP = import('./src/battle/sfx.js').then(function (m) { m.sfx.install(); return m.sfx; });
+  sfxP.catch(function () { /* 音效加载失败：静音继续，不影响游戏 */ });
 
   /* ===== 菜单 ===== */
   function build() {
@@ -105,7 +109,13 @@
   sheet.addEventListener('click', function (e) {
     var b = e.target.closest('[data-lang]');
     if (b) { lang = b.dataset.lang === 'en' ? 'en' : 'zh'; store(LANG_KEY, lang); applyLang(); }
+    var s = e.target.closest('[data-sfx]');
+    if (s) { var v = s.dataset.sfx === '1'; store(SFX_KEY, v ? '1' : '0'); renderSfx(); sfxP.then(function (x) { x.setEnabled(v); }).catch(function () {}); }
   });
+  function renderSfx() {
+    var on = load(SFX_KEY) !== '0';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sfx]'), function (el) { el.setAttribute('aria-pressed', (el.dataset.sfx === '1') === on ? 'true' : 'false'); });
+  }
 
   /* ===== 语言：标题图与文字一起切换，中英文不同时出现 ===== */
   function applyLang() {
@@ -127,6 +137,7 @@
       el.setAttribute('aria-pressed', el.dataset.lang === lang ? 'true' : 'false');
     });
     $('#closeSettings').setAttribute('aria-label', s.close);
+    renderSfx();
   }
 
   /* ===== 开发入口：连点标题 5 次 → 单位×地形测试页 ===== */
