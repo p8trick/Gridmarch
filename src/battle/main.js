@@ -7,6 +7,7 @@ import {createCursor} from './cursor.js';
 import {createArsenal} from './arsenal.js';
 import {createDetail} from './detail.js';
 import {createResult} from './result.js';
+import {createIntel} from './intel.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
 import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -113,6 +114,8 @@ const showCursor = c => cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c))
 // 长按详细面板（0.60；0.61 加展示窗：面板开着时光圈先藏起来——光圈有动画会让战场每秒重画 30 次，展示窗不需要）
 const detail = createDetail({THREE, renderer, host, stage, game, toEngine,
   onOpen: () => cursor.hide(), onClose: () => { if (picked) showCursor(picked); mark(); }});
+
+const intel = createIntel({host, game, onOpen: () => cursor.hide(), onClose: () => { if (picked) showCursor(picked); mark(); }});   // 0.93 战场情报：长按「找未行动单位」键打开
 
 let dirty = true, lastQuarter = -1, lastCur = 0;
 const mark = () => { dirty = true; };
@@ -351,7 +354,7 @@ function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 
   if (!stuck) hudStuck = false;
   else if (!hudStuck) {   // 刚刚变成「无事可做」的这一刻：弹出确认；兵工厂 / 详细面板 / 暂停菜单开着就先等着（它们关上时会再检查一次）；确认已经开着就不重复弹
     if (!$('endm').hidden) hudStuck = true;
-    else if ($('pause').hidden && !ars.isOpen && !detail.isOpen && !econBusy) { hudStuck = true; openEnd(); }
+    else if ($('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen && !econBusy) { hudStuck = true; openEnd(); }
   }
   infoPlace();
   if (lastCells !== cam.cells) { if (lastCells !== null) { showZoom(); clearTimeout(cellsSaveT); cellsSaveT = setTimeout(() => { try { localStorage.setItem(CELLS_KEY, String(Math.round(cam.cells * 100) / 100)); } catch (e) {} }, 500); } lastCells = cam.cells; world.setHpView({k: Math.max(1, cam.cells / 9)}); }   // 视距变了（双指 / 滚轮 / 松手吸附）：旋转按钮临时变成视距数字
@@ -438,7 +441,7 @@ function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
-$('hudL').onclick = () => { if (game.winner !== null) return; if (!world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen) openEnd(); };
+$('hudL').onclick = () => { if (game.winner !== null) return; if (!world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen) openEnd(); };
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
@@ -449,8 +452,16 @@ $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
 // 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
 let nextFocus = 0, cycleHome = null;   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
+// 0.93 长按这个键（约 0.45 秒）= 战场情报；按住时按钮外圈金环慢慢扩开。长按触发后抬手那一下不再算「点一下找单位」
+let intelLp = 0, intelFired = false; const bNext = $('bNext');
+const canIntel = () => !world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen && game.winner === null;
+const intelEnd = () => { clearTimeout(intelLp); intelLp = 0; bNext.classList.remove('charge'); };
+bNext.addEventListener('pointerdown', () => { intelFired = false; intelEnd(); if (!canIntel()) return; bNext.classList.add('charge'); intelLp = setTimeout(() => { intelLp = 0; bNext.classList.remove('charge'); if (!alive || !canIntel()) return; intelFired = true; intel.open(); }, 450); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach(t => bNext.addEventListener(t, intelEnd));
+bNext.oncontextmenu = e => e.preventDefault();
 $('bNext').onclick = () => {
-  if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || game.winner !== null) return;
+  if (intelFired) { intelFired = false; return; }
+  if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || intel.isOpen || game.winner !== null) return;
   const list = game.units.filter(u => u.owner === game.turn && !u.acted).sort((a, b) => a.id - b.id); if (!list.length) return;
   const u = list.find(q => q.id > nextFocus);
   if (!u) { if (cycleHome) { cam.panTo(cycleHome.x, cycleHome.z); mark(); } nextFocus = 0; cycleHome = null; return; }   // 轮完一圈：回到开始前的镜头位置
@@ -557,7 +568,7 @@ function loop(now) {
   let cursorOnly = false;
   if (cursor.update(now / 1000) && now - lastCur > 30) { cursorOnly = !dirty; dirty = true; lastCur = now; }   // 光圈有动画：显示时约 30 帧/秒重画，没有光圈时仍然按需渲染
   if (world.pulseRange(now / 1000) && now - lastPul > 30) { cursorOnly = cursorOnly || !dirty; dirty = true; lastPul = now; }   // 蓝格呼吸：有蓝格时约 30 帧/秒（同光圈，不计入帧率）
-  { const busy = ars.isOpen || detail.isOpen || !$('pause').hidden; if (wasBusy && !busy) hud(); wasBusy = busy; }   // 兵工厂 / 详细面板 / 暂停菜单刚关上：补查一次「是不是无事可做」
+  { const busy = ars.isOpen || detail.isOpen || intel.isOpen || !$('pause').hidden; if (wasBusy && !busy) hud(); wasBusy = busy; }   // 兵工厂 / 详细面板 / 暂停菜单刚关上：补查一次「是不是无事可做」
   if (ars.isOpen) dirty = true;   // 兵工厂转台每帧都要重画（先画战场，再把转台画进右侧留空区）
   if (detail.needsFrame()) dirty = true;   // 详细面板的展示窗：刚打开 / 拖动后画几帧，静止时不出帧
   if (dirty) {
@@ -575,12 +586,12 @@ resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
 host.addEventListener('pointerdown', e => { if (orbitOn && result.minimized && !e.target.closest('.res-tag')) orbitOn = false; }, true);   // 0.91：看战场时一碰棋盘就停下绕场
-window.battle = {result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {intel, result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
   if (!alive) return; alive = false;
-  ars.dispose(); detail.dispose(); result.dispose(); clearTimeout(resT);
+  ars.dispose(); detail.dispose(); intel.dispose(); result.dispose(); clearTimeout(intelLp); clearTimeout(resT);
   cancelAnimationFrame(raf); clearTimeout(wheelTimer); clearTimeout(zoomT); clearTimeout(bannerT); clearTimeout(lpT); clearTimeout(cellsSaveT); clearTimeout(toastT); econTok++; econTimers.forEach(clearTimeout);
   removeEventListener('error', onErr); removeEventListener('unhandledrejection', onRej);
   stage.offChange(resize); stage.offChange(syncSide);

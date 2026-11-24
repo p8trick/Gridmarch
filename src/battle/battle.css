@@ -326,3 +326,23 @@
 #battle.res-open #ui{visibility:hidden}   /* 结算面板打开时藏起右上角按钮 */
 #battle .res .dot,#battle .res-tag .dot{flex:none;width:13px;height:13px;border-radius:50%;box-sizing:border-box;border:2px solid #fff;box-shadow:0 0 0 1.5px #2d3e55}
 #battle .res .dot.b,#battle .res-tag .dot.b{background:#3b82f6}#battle .res .dot.r,#battle .res-tag .dot.r{background:#ef4444}
+
+/* 战场情报（0.93）：外壳 .res.int，盒子 / 行 / 条形全部复用 .res-*；这里只补标题、据点行（带各类据点数）、中立据点条 */
+#battle.int-open #ui{visibility:hidden}
+#battle .int .res-row{bottom:22px;justify-content:center}
+#battle .int .res-tbl{flex:0 1 680px;padding-top:12px}
+#battle .int-top{flex:none;display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-height:26px;padding:0 4px}
+#battle .int-top b{font-size:20px;font-weight:800;letter-spacing:.06em}
+#battle .int-top span{font-size:12px;font-weight:800;color:var(--sub)}
+#battle .int .res-th{height:30px;margin-bottom:4px}
+#battle .int .res-r.tall{flex:1.7;max-height:76px}
+#battle .int .res-r{max-height:44px}
+#battle .int-cc{position:relative;display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:100%}
+#battle .int .res-c.b .int-cc{align-items:flex-end;text-align:right}
+#battle .int .res-c.r .int-cc{align-items:flex-start}
+#battle .int-sub{position:relative;max-width:100%;font-size:10px;line-height:1.3;color:var(--sub);font-weight:700;white-space:normal}
+#battle .int-neu{flex:none;display:flex;align-items:center;gap:12px;margin-top:6px;padding:6px 12px;border-radius:12px;background:var(--card);font-size:12px;color:var(--sub);font-weight:700;min-height:32px}
+#battle .int-neu b{color:var(--text);font-size:14px;font-weight:800;white-space:nowrap}
+/* 长按「找未行动单位」键的蓄力环：按住 0.45 秒内金色环慢慢扩开，满了就打开情报 */
+#battle .gbtn.charge{animation:gcharge .45s linear forwards}
+@keyframes gcharge{0%{box-shadow:0 0 0 0 rgba(255,216,74,0)}100%{box-shadow:0 0 0 6px rgba(255,216,74,.95)}}
