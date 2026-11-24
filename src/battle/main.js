@@ -281,25 +281,26 @@ function nearBar(px, py) {   // 浮条周围留一圈 36px 的缓冲：想点「
 function handleTap(px, py) {
   if (world.busy() || econBusy) return;
   if (acting) {
-    if (targeting) { const c = selectAt(px, py), t = c && targeting.get(toEngine(c).join(',')); if (t) doAttack(t); else { exitTargeting(); infoUpdate(); mark(); } return; }
-    if (!nearBar(px, py)) undoMove();
+    if (targeting) { const c = selectAt(px, py), t = c && targeting.get(toEngine(c).join(',')); if (t) { sfx.play('ok', 'game'); doAttack(t); } else { sfx.play('back', 'game'); exitTargeting(); infoUpdate(); mark(); } return; }
+    if (!nearBar(px, py)) { sfx.play('back', 'game'); undoMove(); }
     return;
   }
   const c = selectAt(px, py);
   if (c) {
     const [ex, ey] = toEngine(c), eu = unitAt(game, ex, ey);
-    if (sel && reach.has(ex + ',' + ey)) { startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
-    clearSel();
-    if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) pickUnit(eu);
-    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) toast('已达到单位上限（' + game.config.maxUnits + '）'); else ars.open(c, game.turn === 0 ? 'blue' : 'red'); }   // 0.88：满员不开生产界面，直接提示
-  } else clearSel();
+    if (sel && reach.has(ex + ',' + ey)) { sfx.play('go', 'game'); startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
+    const wasSel = !!sel; clearSel();   // 0.95 棋盘点按的游戏音效：选单位 / 点格 / 取消选中 / 走 / 撤销 / 开兵工厂（和菜单的声音是两套，见 sfx.js）
+    if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) { pickUnit(eu); sfx.play('select', 'game'); }
+    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) { toast('已达到单位上限（' + game.config.maxUnits + '）'); sfx.play('deny', 'game'); } else { sfx.play('open', 'game'); ars.open(c, game.turn === 0 ? 'blue' : 'red'); } }
+    else sfx.play(wasSel ? 'back' : 'cell', 'game');   // 0.88：满员不开生产界面，直接提示
+  } else { if (sel) sfx.play('back', 'game'); clearSel(); }
   infoUpdate(); hud(); mark();
 }
 function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，但出完整版详细面板（自己的兵工厂也是看详情，不开生产界面）
   if (econBusy) return;
   const c = selectAt(px, py);
   infoUpdate(); hud(); mark();
-  if (c) { sfx.play('open'); detail.open(c); }
+  if (c) { sfx.play('open', 'game'); detail.open(c); }
 }
 
 // ── 详细信息面板（0.57）：点格子后，面板出现在光圈所在位置的【另一侧】（光圈在左半屏 → 面板在右下，反之亦然；中间 46%–54% 不切换，免得抖）。
@@ -458,7 +459,7 @@ let nextFocus = 0, cycleHome = null;   // cycleHome：开始轮流找单位那�
 let intelLp = 0, intelFired = false; const bNext = $('bNext');
 const canIntel = () => !world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen && game.winner === null;
 const intelEnd = () => { clearTimeout(intelLp); intelLp = 0; bNext.classList.remove('charge'); };
-bNext.addEventListener('pointerdown', () => { intelFired = false; intelEnd(); if (!canIntel()) return; bNext.classList.add('charge'); intelLp = setTimeout(() => { intelLp = 0; bNext.classList.remove('charge'); if (!alive || !canIntel()) return; intelFired = true; sfx.play('open'); intel.open(); }, 450); });
+bNext.addEventListener('pointerdown', () => { intelFired = false; intelEnd(); if (!canIntel()) return; bNext.classList.add('charge'); intelLp = setTimeout(() => { intelLp = 0; bNext.classList.remove('charge'); if (!alive || !canIntel()) return; intelFired = true; sfx.play('open', 'game'); intel.open(); }, 450); });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => bNext.addEventListener(t, intelEnd));
 bNext.oncontextmenu = e => e.preventDefault();
 $('bNext').onclick = () => {
