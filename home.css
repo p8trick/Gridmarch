@@ -9,7 +9,7 @@
   position:fixed;inset:0;overflow:hidden;visibility:hidden;animation:reveal 0s 3s forwards;
 
   /* 版式：全部集中在这里，改数字即可（不处理安全区，画面铺满） */
-  --pad-home:max(calc(var(--sw)*5),80px);   /* 0.94：主页左侧标题 + 菜单单独用 80px（iOS 27 顶部毛玻璃实测 56px 还有一点被糊到；战场各面板仍用下面的 --pad-l） */
+  --pad-home:max(calc(var(--sw)*5),56px);   /* 主页左侧标题 + 菜单的左边距：真横屏 56px（没有毛玻璃）；虚拟横屏（舞台转过 90°，home.js 给 #stage 加 .vrot）见下面改成 80px（iOS 27 顶部毛玻璃实测 56px 还有一点被糊到）。战场各面板仍用 --pad-l */
   --pad-l:max(calc(var(--sw)*5),56px);   /* 按钮倾斜后最靠边的角约退进 4px：56px 让可见边缘不小于 52px（岛下沿约 51px），灵动岛在这一侧时不遮按钮 */
   --pad-t:calc(var(--sh)*7);
   --pad-b:calc(var(--sh)*3);
@@ -21,6 +21,7 @@
   --bg-pos:55% 50%;                                          /* 背景焦点 */
 }
 #stage.ready{visibility:visible}
+#stage.vrot{--pad-home:max(calc(var(--sw)*5),80px)}
 /* 两个视图叠在舞台里：主页（#homeView）和战场（#battle，样式在 src/battle/battle.css）；切换只改 hidden，不跳转页面 */
 #homeView{position:absolute;inset:0}
 #homeView[hidden]{display:none}
@@ -45,7 +46,8 @@ body{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:flex-start;
   padding:var(--pad-t) 0 var(--pad-b) var(--pad-home);
 }
-.title{margin:0;height:var(--title-h);display:flex;align-items:center;animation:in-title .5s ease-out both}
+.title{margin:0 0 0 calc(var(--item-h) * -.0882);height:var(--title-h);   /* 0.96：标题左移半个斜切量，对齐菜单斜条「下角」：条高 × tan10° ÷ 2 ≈ 条高 × .0882（条高 44px 时约 3.9px） */
+  display:flex;align-items:center;animation:in-title .5s ease-out both}
 .title img{display:block;height:100%;width:auto}
 /* 英文标题 V1.3 比中文宽得多，按高度的 66% 缩，使两种语言视觉宽度接近 */
 .title[data-lang="en"] img{height:66%}

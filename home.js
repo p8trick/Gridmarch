@@ -155,6 +155,7 @@
   function layout(st) {
     var tall = st.w / st.h <= 16 / 9;                   // 舞台比例 ≤ 16:9（iPad）用专属背景，其余（iPhone）用宽图
     stageEl.classList.toggle('tall', tall);
+    stageEl.classList.toggle('vrot', st.rot !== 0);   // 0.96：舞台转过 90°（竖握 + 竖屏锁定的虚拟横屏）= 顶部毛玻璃在左边，主页左边距用 80px；真横屏没有毛玻璃，用 56px
     var src = tall ? BG_TALL : BG_WIDE;
     if (bgEl.getAttribute('src') !== src) bgEl.src = src;
   }
