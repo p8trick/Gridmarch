@@ -71,3 +71,11 @@
 ## 10. 文档与版本快照
 
 `docs/HANDOFF.md`（现状 + 决策 + 下一步，唯一必读）、`docs/HOME.md`（主页）、`docs/ART_PACKAGES.md`、`docs/CHANGELOG.md`（每个版本改了哪些文件）、`docs/manifests/*.json`（每个版本的文件指纹，`tools/pack.mjs` 靠它生成升级包）、`docs/archive/`（历史文档，不读）。
+
+## 11. 战场新增模块（0.91–1.00）
+
+- `src/rules/save.js`：`serializeGame / restoreGame / terrainSig`，纯 JSON，存档 = 种子 + 引擎状态（地形由种子重生，签名不符拒绝恢复）。`engine.js` 的 `g.stats[玩家]`（生产 / 损失 / 击毁 / 占领 / 收入 / 军费 / 解散）、`summaryOf(g)`（现存 / 据点 / 中立据点）、`disband(g,id)`、`g.winReason / winCell`。
+- `src/battle/result.js`（胜利结算：左胜利牌 + 右蓝红对照表；「看战场」收成底部横幅）、`intel.js`（战场情报，长按找单位键）：两者共用 `.res-*` 样式，数据都读 `summaryOf`。
+- `src/battle/sfx.js`：WebAudio 合成音效，**两个声音库** `ui`（菜单：主页 / 设置 / 暂停菜单 / 结算）和 `game`（战场内操作 + 战斗 + 移动 + 兵工厂）。`install()` 在 `document` 捕获 click 统一出声（`kindOf` 按元素归类，`MENU` 选择器决定哪些算菜单）；棋盘点按、战斗、移动由 `main.js` / `world.js` 回调直接 `sfx.play(名, 库, 延迟, 音高)`。`world.setOnFire / setOnMove` 是世界给战场的两个出声钩子。开关 `gridmarch.sfx`。
+- 存档键 `gridmarch.save`（单槽，带 `gid`）。`askConfirm(标题, 说明, 确定字, 回调)` 复用结束回合的确认框。
+

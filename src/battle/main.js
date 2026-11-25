@@ -44,8 +44,8 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="quality"><span class="txt"><span class="main">画质</span><span class="sub">GRAPHICS</span></span></button></li>
     <li><button class="item" data-act="sfx"><span class="txt"><span class="main">界面音效</span><span class="pst" id="pSfxSt">开</span></span></button></li>
     <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
-    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">SAVE &amp; HOME</span></span></button></li>
     <li><button class="item" data-act="cmd"><span class="txt"><span class="main">军务</span><span class="sub">COMMAND</span></span></button></li>
+    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">SAVE &amp; HOME</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pCmd" hidden>
     <li><button class="item" data-act="disband"><span class="txt"><span class="main">解散部队</span><span class="sub">DISBAND</span></span></button></li>
@@ -98,7 +98,7 @@ if (resume) {
   } else resumeBad = true;   // 地图和存档对不上（生成器改过）：开新局，见下面的提示
 }
 const gid = resumed ? resume.gid : Date.now().toString(36) + Math.random().toString(36).slice(2, 6);   // 这一局的身份：存档里带着它，投降 / 分出胜负 / 换图时只清掉「自己的」存档
-preset.layout.units = specs;
+preset.layout.units = specs; preset.resumed = resumed;   // 1.00：继续存档时放宽「单位不能站在建筑上」的开局布局校验
 world = buildWorld({preset}); world.setOnFire((name, delay) => sfx.play(name, 'game', delay));   // 0.97 开火声由世界在开火那一刻回调
 const PITCH = {light: 1.1, medium: 1, heavy: .85, art: .95};   // 0.98 移动声：重型更低沉
 world.setOnMove((ev, u) => { const k = u.spec.k, v = PITCH[u.spec.type] || (k === 'art' ? PITCH.art : 1);
@@ -423,6 +423,7 @@ const SAVE_KEY = 'gridmarch.save';   // 只有一个存档位：主页「继续�
 function saveGame() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify({v: 1, gid, seed, army, ver: window.GM_VERSION || '', savedAt: Date.now(), game: serializeGame(game), cam: {x: cam.target.x, z: cam.target.z, yaw: cam.yaw}, camMem})); return true; } catch (e) { return false; }
 }
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }   // 投降撤退：不管存档属于哪一局，一律清空（1.00）
 function dropSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && s.gid === gid) localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function saveAndHome() {   // 暂停菜单「返回主页」：先存档再退出（选中 / 走到一半的单位先退回原位）；分出胜负的局不存、顺手清掉自己的旧存档
   pause.hidden = true;
@@ -526,11 +527,21 @@ $('bNext').onclick = () => {
   if (intelFired) { intelFired = false; return; }
   if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || intel.isOpen || game.winner !== null) return;
   const list = game.units.filter(u => u.owner === game.turn && !u.acted).sort((a, b) => a.id - b.id); if (!list.length) return;
-  const u = list.find(q => q.id > nextFocus);
-  if (!u) { if (cycleHome) { cam.panTo(cycleHome.x, cycleHome.z); mark(); } nextFocus = 0; cycleHome = null; return; }   // 轮完一圈：回到开始前的镜头位置
-  const w = world.unitById(u.id); if (!w) return;
-  if (!cycleHome) cycleHome = {x: cam.target.x, z: cam.target.z};
-  nextFocus = u.id; lastJump = {x: w.x, z: w.z}; cam.panTo(w.x, w.z); mark();
+  // 1.00 重写：每按一下镜头都要动。镜头已经停在某个单位上（换边后镜头记忆常落在单位上）→ 这个单位不算、直接看下一个；
+  // 轮完一圈 → 回到开始前的位置；那个位置就是眼前（等于没动）时 → 回到己方基地视角（homeCam）。所以只剩一个闲置单位时，连按 = 单位 ↔ 开始前的位置（或基地）来回切
+  const here = {x: cam.target.x, z: cam.target.z}, AIM = .6, near = (p, q) => p && q && Math.hypot(p.x - q.x, p.z - q.z) < AIM;
+  const at = q => { const w = world.unitById(q.id); return w ? {x: w.x, z: w.z} : null; };
+  let u = list.find(q => q.id > nextFocus);
+  while (u && near(here, at(u))) { if (!cycleHome) cycleHome = here; nextFocus = u.id; u = list.find(q => q.id > nextFocus); }
+  if (!u) {   // 一圈轮完
+    const base = homeCam(game.turn), home = cycleHome && !near(cycleHome, here) ? cycleHome : (base && !near(base, here) ? base : null);
+    nextFocus = 0; cycleHome = null;
+    if (home) { cam.panTo(home.x, home.z); mark(); }
+    return;
+  }
+  const w = at(u); if (!w) return;
+  if (!cycleHome) cycleHome = here;
+  nextFocus = u.id; lastJump = w; cam.panTo(w.x, w.z); mark();
 };
 $('bRot').onclick = () => { orbitOn = false; if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 // 画质（0.66）：暂停菜单第二页；目前只有「帧率显示」开关（存 localStorage gridmarch.showFps）
@@ -575,7 +586,7 @@ pause.addEventListener('click', e => {
   else if (a === 'cmd') setPage('cmd');
   else if (a === 'back') setPage('main');
   else if (a === 'disband') { pause.hidden = true; startDisband(); }
-  else if (a === 'surrender') { pause.hidden = true; askConfirm('投降 / 撤退？', '不存档，这一局作废，直接回到主页', '投降撤退', () => { dropSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }); }
+  else if (a === 'surrender') { pause.hidden = true; askConfirm('投降 / 撤退？', '不存档，这一局作废，直接回到主页', '投降撤退', () => { clearSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }); }
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }

@@ -1,7 +1,7 @@
 # 存档 / 继续 / 解散 / 投降冒烟测试（0.99；同 smoke-result.py：需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
 # 暂停菜单 → 军务 → 解散部队 → 点己方单位 → 确认：单位少一个、stats.disbanded = 1
 # → 暂停菜单「返回主页」= 存档：回到主页，「继续」亮起 → 点「继续」：同一张图、引擎状态完全一致（含解散结果 / 行动状态）、世界里单位的行动灰度跟着恢复
-# → 暂停菜单 → 军务 → 投降撤退 → 确认：回主页、存档被清掉、「继续」重新变灰。出错直接 assert。
+# → 暂停菜单 → 军务 → 投降撤退 → 确认：回主页、存档被清掉（即使存档属于别的局）、「继续」重新变灰。有单位站在建筑上时存档 / 继续也要成功。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'])
@@ -32,6 +32,10 @@ with sync_playwright() as p:
     assert pg.evaluate('()=>window.battle.game.units.filter(o=>o.owner===0).length') == n0 - 1, '蓝军应少一个单位'
     assert pg.evaluate('()=>window.battle.game.stats[0].disbanded') == 1 and pg.evaluate('()=>window.battle.game.stats[0].lost') == 0, '记入 disbanded，不算战损'
     assert pg.is_hidden('#gmHint'), '解散后提示条应收起'
+    # 2b. 再让一个蓝军单位站到建筑上（1.00：以前这样存档后「继续」会报「站在建筑格上」）
+    pg.evaluate('''([a,b])=>{const B=window.battle,g=B.game;const u=g.units.find(o=>o.owner===0&&o.id!==a&&o.id!==b);let c=null;
+        g.terrain.forEach((row,y)=>row.forEach((t,x)=>{if(!c&&(t==="city_small"||t==="city_large")&&!g.units.some(o=>o.x===x&&o.y===y))c=[x,y]}));
+        u.x=c[0];u.y=c[1];B.world.placeAt(B.world.unitById(u.id),B.toWorld(c))}''', [u['id'], v['id']])
     # 3. 存档并回主页
     before = snap(); gid = pg.evaluate('()=>window.battle.gid')
     pause('home'); pg.wait_for_timeout(500)
@@ -43,7 +47,8 @@ with sync_playwright() as p:
     assert snap() == before, '继续后的引擎状态应与存档时完全一致'
     assert pg.evaluate('([id])=>!!window.battle.world.unitById(id).acted', [u['id']]), '已待命的步兵继续后应仍是灰的'
     assert pg.evaluate('([gid])=>window.battle.gid===gid', [gid]), '继续后仍是同一局（gid 相同）'
-    # 5. 投降撤退：不存档，存档被清掉
+    # 5. 投降撤退：不存档，存档被清掉（1.00：不管存档属于哪一局，一律清空——先塞一个别的局的存档进去）
+    pg.evaluate('()=>localStorage.setItem("gridmarch.save", JSON.stringify({gid:"other-game", seed:1, game:{}}))')
     pause('cmd', 'surrender'); assert not pg.is_hidden('#endm') and '投降' in pg.inner_text('#eTitle'), pg.inner_text('#eTitle')
     pg.click('#endm [data-act=ok]'); pg.wait_for_timeout(600)
     assert pg.is_visible('#homeView') and pg.evaluate('()=>localStorage.getItem("gridmarch.save")') is None, '投降后存档应被清掉'

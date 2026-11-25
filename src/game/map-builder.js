@@ -293,7 +293,7 @@ export function validateLayout(preset) {
     if (seen.has(k)) bad.push(`单位重叠 @ ${u.c}`); seen.add(k);
     if (!bridge.has(k) && (t === 'sea' || t === 'outside')) bad.push(`单位 ${u.name} 在 ${t} 上 @ ${u.c}`);
     if (!bridge.has(k) && t === 'river' && u.k !== 'inf') bad.push(`${u.name} 不是步兵却在河里 @ ${u.c}`);
-    if (L.buildings.some(b => key(...b.cell) === k)) bad.push(`单位 ${u.name} 站在建筑格上 @ ${u.c}`);
+    if (!preset.resumed && L.buildings.some(b => key(...b.cell) === k)) bad.push(`单位 ${u.name} 站在建筑格上 @ ${u.c}`);   // 1.00：开局布局不许站在建筑上；继续存档时单位可以在建筑上（占领 / 回血中），preset.resumed 跳过这条
     if (L.mountain.some(c => key(...c) === k) && u.k !== 'inf') bad.push(`${u.name} 不是步兵却在山上 @ ${u.c}`);
   }
   if (bad.length) throw Error('布局校验失败（' + preset.name + '）：\n  ' + bad.join('\n  '));
