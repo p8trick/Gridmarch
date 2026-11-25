@@ -7,6 +7,7 @@ const r1 = run('check-layout.mjs'); process.stdout.write(r1.stdout.replace(/.*to
 const r3 = run('check-coast-blob47.mjs'); process.stdout.write(r3.stdout); if (r3.status || /拒绝 [1-9]/.test(r3.stdout)) bad++;
 const r4 = run('check-rules.mjs'); process.stdout.write(r4.stdout + r4.stderr); if (r4.status) bad++;   // 规则引擎测试（0.33）
 const r5 = run('check-engine-map.mjs'); process.stdout.write(r5.stdout + r5.stderr); if (r5.status) bad++;   // 关卡 → 引擎适配器（0.40）
+const r6 = run('check-i18n.mjs'); process.stdout.write(r6.stdout + r6.stderr); if (r6.status) bad++;   // 语言包自检（1.02）
 const names = run('list-presets.mjs').stdout.split('\n').filter(l => /^[\w-]+$/.test(l));
 for (const k of names) {
   const r = run('check-water-seams.mjs', [k]); const rows = r.stdout.split('\n').filter(l => /边\d/.test(l));

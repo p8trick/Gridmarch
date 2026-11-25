@@ -1,0 +1,33 @@
+// 方寸战线 语言包（1.02 起）。键名按模块分组：unit.* 单位名、terrain.* 地形名、style.* 军队风格，之后的批次依次加 ui.* / battle.* / info.*。
+// 带数字的句子写成 {参数} 占位，不拼接（英文语序和中文不同）。英文缺哪条会自动退回中文并在控制台提示一次，所以可以边译边发。
+export default {
+  "unit.inf": "步兵",
+  "unit.mech": "反坦克兵",
+  "unit.recon": "快速侦察车",
+  "unit.apc": "装甲运输车",
+  "unit.tank": "轻坦",
+  "unit.mdtank": "中坦",
+  "unit.neotank": "重坦",
+  "unit.arty": "自行火炮",
+  "unit.rocket": "火箭炮",
+  "unit.aa": "防空炮",
+  "unit.missile": "防空导弹",
+  "terrain.plain": "平原",
+  "terrain.forest": "树林",
+  "terrain.mountain": "山地",
+  "terrain.river": "河流",
+  "terrain.sea": "海洋",
+  "terrain.shoal": "浅滩",
+  "terrain.road": "公路",
+  "terrain.bridge": "桥梁",
+  "terrain.hq": "总部",
+  "terrain.city_large": "大城市",
+  "terrain.city_small": "小城市",
+  "terrain.factory": "兵工厂",
+  "terrain.airport": "机场",
+  "terrain.port": "船坞",
+  "terrain.cliff": "断崖",
+  "terrain.desert": "沙漠",
+  "terrain.swamp": "沼泽",
+  "style.balanced": "均衡型"
+};

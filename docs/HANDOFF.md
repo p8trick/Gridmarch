@@ -81,3 +81,9 @@ docs/  本文 ARCHITECTURE ART_PACKAGES HOME CHANGELOG manifests/ archive/      
 8. iOS：动画只动 `transform / opacity`；带 `display` 的元素 `hidden` 会失效，补 `[hidden]{display:none}`；WebAudio 要用户手势唤醒；拖镜头走 `cam.pan`。
 9. 实例批只增不减：新增单位生命周期代码要想到回收。测试里改状态走引擎同一条路径；新功能顺手挂 `window.battle` 钩子；页面 id 先查重。
 10. 先查仓库再说「有 / 没有某个资产」；先读现有代码再设计；触屏上别做「点目标 → 弹预估 → 再确认」。
+
+## 语言包约定（1.02 起）
+- 所有玩家可见的文字走 `t('模块.键', {参数})`，词条放 `src/i18n/zh.js` + `en.js`（键必须两边都有，`npm test` 检查）。带数字的句子用 `{参数}` 占位，不拼接。
+- 规则 / 存档层只存 id，名字由 getter 或 `t()` 在显示时取（见 `data.js` 的 `localize`）。新增单位 / 地形 / 风格时，记得同时加 `unit.*` / `terrain.*` / `style.*` 词条。
+- 主页（classic 脚本）和 `blur-tip.js` 有自己的小字典，暂未并入；迁移进度看 `check-i18n` 输出的「还剩约 N 处写死的中文」。
+

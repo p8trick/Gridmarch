@@ -4,6 +4,8 @@
 // buildable:false = 暂不可生产（防空导弹：没有空军 / 海军时它对陆军一个目标也打不了）。
 
 // ── 配置开关（和 HANDOFF 里"后勤做成可开关"一致）──
+import {t} from '../i18n/index.js';
+
 export const CONFIG = {
   ammo: true,          // 弹药：主武器耗弹，打光后只能用副武器（机枪）
   fuel: false,         // 燃料：0.33 先关，移动只受移动力限制
@@ -78,6 +80,11 @@ export const TERRAINS = {
 // ── 伤害表：基础伤害 %（攻击方行 → 目标列），数组顺序 = TARGET_ORDER；null = 打不了 ──
 // 来源：高战2 伤害表（Wars World News）。主武器(P)耗弹；副武器(S)是机枪不耗弹。
 // 没有空军 / 海军时：防空导弹对陆军一律打不了（它是纯对空单位）。
+// 1.02：单位 / 地形 / 军队风格的 name 改成「随当前语言取词」的 getter（词条在 src/i18n/zh.js、en.js 的 unit.* / terrain.* / style.*）。
+// 规则、存档里一直只用 id，不存名字；界面里原有的 .name 写法不用动。
+const localize = (table, group) => { for (const id of Object.keys(table)) Object.defineProperty(table[id], 'name', {get: () => t(group + '.' + id), enumerable: true, configurable: true}); };
+localize(STYLES, 'style'); localize(UNITS, 'unit'); localize(TERRAINS, 'terrain');
+
 export const TARGET_ORDER = ['inf', 'mech', 'recon', 'tank', 'mdtank', 'neotank', 'apc', 'arty', 'rocket', 'aa', 'missile'];
 const row = a => Object.fromEntries(TARGET_ORDER.map((t, i) => [t, a[i]]));
 export const DMG_PRIMARY = {
