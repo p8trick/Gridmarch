@@ -527,18 +527,13 @@ $('bNext').onclick = () => {
   if (intelFired) { intelFired = false; return; }
   if (world.busy() || econBusy || !$('pause').hidden || ars.isOpen || detail.isOpen || intel.isOpen || game.winner !== null) return;
   const list = game.units.filter(u => u.owner === game.turn && !u.acted).sort((a, b) => a.id - b.id); if (!list.length) return;
-  // 1.00 重写：每按一下镜头都要动。镜头已经停在某个单位上（换边后镜头记忆常落在单位上）→ 这个单位不算、直接看下一个；
-  // 轮完一圈 → 回到开始前的位置；那个位置就是眼前（等于没动）时 → 回到己方基地视角（homeCam）。所以只剩一个闲置单位时，连按 = 单位 ↔ 开始前的位置（或基地）来回切
+  // 1.01 重写：镜头只在闲置单位之间轮换，不再有「回到开始前位置 / 基地视角」这一步。
+  // 多个闲置单位：每按一下去下一个（轮完回到第一个）；镜头已经停在某个单位身上时这一下直接看下一个。只有一个：每按一下都对准它。
+  // cycleHome 只留给「结束回合时的镜头记忆」用（见 endTurn），按键本身不再回去
   const here = {x: cam.target.x, z: cam.target.z}, AIM = .6, near = (p, q) => p && q && Math.hypot(p.x - q.x, p.z - q.z) < AIM;
   const at = q => { const w = world.unitById(q.id); return w ? {x: w.x, z: w.z} : null; };
-  let u = list.find(q => q.id > nextFocus);
-  while (u && near(here, at(u))) { if (!cycleHome) cycleHome = here; nextFocus = u.id; u = list.find(q => q.id > nextFocus); }
-  if (!u) {   // 一圈轮完
-    const base = homeCam(game.turn), home = cycleHome && !near(cycleHome, here) ? cycleHome : (base && !near(base, here) ? base : null);
-    nextFocus = 0; cycleHome = null;
-    if (home) { cam.panTo(home.x, home.z); mark(); }
-    return;
-  }
+  let u = list.find(q => q.id > nextFocus) || list[0];
+  for (let i = 0; i < list.length && list.length > 1 && u && near(here, at(u)); i++) { nextFocus = u.id; u = list.find(q => q.id > nextFocus) || list[0]; }
   const w = at(u); if (!w) return;
   if (!cycleHome) cycleHome = here;
   nextFocus = u.id; lastJump = w; cam.panTo(w.x, w.z); mark();

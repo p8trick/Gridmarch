@@ -208,6 +208,8 @@
 
   /* ===== 启动 ===== */
   $('#ver').textContent = 'v' + VER;   // 右下角版本号
+  // 1.01：点版本号 = 去「毛玻璃提示页」（blur-tip.html）：iOS 27 顶部毛玻璃用系统返回手势回到主页可暂时消除
+  $('#ver').onclick = function () { location.href = 'blur-tip.html?v=' + VER; };
   build();
   applyLang();
   for (var i = 0; i < items.length; i++) { if (!isDisabled(i)) { select(i); break; } }

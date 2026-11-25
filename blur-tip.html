@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>方寸战线 · Gridmarch</title>
+<style>
+html,body{margin:0;width:100vw;height:100vh;background:#000;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font:15px -apple-system,system-ui,sans-serif;color:#fff}
+#stage{background:#000}
+#box{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--sh)*3.4);padding:0 80px;text-align:center}
+h1{margin:0;font-size:calc(var(--sh)*6.2);letter-spacing:.06em;font-weight:700}
+p{margin:0;max-width:calc(var(--sw)*62);line-height:1.7;font-size:calc(var(--sh)*4.1);color:rgba(255,255,255,.86)}
+p b{color:#ffc857;font-weight:700}
+#back{min-width:calc(var(--sh)*34);height:calc(var(--sh)*11);padding:0 26px;border-radius:14px;border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.08);color:#fff;font:700 calc(var(--sh)*4.6)/1 -apple-system,system-ui,sans-serif;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#back:active{background:rgba(255,255,255,.22)}
+/* 手势起点示意：系统「返回」手势从屏幕物理左边缘起手向内划；虚拟横屏下这条边在舞台的下边（rot 90）/ 上边（rot -90），真横屏在左边 */
+.edge{position:absolute;display:none;pointer-events:none}
+.edge i{position:absolute;background:#ffc857;box-shadow:0 0 12px 2px rgba(255,200,87,.7)}
+.edge svg{position:absolute;overflow:visible}
+.edge em{position:absolute;font-style:normal;font-size:calc(var(--sh)*3.6);color:#ffc857;white-space:nowrap;font-weight:700}
+.rb .eb,.rt .et,.rl .el{display:block}
+.rb #box{padding-bottom:96px}
+.rt #box{padding-top:96px}
+.rl #box{padding-left:130px}
+@keyframes sw-up{0%{transform:translateY(0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateY(-34px);opacity:0}}
+@keyframes sw-dn{0%{transform:translateY(0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateY(34px);opacity:0}}
+@keyframes sw-rt{0%{transform:translateX(0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateX(34px);opacity:0}}
+/* 下边（rot 90）：亮条贴舞台下边，手指点在亮条中间向上划 */
+.eb{left:0;right:0;bottom:0;height:70px}
+.eb i{left:0;right:0;bottom:0;height:5px}
+.eb svg{left:50%;bottom:10px;width:30px;height:46px;margin-left:-15px;animation:sw-up 1.5s ease-in-out infinite}
+.eb em{left:50%;bottom:24px;margin-left:34px}
+/* 上边（rot -90） */
+.et{left:0;right:0;top:0;height:70px}
+.et i{left:0;right:0;top:0;height:5px}
+.et svg{left:50%;top:10px;width:30px;height:46px;margin-left:-15px;animation:sw-dn 1.5s ease-in-out infinite}
+.et em{left:50%;top:24px;margin-left:34px}
+/* 左边（真横屏） */
+.el{top:0;bottom:0;left:0;width:90px}
+.el i{top:0;bottom:0;left:0;width:5px}
+.el svg{top:50%;left:10px;width:46px;height:30px;margin-top:-15px;animation:sw-rt 1.5s ease-in-out infinite}
+.el em{left:14px;top:50%;margin-top:-62px;width:84px;white-space:normal;line-height:1.3}
+</style>
+<!--GM-BOOT entry="src/battle/blur-tip.js" css=""-->
+<script>
+/* 由 tools/stamp.mjs 生成，请勿手改。版本号只在 index.html 里：主页带 ?v=版本 跳进来；直接打开没有 v 时用时间戳（永远拿最新）。 */
+(function () {
+  var v = new URLSearchParams(location.search).get('v') || ('t' + Date.now()), B = "./", im = {};
+  var FILES = ["app/main.js","app/ui-style.js","art/gray.js","art/palette.js","art/terrain/bridges/bridge-performance.js","art/terrain/bridges/bridges.js","art/terrain/building-performance.js","art/terrain/buildings-index.js","art/terrain/buildings-performance.js","art/terrain/desert-swamp/expansion-geometry.js","art/terrain/desert-swamp/expansion-performance.js","art/terrain/desert-swamp/expansion-terrain.js","art/terrain/dockyard-terrain.js","art/terrain/forest/forest-original.js","art/terrain/forest/forest-performance.js","art/terrain/mountain/mountain-rockmass.js","art/terrain/mountain/terrain-mountain-a2.js","art/terrain/mountain/terrain-mountain-performance.js","art/terrain/terrain-batch1.js","art/terrain/terrain-buildings.js","art/terrain/terrain-nature.js","art/terrain/terrain-transport.js","art/units/artillery-v2_0.js","art/units/infantry/anti-tank-batch.js","art/units/infantry/anti-tank-fire.js","art/units/infantry/anti-tank-performance.js","art/units/infantry/anti-tank-soldier.js","art/units/infantry/boot-profile.js","art/units/infantry/face-profile-trial.js","art/units/infantry/infantry-batch.js","art/units/infantry/infantry-factions.js","art/units/infantry/infantry-fire.js","art/units/infantry/infantry-performance.js","art/units/infantry/soldier-performance.js","art/units/infantry/soldier-rig.js","art/units/infantry/soldier-v5_2.js","art/units/tank-heavy/heavy-tank-animation.js","art/units/tank-heavy/shared/tank-fire.js","art/units/tank-heavy/shared/tracked-motion.js","art/units/tank-heavy/tank-performance.js","art/units/tank-heavy/tank.js","art/units/tank-heavy/track-path.js","art/units/tank-heavy/vehicle-animation.js","art/units/tank-light/animation/instance-moving-parts.js","art/units/tank-light/animation/shared/tank-fire.js","art/units/tank-light/animation/shared/tracked-motion.js","art/units/tank-light/animation/vehicle-animation.js","art/units/tank-light/light-track-v1_4.js","art/units/tank-light/model-core.js","art/units/tank-light/tank.js","art/units/tank-medium/tank-batching.js","art/units/tank-medium/tank-fire.js","art/units/tank-medium/tank-motion.js","art/units/tank-medium/tank-performance.js","art/units/tank-medium/tank.js","art/units/tank-medium/track-path.js","art/units/track-path.js","art/water/cliff-coast-c1.js","art/water/cliff-coast-rules.js","art/water/cliff-outline-warp.js","art/water/coast-final.js","art/water/coast-performance.js","art/water/coast-topology.js","art/water/coast47-component.js","art/water/coast47-mask.js","art/water/coast47-performance.js","art/water/coast47-plan.js","art/water/river-mouth-mt2.js","art/water/river-mouth.js","art/water/river-performance.js","art/water/river-r61-art.js","art/water/river-r61-footprint.js","art/water/sea-board-components.js","art/water/sea-performance.js","art/water/sea-study.js","art/water/shoal-blueprint-a7.js","art/water/shoal-rules.js","battle/arsenal.js","battle/blur-tip.js","battle/camera.js","battle/cursor.js","battle/detail.js","battle/explain.js","battle/intel.js","battle/loading.js","battle/main.js","battle/orientation-test.js","battle/result.js","battle/sfx.js","battle/showcase.js","battle/stage.js","battle/tile-block.js","battle/unit-info.js","battle/unit-models.js","game/engine-map.js","game/levels/index.js","game/levels/level1.js","game/map-builder.js","game/units/infantry-actors.js","game/units/tank-family.js","game/world.js","rules/combat.js","rules/data.js","rules/engine.js","rules/save.js","vendor/three.module.js"], BARE = {"three":"vendor/three.module.js","palette":"art/palette.js"};
+  function u(f) { return B + 'src/' + f + (f.indexOf('vendor/') === 0 ? '' : '?v=' + v); }   // vendor（three.js）不随版本号变，永远走缓存
+  FILES.forEach(function (f) { im[B + 'src/' + f] = u(f); });
+  for (var k in BARE) im[k] = u(BARE[k]);
+  window.GM_VERSION = v;
+  document.write('<script type="importmap">' + JSON.stringify({imports: im}) + '<\/script>');
+
+  document.write('<script type="module" src="' + u("battle/blur-tip.js") + '"><\/script>');
+})();
+</script>
+<!--/GM-BOOT-->
+</head><body>
+<div id="stage">
+  <div id="box">
+    <h1 id="t"></h1>
+    <p id="p1"></p>
+    <p id="p2"></p>
+    <button id="back" type="button"></button>
+  </div>
+  <div class="edge eb"><i></i><svg viewBox="0 0 30 46"><circle cx="15" cy="38" r="7" fill="#ffc857"/><path d="M15 28V6M5 15L15 5l10 10" fill="none" stroke="#ffc857" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><em class="lab"></em></div>
+  <div class="edge et"><i></i><svg viewBox="0 0 30 46"><circle cx="15" cy="8" r="7" fill="#ffc857"/><path d="M15 18v22M5 31l10 10 10-10" fill="none" stroke="#ffc857" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><em class="lab"></em></div>
+  <div class="edge el"><i></i><svg viewBox="0 0 46 30"><circle cx="8" cy="15" r="7" fill="#ffc857"/><path d="M18 15h22M31 5l10 10-10 10" fill="none" stroke="#ffc857" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><em class="lab"></em></div>
+</div>
+</body></html>
