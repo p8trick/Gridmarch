@@ -23,6 +23,6 @@ with sync_playwright() as p:
     pg.click('.item[data-id=single]'); sample('进入战斗')
     pg.wait_for_function('window.battle && window.battle.world', timeout=30000); pg.wait_for_timeout(800)
     assert pg.evaluate('()=>!document.querySelector("#loading")'), '进度条没撤掉'
-    pg.click('#bMenu'); pg.wait_for_timeout(400); pg.click('[data-act=reroll]'); sample('换图')
+    pg.click('#bMenu'); pg.wait_for_timeout(400); pg.click('#pause [data-act=cmd]'); pg.wait_for_timeout(200); pg.click('#pause [data-act=reroll]'); pg.wait_for_timeout(200); pg.click('#endm [data-act=ok]'); sample('换图')   # 0.99：换图挪进「军务」页，并加了确认
     pg.wait_for_function('window.battle && window.battle.world', timeout=30000)
     print('加载进度条冒烟测试通过', 'errors:', errs[:5]); b.close()

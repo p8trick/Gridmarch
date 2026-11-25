@@ -7,7 +7,7 @@ import {strike, dispHp} from './combat.js';
 const key = (x, y) => x + ',' + y;
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 // 0.91 统计表（胜利结算 / 战场情报共用）：每方累计 built 生产数 · lost 损失数 · killed 击毁数 · captured 占领数 · income 累计收入 · spent 累计军费（造兵 + 修理）
-const newStats = () => ({built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0});
+const newStats = () => ({built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0, disbanded: 0});   // 0.99 disbanded = 自己解散的部队数（不算战损）
 
 // terrain：二维数组 terrain[y][x]，值是 TERRAINS 里的 id；
 // units：[{type, owner, x, y, hp?, ammo?, fuel?}]；players：[{style}]（默认两个均衡型军队）
@@ -274,6 +274,15 @@ export function summaryOf(g) {
     if (o === undefined) { neutral++; neutralByType[id] = (neutralByType[id] || 0) + 1; } else { sides[o].props++; sides[o].byType[id] = (sides[o].byType[id] || 0) + 1; }
   }
   return {sides, neutral, neutralByType, day: g.day, winner: g.winner, reason: g.winReason, winCell: g.winCell};
+}
+
+// 解散部队（0.99）：当前行动方解散自己的一个单位——单位消失，不返还资金，不算战损（stats.disbanded++），主要用来腾出单位上限。
+// 解散最后一个单位会触发歼灭判定（和被打光一样）。返回 {ok, unit}
+export function disband(g, id) {
+  const u = g.units.find(q => q.id === id);
+  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false};
+  g.units = g.units.filter(q => q !== u); g.stats[u.owner].disbanded++;
+  checkWinner(g); return {ok: true, unit: u};
 }
 
 export {dispHp};

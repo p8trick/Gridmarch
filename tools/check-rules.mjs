@@ -1,8 +1,9 @@
 // 规则引擎自动测试（0.33）：伤害公式、移动消耗、攻击 / 反击 / 间接火力、弹药、沼泽、回合与胜负、军队风格。
+import {serializeGame, restoreGame} from '../src/rules/save.js';
 import assert from 'assert';
 import {UNIT_IDS, UNITS, TERRAINS, TARGET_ORDER, DMG_PRIMARY, DMG_SECONDARY} from '../src/rules/data.js';
 import {calcDamage, pickWeapon} from '../src/rules/combat.js';
-import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf, join, joinTargetOf, canJoinInto, summaryOf} from '../src/rules/engine.js';
+import {createGame, addUnit, capture, canCapture, reachable, pathOf, undoMove, canProduce, forecast, move, attack, targetsOf, endTurn, wait, unitAt, produce, incomeOf, join, joinTargetOf, canJoinInto, summaryOf, disband} from '../src/rules/engine.js';
 
 let n = 0; const t = (name, f) => { f(); n++; console.log('PASS', name); };
 const map = (w, h, fill = 'plain') => Array.from({length: h}, () => Array(w).fill(fill));
@@ -308,7 +309,7 @@ t('合流：满血目标 / 不同类型 / 敌军 / config.join=false 都不行�
 
 t('统计表（0.91）：击毁 / 损失 / 反击击毁 / 生产 / 收入 / 军费 / 占领；预估不改统计；歼灭有 winReason', () => {
   const g = createGame({terrain: map(5, 1), units: [{type: 'tank', owner: 0, x: 1, y: 0, hp: 100}, {type: 'inf', owner: 1, x: 2, y: 0, hp: 20}, {type: 'inf', owner: 1, x: 4, y: 0}]});
-  forecast(g, 1, 2); assert.deepEqual(g.stats[0], {built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0});
+  forecast(g, 1, 2); assert.deepEqual(g.stats[0], {built: 0, lost: 0, killed: 0, captured: 0, income: 0, spent: 0, disbanded: 0});
   attack(g, 1, 2);
   assert.equal(g.stats[0].killed, 1); assert.equal(g.stats[1].lost, 1); assert.equal(g.winner, null);
   const s = summaryOf(g); assert.equal(s.sides[0].units, 1); assert.equal(s.sides[1].units, 1); assert.equal(s.neutral, 0);
@@ -331,6 +332,25 @@ t('统计表（0.91）：生产记 built / spent，收入累计，占领总部�
 t('歼灭获胜（0.92）：winReason wipe，winCell = 打出最后一击的我方单位；被反击全歼则是守方', () => {
   const g = createGame({terrain: map(4, 1), units: [{type: 'tank', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 2, y: 0, hp: 10}]});
   attack(g, 1, 2); assert.equal(g.winner, 0); assert.equal(g.winReason, 'wipe'); assert.deepEqual(g.winCell, [1, 0]);
+});
+
+t('解散部队（0.99）：只能解散当前行动方自己的单位；不返还资金、不算战损；解散最后一个单位 = 被歼灭', () => {
+  const g = createGame({terrain: map(5, 1), funds: [0, 0], units: [{type: 'inf', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 0, x: 1, y: 0}, {type: 'inf', owner: 1, x: 4, y: 0}]});
+  assert.equal(disband(g, 3).ok, false);   // 红方的单位，不是当前行动方（蓝）的
+  assert.equal(disband(g, 99).ok, false);
+  const f0 = g.funds[0]; assert(disband(g, 1).ok); assert.equal(g.units.length, 2); assert.equal(g.stats[0].disbanded, 1); assert.equal(g.stats[0].lost, 0); assert.equal(g.funds[0], f0); assert.equal(g.winner, null);
+  assert(disband(g, 2).ok); assert.equal(g.winner, 1); assert.equal(g.winReason, 'wipe');
+  assert.equal(disband(g, 3).ok, false);   // 已经分出胜负
+});
+
+t('存档（0.99）：serialize → JSON → restore 往返后状态一致；地形签名不符 / 版本不符拒绝恢复且不动 game', () => {
+  const mk = () => createGame({terrain: map(6, 2), owners: {}, funds: [3000, 500], units: [{type: 'inf', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 3, y: 0, hp: 60}, {type: 'inf', owner: 1, x: 5, y: 1}]});
+  const a = mk(); move(a, 1, 1, 0); endTurn(a); attack(a, 2, 1) || 0; endTurn(a);
+  const data = JSON.parse(JSON.stringify(serializeGame(a)));
+  const b = mk(); assert(restoreGame(b, data));
+  assert.equal(JSON.stringify(serializeGame(b)), JSON.stringify(serializeGame(a))); assert(b.built instanceof Set);   // 用 JSON 比：原对象里值为 undefined 的键（如 origin）JSON 后不在
+  const c = createGame({terrain: map(7, 2), units: []}); const before = JSON.stringify(serializeGame(c)); assert.equal(restoreGame(c, data), false); assert.equal(JSON.stringify(serializeGame(c)), before);
+  assert.equal(restoreGame(mk(), {...data, v: 99}), false);
 });
 
 console.log(`✓ 规则测试 ${n} 项全部通过`);

@@ -346,3 +346,7 @@
 /* 长按「找未行动单位」键的蓄力环：按住 0.45 秒内金色环慢慢扩开，满了就打开情报 */
 #battle .gbtn.charge{animation:gcharge .45s linear forwards}
 @keyframes gcharge{0%{box-shadow:0 0 0 0 rgba(255,216,74,0)}100%{box-shadow:0 0 0 6px rgba(255,216,74,.95)}}
+
+/* 解散部队提示条（0.99）：从暂停菜单「军务 → 解散部队」进来后一直挂着，点空白处取消 */
+#battle #gmHint{position:absolute;left:50%;top:72px;transform:translateX(-50%);z-index:9;pointer-events:none;padding:8px 18px;border-radius:12px;background:rgba(18,32,52,.92);border:2px solid #ffcf3f;color:#fff;font:800 15px/1.2 var(--font);letter-spacing:.04em;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+#battle #gmHint[hidden]{display:none}

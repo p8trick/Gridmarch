@@ -11,7 +11,7 @@
   var SFX_KEY = 'gridmarch.sfx';              // 界面音效开关（src/battle/sfx.js 读同一个键；'0' = 关）
 
   var MENU = [
-    { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { toast: 'soon' } },
+    { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { resume: true } },
     { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { battle: true } },
     { id: 'multi',    zh: '多人对战', en: 'Multiplayer',  sub: 'MULTIPLAYER',   go: { toast: 'soon' } },
     { id: 'editor',   zh: '编辑器',   en: 'Editor',       sub: 'EDITOR',        go: { toast: 'soon' } },
@@ -81,6 +81,7 @@
     if (isDisabled(i)) return;
     var g = MENU[i].go;
     if (g.battle) { setTimeout(function () { enterBattle(); }, 120); }
+    else if (g.resume) { setTimeout(function () { enterBattle(null, true); }, 120); }   // 0.99 继续：读存档回到战场
     else if (g.settings) { openSettings(); }
     else if (g.toast) { toast(g.toast); }
   }
@@ -170,8 +171,18 @@
   /* ===== 视图切换：主页 ↔ 战场都在这一个文档里（不跳转页面，系统边缘滑动手势就没有历史可翻）=====
      战场是 src/battle/main.js 里的模块，第一次进入时才载入；退出时它自己释放显存。 */
   var homeEl = $('#homeView'), battleEl = $('#battle'), battleOn = false;
-  function enterBattle(seed) {
+  /* 存档（0.99）：战场里暂停菜单「返回主页」写 gridmarch.save（src/battle/main.js saveGame）；「继续」读它，没有存档时灰着 */
+  function refreshSave() {
+    hasSave = !!load(SAVE_KEY);
+    for (var i = 0; i < items.length; i++) if (MENU[i].needsSave) { if (hasSave) items[i].removeAttribute('aria-disabled'); else items[i].setAttribute('aria-disabled', 'true'); }
+  }
+  function enterBattle(seed, resume) {
     if (battleOn) return;
+    var save = null;
+    if (resume) {
+      try { save = JSON.parse(load(SAVE_KEY)); } catch (e) { save = null; }
+      if (!save || !save.game) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} refreshSave(); toast(lang === 'en' ? 'Save data is damaged' : '存档已损坏，无法继续'); return; }
+    }
     battleOn = true;
     homeEl.hidden = true; battleEl.hidden = false;
     battleEl.innerHTML = '';
@@ -183,13 +194,13 @@
       return L.preload(urls, function (p) { ld.to(4 + p * 36, 150); }).then(function () { return ld; });
     }).catch(function () { return null; });   // 进度条本身出问题：不影响进入战场，mountBattle 会自己建一个
     ldP.then(function (ld) { return Promise.all([stageP, import('./src/battle/main.js')]).then(function (r) { return [r[0], r[1], ld]; }); }).then(function (r) {
-      return r[1].mountBattle(battleEl, r[0], { seed: seed, army: PARAMS.has('units'), debug: PARAMS.has('debug'), onExit: exitBattle, loading: r[2] });
+      return r[1].mountBattle(battleEl, r[0], { seed: seed, army: PARAMS.has('units'), resume: save, debug: PARAMS.has('debug'), onExit: exitBattle, loading: r[2] });
     }).catch(function (e) {
       exitBattle(); toast('载入战场失败：' + (e && e.message || e));
     });
   }
   function exitBattle() {
-    battleOn = false;
+    battleOn = false; refreshSave();
     battleEl.hidden = true; battleEl.innerHTML = '';
     homeEl.hidden = false;
     if (sel >= 0) items[sel].focus({ preventScroll: true });

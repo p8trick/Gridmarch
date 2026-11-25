@@ -10,9 +10,10 @@ import {createResult} from './result.js';
 import {createIntel} from './intel.js';
 import {sfx, weaponSound, hitSound, deathSound} from './sfx.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
-import {createGameFromPreset, specOfUnit} from '../game/engine-map.js';
+import {createGameFromPreset, specOfUnit, TEAM_OF} from '../game/engine-map.js';
+import {serializeGame, restoreGame} from '../rules/save.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
-import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, canCapture, attack as engineAttack, targetsOf, forecast, atUnitCap, join as engineJoin, joinTargetOf} from '../rules/engine.js';
+import {dispHp, unitAt, produce as engineProduce, canProduce, endTurn as engineEndTurn, reachable as engineReach, pathOf, move as engineMove, undoMove as engineUndo, wait as engineWait, capture as engineCapture, disband as engineDisband, canCapture, attack as engineAttack, targetsOf, forecast, atUnitCap, join as engineJoin, joinTargetOf} from '../rules/engine.js';
 
 // 战场（正式游戏的页面层）：关卡 → 世界 → 相机 → 触控。规则引擎接入前，这里只负责把战场"摆出来、看得清、转得动"。
 // 0.30 起战场不再是独立 html，而是主页（index.html）里的一个"视图"：mountBattle 把战场挂进 host、unmountBattle 拆掉并释放显存。
@@ -43,8 +44,16 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="quality"><span class="txt"><span class="main">画质</span><span class="sub">GRAPHICS</span></span></button></li>
     <li><button class="item" data-act="sfx"><span class="txt"><span class="main">界面音效</span><span class="pst" id="pSfxSt">开</span></span></button></li>
     <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
-    <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图</span><span class="sub">NEW MAP</span></span></button></li>
-    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">HOME</span></span></button></li>
+    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">SAVE &amp; HOME</span></span></button></li>
+    <li><button class="item" data-act="cmd"><span class="txt"><span class="main">军务</span><span class="sub">COMMAND</span></span></button></li>
+  </ul>
+  <ul class="pmenu" id="pCmd" hidden>
+    <li><button class="item" data-act="disband"><span class="txt"><span class="main">解散部队</span><span class="sub">DISBAND</span></span></button></li>
+    <li class="pnote">选一个己方单位解散：单位消失，不返还资金，不算战损。用来腾出单位上限</li>
+    <li><button class="item" data-act="surrender"><span class="txt"><span class="main">投降撤退</span><span class="sub">SURRENDER</span></span></button></li>
+    <li class="pnote">不存档，直接回主页（这一局作废）</li>
+    <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图重开</span><span class="sub">NEW MAP</span></span></button></li>
+    <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pQual" hidden>
     <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
@@ -75,9 +84,20 @@ ld.attach(host).label('正在生成战场…');
   if (!alive) return handle;
 
 // ── 关卡：opts.seed 固定地图（网址 index.html?go=battle&seed=N）；不给就每次随机一个种子（左下角会显示，想复现就记下来）──
-const seed = Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 999999)));
-const preset = makeLevel1(seed, {army: opts.army ? TEST_ARMY : undefined});   // 0.86：默认没有起始单位；网址加 &units=1 给每方 4 个（冒烟测试用）
+const resume = opts.resume || null;   // 0.99 存档：主页「继续」传进来的存档对象（种子 + 引擎状态 + 镜头）；地形由种子重新生成，再把引擎状态写回去
+const seed = resume ? Math.max(1, parseInt(resume.seed) || 1) : Math.max(1, parseInt(opts.seed) || (1 + Math.floor(Math.random() * 999999)));
+const army = resume ? !!resume.army : !!opts.army;
+const preset = makeLevel1(seed, {army: army ? TEST_ARMY : undefined});   // 0.86：默认没有起始单位；网址加 &units=1 给每方 4 个（冒烟测试用）
 const {game, specs, toEngine, toWorld} = createGameFromPreset(preset);   // 0.40：关卡 → 规则引擎（建筑归属、开局资金、起始部队）；目前只显示，还不能操作
+let resumed = false, resumeBad = false;
+if (resume) {
+  if (restoreGame(game, resume.game)) {   // 引擎状态写回；渲染层的单位规格和建筑归属按它重排（单位位置 / 血量 / 行动状态在后面 syncActed 里补）
+    resumed = true; specs.length = 0;
+    for (const u of game.units) { const s = specOfUnit(u, toWorld); if (s) specs.push(s); }
+    for (const b of preset.layout.buildings) { const o = game.owners[toEngine(b.cell).join(',')]; b.owner = o === undefined ? 'neutral' : TEAM_OF[o]; }
+  } else resumeBad = true;   // 地图和存档对不上（生成器改过）：开新局，见下面的提示
+}
+const gid = resumed ? resume.gid : Date.now().toString(36) + Math.random().toString(36).slice(2, 6);   // 这一局的身份：存档里带着它，投降 / 分出胜负 / 换图时只清掉「自己的」存档
 preset.layout.units = specs;
 world = buildWorld({preset}); world.setOnFire((name, delay) => sfx.play(name, 'game', delay));   // 0.97 开火声由世界在开火那一刻回调
 const PITCH = {light: 1.1, medium: 1, heavy: .85, art: .95};   // 0.98 移动声：重型更低沉
@@ -114,8 +134,8 @@ const produceHere = (type, cell) => {
 };
 const ars = createArsenal({THREE, renderer, host, stage, game, onProduce: produceHere});   // 兵工厂界面（0.42）
 const result = createResult({host, game,   // 0.91 胜利结算面板（右盒数据来自引擎统计表 summaryOf）；再来一局 = 同一张图重开，回主页 = 退出战场
-  onAgain: () => mountBattle(host, stage, {...opts, loading: null, seed}),
-  onHome: () => { unmountBattle(); if (opts.onExit) opts.onExit(); }});
+  onAgain: () => { dropSave(); mountBattle(host, stage, {...opts, army, resume: null, loading: null, seed}); },
+  onHome: () => { dropSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }});
 const showCursor = c => cursor.show(c[0] * 2, c[1] * 2, world.bldMap.has(key(c)) ? 'building' : 'cell', (px, pz) => world.surfaceY(c[0], c[1], px, pz));
 // 长按详细面板（0.60；0.61 加展示窗：面板开着时光圈先藏起来——光圈有动画会让战场每秒重画 30 次，展示窗不需要）
 const detail = createDetail({THREE, renderer, host, stage, game, toEngine,
@@ -216,6 +236,7 @@ function popup(id, text, cls = '') {   // 单位头顶飘一个伤害数字（�
 }
 function showWinner() {   // 胜负已分：先放换回合横幅样式的「胜利」，败方压灰 + 镜头平移到被占的总部 + 缓缓绕场，1.5 秒后弹出结算面板（0.91）
   const w = game.winner; if (w === null || result.exists) return;
+  dropSave();   // 0.99 这一局结束了：清掉自己的存档（主页「继续」不再指向它）
   const b = $('banner'); $('bDay').textContent = w < 0 ? '同归于尽' : '胜利'; $('bTeam').textContent = w < 0 ? '双方全灭' : OWN[w] + '获胜';
   $('bDot').className = 'dot ' + (w === 1 ? 'r' : 'b'); b.className = 'banner ' + (w === 1 ? 'r' : 'b'); b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
@@ -285,6 +306,12 @@ function nearBar(px, py) {   // 浮条周围留一圈 36px 的缓冲：想点「
 }
 function handleTap(px, py) {
   if (world.busy() || econBusy) return;
+  if (disbandMode) {   // 0.99 解散部队：点己方单位 → 确认；点别处 = 取消
+    const c = selectAt(px, py), eu = c && unitAt(game, ...toEngine(c));
+    if (eu && eu.owner === game.turn) askConfirm(`解散${RULE_UNITS[eu.type].name}？`, '单位消失，不返还资金，不可撤销', '解散', () => { endDisband(); doDisband(eu.id); });
+    else { sfx.play('back', 'game'); endDisband(); }
+    return;
+  }
   if (acting) {
     if (targeting) { const c = selectAt(px, py), t = c && targeting.get(toEngine(c).join(',')); if (t) { sfx.play('ok', 'game'); doAttack(t); } else { sfx.play('back', 'game'); exitTargeting(); infoUpdate(); mark(); } return; }
     if (!nearBar(px, py)) { sfx.play('back', 'game'); undoMove(); }
@@ -369,16 +396,19 @@ function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 
   if (debug) $('dbg').textContent = `${fps.toFixed(0)}fps · ${renderer.info.render.triangles}△ · ${renderer.info.render.calls}绘制`;
 }
 // 结束回合（0.58）：点左上状态条 → 状态条下方弹出确认；点「结束回合」才真正结束：引擎 endTurn（换人 / 天数 / 单位恢复 / 收入 / 兵工厂可再生产）→ 中央大横幅「第 N 天」
+let cfmAct = null;   // 0.99 通用确认框（复用结束回合的那个）：askConfirm 设置它，点「确定」时执行；openEnd 清掉它
+function askConfirm(title, note, okText, fn) { $('eTitle').textContent = title; const n = $('eNote'); n.hidden = !note; n.textContent = note || ''; $('endm').querySelector('[data-act=ok]').textContent = okText; cfmAct = fn; $('endm').hidden = false; }
 function openEnd() {
+  cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = '结束回合';
   const t = game.turn, f = [...Object.keys(game.owners)].filter(k => game.owners[k] === t && !game.built.has(k)).filter(k => { const [x, y] = k.split(',').map(Number); return game.terrain[y][x] === 'factory' && !unitAt(game, x, y); }).length;
   $('eTitle').textContent = `结束第 ${game.day} 天 · ${OWN[t]} 的回合？`;
   const note = $('eNote'); note.hidden = !(f && game.funds[t] >= 1000); note.textContent = `还有 ${f} 座兵工厂没生产`;   // 单位没行动这一项，等移动 / 攻击接入后再加
   $('endm').hidden = false;
 }
-const closeEnd = () => { $('endm').hidden = true; };
+const closeEnd = () => { $('endm').hidden = true; cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = '结束回合'; };
 // 0.88 每一方记住自己上次的镜头位置：结束回合时存下结束方的镜头（正在「找单位」轮流时存轮流之前的位置），换边后镜头平滑移到新一方上次的位置；
 // 还没存过的一方（红军第一回合）去自己的总部附近。这样换边后不用再手动把镜头拖回自己阵营才好操作。
-const camMem = [null, null];
+const camMem = resumed && resume.camMem ? [resume.camMem[0] || null, resume.camMem[1] || null] : [null, null];
 const homeCam = side => {
   const k = Object.keys(game.owners).find(q => game.owners[q] === side && game.terrain[+q.split(',')[1]][+q.split(',')[0]] === 'hq'); if (!k) return null;
   const [x, y] = k.split(',').map(Number), c = toWorld([x, y]); return {x: c[0] * 2 + (x < game.w / 2 ? 10 : -10), z: c[1] * 2};
@@ -388,13 +418,38 @@ function toast(text) {   // 0.88：屏幕上方一条短提示（红色底，1.8
   let el = $('gmToast'); if (!el) { el = document.createElement('div'); el.id = 'gmToast'; $('hudL').parentNode.appendChild(el); }
   el.textContent = text; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1900);
 }
+// ── 存档 / 投降 / 解散（0.99）──
+const SAVE_KEY = 'gridmarch.save';   // 只有一个存档位：主页「继续」读它。里面带 gid，投降 / 分出胜负 / 换图时只清自己这一局的
+function saveGame() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({v: 1, gid, seed, army, ver: window.GM_VERSION || '', savedAt: Date.now(), game: serializeGame(game), cam: {x: cam.target.x, z: cam.target.z, yaw: cam.yaw}, camMem})); return true; } catch (e) { return false; }
+}
+function dropSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && s.gid === gid) localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function saveAndHome() {   // 暂停菜单「返回主页」：先存档再退出（选中 / 走到一半的单位先退回原位）；分出胜负的局不存、顺手清掉自己的旧存档
+  pause.hidden = true;
+  if (world.busy() || econBusy) { toast('动画进行中，稍后再试'); return; }
+  if (game.winner !== null) dropSave();
+  else { clearSel(); if (acting) undoMove(); clearAct(); if (!saveGame()) { toast('存档失败（存储空间不足？）'); return; } }
+  unmountBattle(); if (opts.onExit) opts.onExit();
+}
+let disbandMode = false;   // 解散部队：从暂停菜单「军务」进来，点一个己方单位 → 确认 → 解散；点空白取消
+function setHint(text) { let el = $('gmHint'); if (!el) { el = document.createElement('div'); el.id = 'gmHint'; $('hudL').parentNode.appendChild(el); } el.textContent = text || ''; el.hidden = !text; }
+function startDisband() { if (game.winner !== null) return; clearSel(); if (acting) undoMove(); clearAct(); disbandMode = true; setHint('解散部队：点一个己方单位 · 点空白处取消'); mark(); }
+function endDisband() { disbandMode = false; setHint(''); clearSel(); mark(); }
+function doDisband(id) {
+  const r = engineDisband(game, id); if (!r.ok) return;
+  sfx.play('poof', 'game'); world.removeUnit(id, combatOn); toast('已解散 ' + RULE_UNITS[r.unit.type].name);
+  syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner();
+}
 function doEndTurn() {
   if (acting && joinTargetOf(game, acting)) undoMove();   // 停在合流格上没点合流就结束回合：先把画面里的单位退回原位（引擎的 endTurn 也会退）
   const prev = game.turn, r = engineEndTurn(game); if (!r.ok) return;
-  camMem[prev] = cycleHome ? {...cycleHome} : {x: cam.target.x, z: cam.target.z};
+  // 0.99：记下结束方的镜头。只在「纯浏览」时用轮流前的位置——镜头还停在「找单位」跳过去的地方、而且那个单位没行动过；
+  // 跳过去之后行动了（或者手动拖过镜头），就记当前位置，不然换边再换回来镜头会回到错的地方
+  const browsing = cycleHome && lastJump && Math.hypot(cam.target.x - lastJump.x, cam.target.z - lastJump.z) < .6 && game.units.some(q => q.id === nextFocus && !q.acted);
+  camMem[prev] = browsing ? {...cycleHome} : {x: cam.target.x, z: cam.target.z};
   if (game.winner === null) { const m = camMem[game.turn] || homeCam(game.turn); if (m) cam.panTo(m.x, m.z, .7); }
   hudReady = false; hudStuck = false; $('hudL').classList.remove('ready'); clearSel(); clearAct();
-  nextFocus = 0; cycleHome = null;
+  nextFocus = 0; cycleHome = null; lastJump = null;
   const swamp = r.swamp || [], reps = r.repairs || [];
   const fx = combatOn && ((r.income || 0) > 0 || reps.length > 0 || swamp.length > 0);   // 关了「作战动画」就不演，直接到账
   if (fx) { if (r.fundsBefore !== undefined) econShown = r.fundsBefore; econBusy = true; for (const q of reps) holdHp.add(q.id); for (const q of swamp) if (!q.dead) holdHp.add(q.id); }
@@ -453,13 +508,13 @@ $('hudL').onclick = () => { if (game.winner !== null) return; if (!world.busy() 
 $('endm').addEventListener('click', e => {
   if (e.target.id === 'endm') return closeEnd();   // 点外面 = 取消
   const b = e.target.closest('button'); if (!b) return;
-  closeEnd(); if (b.dataset.act === 'ok') doEndTurn();
+  const fn = cfmAct; closeEnd(); if (b.dataset.act === 'ok') { if (fn) fn(); else doEndTurn(); }
 });
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
 $('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
 const pause = $('pause');
 // 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
-let nextFocus = 0, cycleHome = null;   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
+let nextFocus = 0, cycleHome = null, lastJump = null;   // lastJump：最近一次「找单位」镜头跳到的位置   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
 // 0.93 长按这个键（约 0.45 秒）= 战场情报；按住时按钮外圈金环慢慢扩开。长按触发后抬手那一下不再算「点一下找单位」
 let intelLp = 0, intelFired = false; const bNext = $('bNext');
 const canIntel = () => !world.busy() && !econBusy && $('pause').hidden && !ars.isOpen && !detail.isOpen && !intel.isOpen && game.winner === null;
@@ -475,7 +530,7 @@ $('bNext').onclick = () => {
   if (!u) { if (cycleHome) { cam.panTo(cycleHome.x, cycleHome.z); mark(); } nextFocus = 0; cycleHome = null; return; }   // 轮完一圈：回到开始前的镜头位置
   const w = world.unitById(u.id); if (!w) return;
   if (!cycleHome) cycleHome = {x: cam.target.x, z: cam.target.z};
-  nextFocus = u.id; cam.panTo(w.x, w.z); mark();
+  nextFocus = u.id; lastJump = {x: w.x, z: w.z}; cam.panTo(w.x, w.z); mark();
 };
 $('bRot').onclick = () => { orbitOn = false; if (zoomOn) { clearTimeout(zoomT); rotSpan.innerHTML = ROT_SVG; rotSpan.classList.remove('zoom'); rotSpan.style.opacity = 1; zoomOn = false; } cam.rotate(1); mark(); };   // 正显示视距数字时点一下 = 立刻变回图标并旋转
 // 画质（0.66）：暂停菜单第二页；目前只有「帧率显示」开关（存 localStorage gridmarch.showFps）
@@ -507,24 +562,27 @@ let tuckPct = 40; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.inc
 const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
 tuckRender();
 const sfxRender = () => { $('pSfxSt').textContent = sfx.enabled ? '开' : '关'; $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
-function setPage(q) { $('pMain').hidden = q; $('pQual').hidden = !q; $('pTitle').textContent = q ? '画质' : '暂停'; $('pInfo').hidden = q; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
+function setPage(name) { $('pMain').hidden = name !== 'main'; $('pQual').hidden = name !== 'quality'; $('pCmd').hidden = name !== 'cmd'; $('pTitle').textContent = {main: '暂停', quality: '画质', cmd: '军务'}[name]; $('pInfo').hidden = name !== 'main'; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
-$('bMenu').onclick = () => { setPage(false); pause.hidden = false; };
+$('bMenu').onclick = () => { setPage('main'); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
 pause.addEventListener('click', e => {
   if (e.target === pause) { pause.hidden = true; return; }   // 点面板外 = 继续
   const b = e.target.closest('.item'); if (!b) return;
   const a = b.dataset.act;
   if (a === 'resume') pause.hidden = true;
-  else if (a === 'quality') setPage(true);
-  else if (a === 'back') setPage(false);
+  else if (a === 'quality') setPage('quality');
+  else if (a === 'cmd') setPage('cmd');
+  else if (a === 'back') setPage('main');
+  else if (a === 'disband') { pause.hidden = true; startDisband(); }
+  else if (a === 'surrender') { pause.hidden = true; askConfirm('投降 / 撤退？', '不存档，这一局作废，直接回到主页', '投降撤退', () => { dropSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }); }
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'sfx') { sfx.setEnabled(!sfx.enabled); sfxRender(); }   // 0.94 界面音效开关（同主页设置里的「音效」）
   else if (a === 'side') stage.toggleSide();
-  else if (a === 'reroll') mountBattle(host, stage, {...opts, loading: null, seed: 1 + Math.floor(Math.random() * 999999)});   // 换图：原地重建（不刷新页面、不产生历史记录）
-  else if (a === 'home') { unmountBattle(); if (opts.onExit) opts.onExit(); }
+  else if (a === 'reroll') { pause.hidden = true; askConfirm('换图重开？', '当前这一局不会保存', '换图', () => { dropSave(); mountBattle(host, stage, {...opts, army, resume: null, loading: null, seed: 1 + Math.floor(Math.random() * 999999)}); }); }   // 换图：原地重建（不刷新页面、不产生历史记录）
+  else if (a === 'home') saveAndHome();
 });
 
 // ── 触控：单指平移，双指缩放（松手吸附最近一档），轻点选格 ──
@@ -592,11 +650,16 @@ function loop(now) {
   fpsTick(now);
   if (now - t0 > 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now; if (debug) hud(); }
 }
+if (resumed) {   // 0.99 继续存档：单位的行动 / 血量 / 占领标记按引擎状态补上，镜头回到存档时的位置
+  syncActed(); syncCaps();
+  if (resume.cam) { cam.target.x = resume.cam.x; cam.target.z = resume.cam.z; if (typeof resume.cam.yaw === 'number') cam.yaw = resume.cam.yaw; }
+}
+if (resumeBad) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} setTimeout(() => toast('存档对应的地图已变化，无法继续，已开新局'), 600); }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
 host.addEventListener('pointerdown', e => { if (orbitOn && result.minimized && !e.target.closest('.res-tag')) orbitOn = false; }, true);   // 0.91：看战场时一碰棋盘就停下绕场
-window.battle = {intel, result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {camMem, saveGame, gid, resumed, intel, result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
