@@ -1,4 +1,5 @@
 // 规则引擎骨架（0.33）：地图 + 单位 + 回合。纯数据、纯函数，不依赖画面，方便自动测试和以后接 AI。
+import {t as tx} from '../i18n/index.js';   // 玩家能看到的错误提示走语言包（别名 tx：本文件里 t 常用作局部变量）
 // 目前包含：移动（按地形消耗）、攻击与反击、回合切换、沼泽掉血（回合开始）、歼灭胜负。
 // 0.77 加了占领（capture）；0.81 加了回合开始的修理 / 补给（repairUnits）。还没有：合流、运输（后续里程碑）。
 import {UNIT_IDS, UNITS, TERRAINS, CONFIG, DEFAULT_STYLE} from './data.js';
@@ -94,13 +95,13 @@ export const atUnitCap = (g, player = g.turn) => g.units.filter(u => u.owner ===
 
 export function produce(g, x, y, type) {
   const t = UNITS[type], tr = TERRAINS[g.terrain[y]?.[x]];
-  if (!t || !tr || g.winner !== null) return {ok: false, err: '不能操作'};
-  if (tr !== TERRAINS.factory || g.owners[key(x, y)] !== g.turn) return {ok: false, err: '这里不是你的兵工厂'};
-  if (t.buildable === false || t.cost === null) return {ok: false, err: '这个单位暂不可生产'};
-  if (atUnitCap(g)) return {ok: false, err: '已达到单位上限（' + g.config.maxUnits + '）'};
-  if (g.built.has(key(x, y))) return {ok: false, err: '这座兵工厂本回合已经生产过'};
-  if (unitAt(g, x, y)) return {ok: false, err: '兵工厂上有单位'};
-  if (g.funds[g.turn] < t.cost) return {ok: false, err: '资金不足'};
+  if (!t || !tr || g.winner !== null) return {ok: false, err: tx('err.noOp')};
+  if (tr !== TERRAINS.factory || g.owners[key(x, y)] !== g.turn) return {ok: false, err: tx('err.notFactory')};
+  if (t.buildable === false || t.cost === null) return {ok: false, err: tx('err.unavailable')};
+  if (atUnitCap(g)) return {ok: false, err: tx('toast.unitCap', {n: g.config.maxUnits})};
+  if (g.built.has(key(x, y))) return {ok: false, err: tx('err.built')};
+  if (unitAt(g, x, y)) return {ok: false, err: tx('err.occupied')};
+  if (g.funds[g.turn] < t.cost) return {ok: false, err: tx('err.funds')};
   g.funds[g.turn] -= t.cost; g.built.add(key(x, y)); g.stats[g.turn].built++; g.stats[g.turn].spent += t.cost;
   const u = addUnit(g, {type, owner: g.turn, x, y}); u.moved = u.acted = true;   // 新单位本回合不能行动
   return {ok: true, unit: u};
@@ -151,10 +152,10 @@ export function pathOf(g, unit, x, y) {
 
 export function move(g, id, x, y) {
   const u = getUnit(g, id);
-  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
-  if (u.moved || u.acted) return {ok: false, err: '这个单位本回合已行动'};
+  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: tx('err.noOp')};
+  if (u.moved || u.acted) return {ok: false, err: tx('err.acted')};
   const r = reachable(g, u), c = r.get(key(x, y));
-  if (c === undefined) return {ok: false, err: '到不了'};
+  if (c === undefined) return {ok: false, err: tx('err.unreachable')};
   u.origin = {x: u.x, y: u.y, fuel: u.fuel, cap: u.cap || 0};   // 0.68：走完、选「待命」之前可以撤销（0.77：占领进度一起还原）
   if (g.config.fuel) u.fuel -= c;
   if (x !== u.x || y !== u.y) u.cap = 0;   // 0.77：离开这一格 = 占领进度清零
@@ -164,8 +165,8 @@ export function move(g, id, x, y) {
 // 撤销移动（0.68）：只在「已经走了、还没待命 / 攻击」时可以，退回原位、燃料和「已移动」一起还原
 export function undoMove(g, id) {
   const u = getUnit(g, id);
-  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
-  if (!u.moved || u.acted || !u.origin) return {ok: false, err: '现在不能撤销'};
+  if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: tx('err.noOp')};
+  if (!u.moved || u.acted || !u.origin) return {ok: false, err: tx('err.noUndo')};
   u.x = u.origin.x; u.y = u.origin.y; u.fuel = u.origin.fuel; u.cap = u.origin.cap; u.moved = false; delete u.origin; return {ok: true};
 }
 
@@ -178,8 +179,8 @@ export function targetsOf(g, u) {
 
 export function attack(g, id, targetId) {
   const a = getUnit(g, id), d = getUnit(g, targetId);
-  if (!a || !d || a.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
-  if (!targetsOf(g, a).includes(d)) return {ok: false, err: '打不到'};
+  if (!a || !d || a.owner !== g.turn || g.winner !== null) return {ok: false, err: tx('err.noOp')};
+  if (!targetsOf(g, a).includes(d)) return {ok: false, err: tx('err.noReach')};
   const out = {ok: true, hit: null, counter: null, hp0: {a: a.hp, d: d.hp}};   // hp0：开打前双方血量（战场飘伤害数字用）
   const spend = (u, s) => { if (s.weapon === 'primary' && g.config.ammo) u.ammo--; };
   const s1 = strike(g, a, d); spend(a, s1); d.hp = Math.max(0, d.hp - s1.damage); out.hit = s1;
@@ -205,7 +206,7 @@ export function canCapture(g, u) {
   return !!(UNITS[u.type].capture && tr?.property && g.owners[key(u.x, u.y)] !== u.owner && u.owner === g.turn && !u.acted && g.winner === null);
 }
 export function capture(g, id) {
-  const u = getUnit(g, id); if (!u || !canCapture(g, u)) return {ok: false, err: '不能占领'};
+  const u = getUnit(g, id); if (!u || !canCapture(g, u)) return {ok: false, err: tx('err.noCapture')};
   const k = key(u.x, u.y), tr = TERRAINS[g.terrain[u.y][u.x]], prev = g.owners[k], gain = dispHp(u.hp);
   u.cap = (u.cap || 0) + gain; u.moved = u.acted = true; delete u.origin;
   const out = {ok: true, key: k, terrain: g.terrain[u.y][u.x], prev, gain, cap: u.cap, need: tr.capture, done: false};
@@ -219,9 +220,9 @@ export function capture(g, id) {
 // 合流（0.89）：u 已经走到了可合流的友军格上 → u 并进目标：血量相加（最多 100），超出的部分按造价折成资金退还（CONFIG.joinRefund），弹药 / 燃料相加（不超过满值）；
 // u 消失；合流后的单位本回合行动结束（0.90：高战规则，和被并入单位合流前有没有行动过无关）。返回 {ok, targetId, hp, gained, over, refund}
 export function join(g, id) {
-  const u = getUnit(g, id); if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: '不能操作'};
-  if (!u.moved || u.acted) return {ok: false, err: '现在不能合流'};
-  const t = joinTargetOf(g, u); if (!t) return {ok: false, err: '这里没有可以合流的单位'};
+  const u = getUnit(g, id); if (!u || u.owner !== g.turn || g.winner !== null) return {ok: false, err: tx('err.noOp')};
+  if (!u.moved || u.acted) return {ok: false, err: tx('err.noJoin')};
+  const t = joinTargetOf(g, u); if (!t) return {ok: false, err: tx('err.noJoinTarget')};
   const spec = UNITS[t.type], total = t.hp + u.hp, hp = Math.min(100, total), over = total - hp, gained = hp - t.hp;
   const refund = g.config.joinRefund ? Math.floor(spec.cost * over / 100) : 0;
   t.hp = hp; t.ammo = Math.min(spec.ammo, t.ammo + u.ammo); t.fuel = Math.min(spec.fuel, t.fuel + u.fuel); g.funds[u.owner] += refund; t.moved = t.acted = true; delete t.origin;
@@ -230,8 +231,8 @@ export function join(g, id) {
 }
 
 export function wait(g, id) {
-  const u = getUnit(g, id); if (!u || u.owner !== g.turn) return {ok: false, err: '不能操作'};
-  if (joinTargetOf(g, u)) return {ok: false, err: '这里只能合流，不能待命'};
+  const u = getUnit(g, id); if (!u || u.owner !== g.turn) return {ok: false, err: tx('err.noOp')};
+  if (joinTargetOf(g, u)) return {ok: false, err: tx('err.joinOnly')};
   u.moved = u.acted = true; delete u.origin; return {ok: true};
 }
 
@@ -243,7 +244,7 @@ function checkWinner(g) {
 
 // 结束当前玩家的回合：换人 → 对方单位恢复行动 → 收入 → 修理 → 沼泽掉血（轮到的这一方）
 export function endTurn(g) {
-  if (g.winner !== null) return {ok: false, err: '游戏已结束'};
+  if (g.winner !== null) return {ok: false, err: tx('err.gameOver')};
   for (const u of g.units) if (u.owner === g.turn && u.moved && !u.acted && u.origin && joinTargetOf(g, u)) undoMove(g, u.id);   // 0.89：停在「合流格」上还没点合流就结束回合 = 这次移动作废，退回原位（不能留下两个单位同格）
   g.turn = (g.turn + 1) % g.players.length; if (g.turn === 0) g.day++;
   for (const u of g.units) if (u.owner === g.turn) { u.moved = u.acted = false; delete u.origin; }

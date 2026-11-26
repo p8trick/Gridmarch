@@ -4,6 +4,7 @@ import {DICT, t, setLang, getLang} from '../src/i18n/index.js';
 import {UNITS, TERRAINS, STYLES} from '../src/rules/data.js';
 import {unitTip, terrainTip, unitDefault, terrainDefault, UNIT_BLURB, terrainNote} from '../src/battle/explain.js';
 import {weaponHtml} from '../src/battle/unit-info.js';
+import {createGame, produce} from '../src/rules/engine.js';
 const zh = DICT.zh, en = DICT.en; let n = 0; const ok = (name, f) => { f(); n++; console.log('PASS', name); };
 ok('zh / en 键一一对应', () => { const a = Object.keys(zh).filter(k => !(k in en)), b = Object.keys(en).filter(k => !(k in zh)); assert.deepStrictEqual([a, b], [[], []], '英文缺：' + a + ' / 中文缺：' + b); });
 ok('英文短名不超过 12 个字符（兵工厂卡片放得下）、图标字不超过 2 个字符', () => { for (const id of Object.keys(UNITS)) { assert(en['unit.' + id].length <= 12, '英文短名太长 ' + id); assert(en['glyph.' + id].length <= 2 && zh['glyph.' + id].length === 1, '图标字长度 ' + id); } });
@@ -29,6 +30,13 @@ ok('详细面板说明：中英文每一项都能生成，英文里不含中文'
   setLang('zh'); assert.deepStrictEqual(bad, [], '英文说明里还有中文：\n' + bad.join('\n'));
   assert.strictEqual(unitTip('hp', {type: 'inf', eu: {hp: 73}, cfg}).d.includes('格数越少'), true); assert.strictEqual(UNIT_BLURB.inf, '最便宜的单位，山地、河流都能翻越，可以占领建筑。');
 });
+ok('引擎提示（兵工厂等）随语言，中文与原文一致', () => {
+  const mk = () => { const g = createGame({terrain: [['factory', 'factory', 'plain']], owners: {'0,0': 0, '1,0': 1}, units: []}); g.funds = [0, 0]; return g; };
+  assert.strictEqual(produce(mk(), 0, 0, 'tank').err, '资金不足'); assert.strictEqual(produce(mk(), 1, 0, 'inf').err, '这里不是你的兵工厂');
+  setLang('en'); const a = produce(mk(), 0, 0, 'tank').err, b = produce(mk(), 1, 0, 'inf').err; setLang('zh');
+  assert.strictEqual(a, 'Not enough funds'); assert.strictEqual(b, 'This is not your factory');
+});
+ok('战报 / 引擎 err.* 词条齐全且英文无中文', () => { for (const k of Object.keys(zh).filter(k => /^(res|err|map)\./.test(k))) assert(en[k] && !/[\u4e00-\u9fff]/.test(en[k]), '词条 ' + k); });
 // 进度：还剩多少写死的中文字符串（只统计 src/ 下战斗相关 js，不含 art / vendor / i18n；注释不算）
 let left = 0; const walk = d => { for (const f of fs.readdirSync(d, {withFileTypes: true})) { const p = path.join(d, f.name); if (f.isDirectory()) { if (!/vendor|art|i18n/.test(f.name)) walk(p); } else if (p.endsWith('.js')) { for (const l of fs.readFileSync(p, 'utf8').split('\n')) left += (l.split('//')[0].match(/(['"`])(?:(?!\1).)*[\u4e00-\u9fff](?:(?!\1).)*\1/g) || []).length; } } };
 walk(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'src'));

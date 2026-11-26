@@ -1,3 +1,4 @@
+import {t as tx} from '../../i18n/index.js';
 import {planWater, validateLayout} from '../map-builder.js';
 
 // 第一关：20×12，红蓝左右镜像（x → -1-x）。蓝方在西，红方在东。
@@ -68,7 +69,7 @@ function build(seed, attempt, army = START.army) {
   }
   const outside = [...rect(X0 - 1, X0 - 1, Z0 - 1, Z1 + 1), ...rect(X1 + 1, X1 + 1, Z0 - 1, Z1 + 1), ...rect(X0, X1, Z0 - 1, Z0 - 1), ...rect(X0, X1, Z1 + 1, Z1 + 1)];
   const preset = {
-    name: '第一关', x: [X0, X1], z: [Z0, Z1], seed: 7, levelSeed: seed,
+    get name() { return tx('map.level1'); }, x: [X0, X1], z: [Z0, Z1], seed: 7, levelSeed: seed,
     topology: {coastType: 'mixed', typeForCell: x => x < 0 ? 'shoal' : 'cliff', land: board.filter(c => !sea.has(key(...c))), outside},
     layout: {mountain: [], desert: [], swamp: [], roads: [], forest: {x: [0, -1], z: [0, -1]}, forestExtra: [], buildings: [], units: []},
     bridges: [],

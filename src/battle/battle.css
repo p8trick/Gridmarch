@@ -143,7 +143,7 @@
 #battle .ars-card.poor .pr,#battle .ars-card.lock .pr{background:var(--dis);color:var(--sub)}
 #battle .ars-pv{position:relative;flex:1;min-height:0;border-radius:15px;border:3px solid var(--line);box-shadow:0 0 0 600px var(--bg);touch-action:none;background:transparent}
 #battle .ars-pv .nomodel{position:absolute;inset:0;border-radius:12px;display:none;place-items:center;font-weight:800;font-size:16px;color:#7a6a48;background:#e8d9b4}
-#battle .ars-tag{position:absolute;left:10px;top:9px;display:flex;align-items:center;gap:8px;z-index:1}
+#battle .ars-tag{position:absolute;left:10px;right:10px;top:9px;display:flex;align-items:center;gap:8px;z-index:1}   /* 1.06：加 right:10px，名字太长折成两行时，小盒子左右离展示台边框一样远 */
 #battle .ars-tag b{padding:3px 12px;border-radius:10px;background:var(--bg);border:2px solid var(--line);font-size:16px;font-weight:800;box-shadow:0 2px 0 var(--line)}
 #battle .ars-hint{position:absolute;left:0;right:0;bottom:7px;text-align:center;font-size:10px;color:#7a6a48;pointer-events:none}
 #battle .ars-body{flex:1;min-height:0;display:flex;gap:10px}   /* 0.52：左 = 转台窗口，右 = 数据列（仿高战2） */
@@ -159,7 +159,7 @@
 #battle .ars-wr{flex:1;min-height:0;display:flex;align-items:stretch;gap:4px}
 #battle .ars-wc{flex:1;min-width:0;display:flex;gap:4px}
 #battle .ars-cat{flex:1;max-width:58px;min-width:0;border-radius:8px;border:2px solid var(--line);background:var(--cc);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--text)}
-#battle .ars-wn{align-self:center;font-size:11px;color:var(--sub)}
+#battle .ars-wn{align-self:center;flex:1;font-size:11px;color:var(--sub)}   /* 1.06：flex:1 把右边的「主炮 / 副炮」标签始终顶在最右（没有武器、显示「无」时原来会贴着它） */
 #battle .ars-wt{flex:none;width:18px;display:grid;place-items:center;writing-mode:vertical-rl;text-orientation:upright;font-size:14px;font-weight:800;color:var(--btn);letter-spacing:2px}   /* 竖排「主炮 / 副炮」 */
 #battle .ars-wp.off{opacity:.55}
 #battle .ars-close{flex:none;width:100%;height:46px;border-radius:13px;border:3px solid var(--line);background:#ffd1c9;color:var(--text);font:800 16px inherit;box-shadow:var(--shadow);touch-action:manipulation;transform:skewX(-6deg)}   /* 0.53：原「生产」按钮改成关闭 */
@@ -362,3 +362,7 @@
 #battle[data-lang=en] .dt-wps .ars-wr{min-height:30px}
 
 #battle[data-lang=en] .ars-hint{font-size:9.5px;letter-spacing:-.01em}
+/* 1.06 英文：兵工厂卡片的「移 / 射」小字不折行；选中且锁定的卡价格签里「No model / N/A」两行字号小一点 */
+#battle[data-lang=en] .ars-card .sub{white-space:nowrap}
+#battle[data-lang=en] .ars-card .pr b{font-size:11px}
+
