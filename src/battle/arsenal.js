@@ -1,3 +1,4 @@
+import {t} from '../i18n/index.js';
 import {MODEL_OF} from '../game/engine-map.js';
 import {UNITS, UNIT_IDS} from '../rules/data.js';
 import {GLYPH, weaponHtml} from './unit-info.js';
@@ -40,7 +41,7 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
     if (current) turn.remove(current.holder); current = null;
     const m = modelFor(sel);
     if (m && m !== 'error') { current = m; turn.add(m.holder); }
-    if (el) { const nm = el.querySelector('.nomodel'); nm.style.display = m && m !== 'error' ? 'none' : 'grid'; nm.firstChild.textContent = m === 'error' ? '模型加载失败' : '尚未建模'; }
+    if (el) { const nm = el.querySelector('.nomodel'); nm.style.display = m && m !== 'error' ? 'none' : 'grid'; nm.firstChild.textContent = t(m === 'error' ? 'model.error' : 'model.none'); }
   }
 
   // ── DOM ──
@@ -58,14 +59,14 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
     el = document.createElement('div'); el.className = 'ars ' + (team === 'blue' ? 'army-b' : 'army-r');
     el.innerHTML = `<div class="ars-dim"></div><div class="ars-row">
       <div class="ars-box ars-menu">
-        <div class="ars-head"><b>兵工厂</b><span class="ars-fund">资金 <b id="arsFund"></b></span></div>
+        <div class="ars-head"><b>${t('ars.title')}</b><span class="ars-fund">${t('ars.funds')} <b id="arsFund"></b></span></div>
         <div class="ars-list"><i class="ars-more up">▲</i><i class="ars-more dn">▼</i><div class="ars-cards">${UNIT_IDS.map(id => `<button class="ars-card" data-u="${id}"><span class="ico">${GLYPH[id]}</span><span class="tx"><span class="nm">${UNITS[id].name}</span><span class="sub"></span></span><span class="pr"></span></button>`).join('')}</div></div>
       </div>
       <div class="ars-box ars-show"><div class="ars-body">
-        <div class="ars-pv" id="arsPv"><div class="nomodel"><span>尚未建模</span></div>
+        <div class="ars-pv" id="arsPv"><div class="nomodel"><span>${t('model.none')}</span></div>
           <div class="ars-tag"><b id="arsName"></b></div>
-          <small class="ars-hint">拖动旋转 · 双指缩放 · 双击复位</small></div>
-        <div class="ars-info"><div class="ars-stats"></div><div class="ars-wps"></div><button class="ars-close" data-act="close">关闭</button></div>
+          <small class="ars-hint">${t('ars.hint')}</small></div>
+        <div class="ars-info"><div class="ars-stats"></div><div class="ars-wps"></div><button class="ars-close" data-act="close">${t('ars.close')}</button></div>
         </div>
         <div class="ars-toast"></div>
       </div></div>`;
@@ -152,15 +153,15 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
       const id = c.dataset.u, u = UNITS[id], lock = locked(id), poor = !lock && u.cost > f;
       c.classList.toggle('sel', id === sel); c.classList.toggle('poor', poor); c.classList.toggle('lock', lock);
       c.classList.toggle('arm', id === armed); const pr = c.querySelector('.pr');
-      if (id === armed) pr.innerHTML = lock ? (u.buildable === false ? '<b>暂不可</b><i>生产</i>' : '<b>未建模</b><i>暂不可</i>') : poor ? '<b>资金不足</b><i>' + u.cost + '</i>' : '<b>生产</b><i>' + u.cost + '</i>';   // 价格签变成「生产 / 价格」按钮
-      else pr.textContent = lock ? (u.buildable === false ? '暂不可' : '未建模') : u.cost;
-      c.querySelector('.sub').textContent = `移${u.move} · 射${u.range[0] === u.range[1] ? u.range[0] : u.range.join('–')}`;
+      if (id === armed) pr.innerHTML = lock ? (u.buildable === false ? `<b>${t('ars.na')}</b><i>${t('ars.build')}</i>` : `<b>${t('ars.noModel')}</b><i>${t('ars.na')}</i>`) : poor ? `<b>${t('ars.poor')}</b><i>` + u.cost + '</i>' : `<b>${t('ars.build')}</b><i>` + u.cost + '</i>';   // 价格签变成「生产 / 价格」按钮
+      else pr.textContent = lock ? t(u.buildable === false ? 'ars.na' : 'ars.noModel') : u.cost;
+      c.querySelector('.sub').textContent = t('ars.sub', {m: u.move, r: u.range[0] === u.range[1] ? u.range[0] : u.range.join('–')});
     });
     const u = UNITS[sel], lock = locked(sel), poor = !lock && u.cost > f;
     el.querySelector('#arsName').textContent = u.fullName || u.name;
     // 右列（0.52，仿高战2）：机动 / 视野 / 燃料三行，然后主炮、副炮各一块：武器名 + 弹药，下面是「能打的大类」小块（只列能打的，不列灰的）
     const fuel = u.fuel === Infinity ? '∞' : u.fuel + '/' + u.fuel;
-    el.querySelector('.ars-stats').innerHTML = `<div>机动<b>${u.move}</b></div><div>视野<b>${u.vision}</b></div><div>燃料<b>${fuel}</b></div>`;
+    el.querySelector('.ars-stats').innerHTML = `<div>${t('kv.move')}<b>${u.move}</b></div><div>${t('kv.vision')}<b>${u.vision}</b></div><div>${t('card.fuel')}<b>${fuel}</b></div>`;
     el.querySelector('.ars-wps').innerHTML = weaponHtml(sel);   // 0.60：主副炮块抽到 unit-info.js，和战场长按详细面板共用
     showModel();
     const sc = el.querySelector('.ars-card.sel');   // 选中的卡片不在可见范围内才把它滑到中间（点一下可见的卡片，列表不乱跳）

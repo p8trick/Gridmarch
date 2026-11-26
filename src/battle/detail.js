@@ -16,7 +16,7 @@ import {getTileBlock} from './tile-block.js';
 //   点一项（血量 / 机动 / 主炮 / 防御星 / 某类移动消耗…）→ 该项高亮，盒子底部说明栏换成这一项的解释（文字全在 explain.js）；再点一次取消。
 //   点盒子外面的暗处关掉面板（没有关闭按钮）；点盒子里的空白处不关。
 // 数据全部来自规则引擎（data.js + game 状态），打开时取一次快照（面板打开期间战场不会变）。
-import {OWN} from '../i18n/index.js';
+import {OWN, t} from '../i18n/index.js';
 const MTS = ['foot', 'mech', 'tread', 'wheel'];
 
 export function createDetail({THREE, renderer, host, stage, game, toEngine, onOpen, onClose}) {
@@ -31,10 +31,10 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
     const d = UNITS[eu.type], hp = dispHp(eu.hp), col = hp >= 7 ? '#4fc34f' : hp >= 4 ? '#f2b81e' : '#ee5a4d';
     const rg = d.range[0] === d.range[1] ? d.range[0] : d.range.join('–');
     return `<div class="dt-box ${eu.owner === 0 ? 'army-b' : 'army-r'}" data-box="unit">
-      <div class="dt-head"><span class="dt-ico">${GLYPH[eu.type]}</span><b class="dt-name">${d.fullName || d.name}</b><span class="dt-chips"><em class="dt-chip ${eu.acted ? '' : 'go'}" data-k="status">${eu.acted ? '已行动' : '可行动'}</em><em class="dt-chip army">${OWN[eu.owner]}</em></span></div>
+      <div class="dt-head"><span class="dt-ico">${GLYPH[eu.type]}</span><b class="dt-name">${d.fullName || d.name}</b><span class="dt-chips"><em class="dt-chip ${eu.acted ? '' : 'go'}" data-k="status">${t(eu.acted ? 'chip.acted' : 'chip.ready')}</em><em class="dt-chip army">${OWN[eu.owner]}</em></span></div>
       <div class="dt-mid"><div class="dt-view" data-w="unit"></div><div class="dt-col">
-        <div class="dt-hp" data-k="hp"><span>血量</span><span class="dt-bar">${Array.from({length: 10}, (_, i) => `<s><i style="width:${Math.max(0, Math.min(1, (eu.hp - i * 10) / 10)) * 100}%;background:${col}"></i></s>`).join('')}</span><b>${eu.hp}/100</b></div>
-        <div class="dt-grid">${kv('机动', 'move', d.move)}${kv('视野', 'vision', d.vision)}${kv('射程', 'range', rg)}${kv('移动', 'mt', MT_NAME[d.mt])}${kv('燃料', 'fuel', d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel)}${kv('弹药', 'ammo', d.ammo ? eu.ammo + '/' + d.ammo : '—')}</div>
+        <div class="dt-hp" data-k="hp"><span>${t('card.hp')}</span><span class="dt-bar">${Array.from({length: 10}, (_, i) => `<s><i style="width:${Math.max(0, Math.min(1, (eu.hp - i * 10) / 10)) * 100}%;background:${col}"></i></s>`).join('')}</span><b>${eu.hp}/100</b></div>
+        <div class="dt-grid">${kv(t('kv.move'), 'move', d.move)}${kv(t('kv.vision'), 'vision', d.vision)}${kv(t('kv.range'), 'range', rg)}${kv(t('kv.mt'), 'mt', MT_NAME[d.mt])}${kv(t('card.fuel'), 'fuel', d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel)}${kv(t('card.ammo'), 'ammo', d.ammo ? eu.ammo + '/' + d.ammo : '—')}</div>
       </div></div>
       <div class="dt-wps">${weaponHtml(eu.type, d.ammo ? eu.ammo : undefined)}</div>
       <div class="dt-exp"></div>
@@ -44,20 +44,20 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
   function terrainBox(tid, owner, eu) {
     const T = TERRAINS[tid], cfg = game.config || {};
     const army = T.property && owner !== undefined ? (owner === 0 ? 'army-b' : 'army-r') : '';
-    const chip = T.property ? `<em class="dt-chip ${army ? 'army' : ''}" data-k="owner">${owner === undefined ? '中立' : OWN[owner]}</em>` : '';
+    const chip = T.property ? `<em class="dt-chip ${army ? 'army' : ''}" data-k="owner">${owner === undefined ? t('card.neutral') : OWN[owner]}</em>` : '';
     const mine = eu ? UNITS[eu.type].mt : null;
     const cost = MTS.map(m => { const c = T.cost[m]; return `<div class="dt-c ${m === mine ? 'me' : ''}" data-k="cost:${m}"><span>${MT_NAME[m]}</span><b class="${c === null ? 'no' : ''}">${c === null ? '✕' : c}</b></div>`; }).join('');
     const extra = [];
-    if (T.property) { extra.push(kv('收入', 'income', T.income + '/回合')); extra.push(kv(eu && eu.cap > 0 ? '占领进度' : '占领点数', 'capture', eu && eu.cap > 0 ? eu.cap + '/' + T.capture : T.capture)); }
+    if (T.property) { extra.push(kv(t('kv.income'), 'income', t('kv.perTurn', {n: T.income}))); extra.push(kv(t(eu && eu.cap > 0 ? 'kv.capProgress' : 'kv.capPoints'), 'capture', eu && eu.cap > 0 ? eu.cap + '/' + T.capture : T.capture)); }
     return `<div class="dt-box ${army}" data-box="terrain">
       <div class="dt-head"><b class="dt-name">${T.name}</b><span class="dt-chips">${chip}</span></div>
       <div class="dt-mid"><div class="dt-view" data-w="terrain"></div><div class="dt-col">
         <div class="dt-note">${terrainNote(tid)}</div>
-        <div class="dt-def" data-k="stars"><span>防御</span><span class="dt-stars">${T.stars ? stars(T.stars) : '<span class="dt-none">无</span>'}</span></div>
+        <div class="dt-def" data-k="stars"><span>${t('card.def')}</span><span class="dt-stars">${T.stars ? stars(T.stars) : `<span class="dt-none">${t('wp.none')}</span>`}</span></div>
       </div></div>
       <div class="dt-cost">${cost}</div>
       ${extra.length ? `<div class="dt-grid">${extra.join('')}</div>` : ''}
-      ${T.hazard && cfg.swampDamage ? '<div class="dt-warn" data-k="hazard">回合结束时，站在这里的陆军会掉血 ▸</div>' : ''}
+      ${T.hazard && cfg.swampDamage ? `<div class="dt-warn" data-k="hazard">${t('dt.hazard')}</div>` : ''}
       <div class="dt-exp"></div>
     </div>`;
   }
@@ -83,7 +83,7 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
     const eu = game.units.find(u => u.x === ex && u.y === ey) || null;
     cell = {c, ex, ey, eu, tid};
     el = document.createElement('div'); el.className = 'det';
-    el.innerHTML = `<div class="det-dim"></div><div class="det-row">${eu ? unitBox(eu) : ''}${terrainBox(tid, game.owners[ex + ',' + ey], eu)}</div><div class="det-hint">点一项看说明　·　拖动小窗转模型　·　点空白处关闭</div>`;
+    el.innerHTML = `<div class="det-dim"></div><div class="det-row">${eu ? unitBox(eu) : ''}${terrainBox(tid, game.owners[ex + ',' + ey], eu)}</div><div class="det-hint">${t('dt.hint')}</div>`;
     el.querySelectorAll('.dt-box').forEach(b => explain(b, null));
     // 关闭只认「在面板上按下 + 抬起」：长按时手指还没抬起，抬起产生的那次 click 不能把刚打开的面板关掉
     el.addEventListener('pointerdown', () => { sawDown = true; });
@@ -99,7 +99,7 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
       const kind = v.dataset.w === 'unit' ? 'unit' : 'tile', studio = studioOf(kind), w = {el: v, kind, studio, yaw: studio.defaults.yaw, pitch: studio.defaults.pitch, drag: null};
       if (kind === 'unit') {
         const m = getUnitModel(THREE, cell.eu.type, cell.eu.owner === 0 ? 'blue' : 'red');
-        if (m && m !== 'error') studio.setContent(m.holder); else { studio.setContent(null); v.innerHTML = `<div class="dt-nomodel">${m === 'error' ? '模型加载失败' : '尚未建模'}</div>`; }
+        if (m && m !== 'error') studio.setContent(m.holder); else { studio.setContent(null); v.innerHTML = `<div class="dt-nomodel">${t(m === 'error' ? 'model.error' : 'model.none')}</div>`; }
       } else studio.setContent(getTileBlock(cell.tid, game.owners[cell.ex + ',' + cell.ey]));
       v.addEventListener('pointerdown', e => { w.drag = {x: e.clientX, y: e.clientY, yaw: w.yaw, pitch: w.pitch, id: e.pointerId}; v.setPointerCapture(e.pointerId); e.stopPropagation(); sawDown = false; });
       v.addEventListener('pointermove', e => {

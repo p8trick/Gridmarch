@@ -356,4 +356,9 @@
 #battle[data-lang=en] .ars-card .nm{font-size:13px;letter-spacing:-.01em}
 #battle[data-lang=en] .ars-card .ico,#battle[data-lang=en] .dt-ico{font-size:14px;letter-spacing:-.02em}
 #loading[data-lang=en] .ld-title{letter-spacing:.14em;text-indent:.14em}
+/* 1.05 英文：武器块的标签（原来竖排两个汉字）改横排；详细面板数值行留出间隙 */
+#battle[data-lang=en] .ars-wt{writing-mode:horizontal-tb;text-orientation:mixed;width:auto;font-size:11px;letter-spacing:0;align-self:flex-end;padding:0 2px 2px}
+#battle[data-lang=en] .dt-kv{gap:8px;font-size:11px}
+#battle[data-lang=en] .dt-wps .ars-wr{min-height:30px}
 
+#battle[data-lang=en] .ars-hint{font-size:9.5px;letter-spacing:-.01em}

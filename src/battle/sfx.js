@@ -126,7 +126,7 @@ function kindOf(t) {
   if (b) {
     if (b.closest('[disabled],[aria-disabled=true],.off')) return null;   // 灰着的：不出声
     const act = b.dataset.act;
-    if (b.classList.contains('arm') && t.closest('.pr')) return [bank, /不足|暂不可|未建模/.test(t.closest('.pr').textContent) ? 'deny' : 'ok'];   // 兵工厂：点已选中的卡的价格签 = 买
+    if (b.classList.contains('arm') && t.closest('.pr')) return [bank, (b.classList.contains('poor') || b.classList.contains('lock')) ? 'deny' : 'ok'];   // 兵工厂：点已选中的卡的价格签 = 买（1.05 起按卡片的 poor / lock class 判断，不再靠中文文字）
     if (b.classList.contains('close') || b.id === 'closeSettings' || BACK_ACTS.has(act)) return [bank, 'back'];
     if (bank === 'game' && act === 'wait') return [bank, 'wait'];
     if (bank === 'game' && act === 'attack') return [bank, 'arm'];

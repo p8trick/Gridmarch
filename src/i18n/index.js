@@ -29,3 +29,6 @@ export function applyI18n(root) {
 
 // 队伍名：OWN[0] 蓝军 / OWN[1] 红军（随语言；原来 main / detail / intel / result 各写了一份）
 export const OWN = {}; Object.defineProperty(OWN, 0, {get: () => t('team.blue'), enumerable: true}); Object.defineProperty(OWN, 1, {get: () => t('team.red'), enumerable: true});
+
+// 查表对象：obj[id] 每次读取都按当前语言取 t(prefix + id)（原来写死中文的 {id: '文字'} 表直接换成它，调用处不用改）
+export const lazyTable = (prefix, ids) => { const o = {}; for (const id of ids) Object.defineProperty(o, id, {get: () => t(prefix + id), enumerable: true}); return o; };
