@@ -4,7 +4,7 @@ import {TERRAINS} from '../rules/data.js';
 // 战场情报（0.93）：长按右上角「找未行动单位」键（约 0.45 秒）打开；单个大玩具盒，风格同胜利结算的对照表（样式 .res-* 复用，外壳是 .res.int）。
 // 蓝红对照：现存单位 / 已生产 / 损失 / 据点（带各类据点数）/ 每回合收入 / 军费（现有资金）；底部一条「中立据点」（总数 + 各类）。
 // 数据来自规则引擎（engine.summaryOf + incomeOf）。打开时取一次快照，面板打开期间战场不会变。点盒子外面的暗处关闭（长按时手指还没抬起，抬起的那次点按不算）。
-const OWN = ['蓝军', '红军'];
+import {OWN} from '../i18n/index.js';
 const ORDER = ['hq', 'city_large', 'city_small', 'factory', 'airport', 'port'];
 const SHORT = {hq: '总部', city_large: '大城', city_small: '小城', factory: '兵工厂', airport: '机场', port: '船坞'};
 const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');

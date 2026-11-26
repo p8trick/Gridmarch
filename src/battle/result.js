@@ -3,7 +3,7 @@ import {summaryOf} from '../rules/engine.js';
 // 胜利结算面板（0.91，方案 A「双盒战报」+ C 的「看战场」收成底部细横幅）：
 // 左盒 = 胜利牌（胜方颜色条 + 盖章「胜利」+ 第 N 天 + 怎么赢的 + 三个按钮），右盒 = 蓝红对照表（条形 = 数量对比，更占优的一边数字放大）。
 // 「看战场」= 面板收起，底部留一条细横幅（胜方 · 第 N 天 · 击毁 / 损失 / 据点），点一下重新展开。数据来自规则引擎的统计表（engine.summaryOf），战场情报以后共用。
-const OWN = ['蓝军', '红军'];
+import {OWN} from '../i18n/index.js';
 const HOW = {hq: '占领了敌军总部', wipe: '歼灭了敌军全部部队', draw: '双方同时全灭'};
 const ROWS = [   // better：'hi' 越大越占优、'lo' 越小越占优、null 只比条形不加粗
   ['built', '已生产', null], ['lost', '损失', 'lo'], ['killed', '击毁', 'hi'], ['props', '据点', 'hi'], ['income', '累计收入', 'hi'], ['spent', '累计军费', null],

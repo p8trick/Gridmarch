@@ -16,7 +16,7 @@ import {getTileBlock} from './tile-block.js';
 //   点一项（血量 / 机动 / 主炮 / 防御星 / 某类移动消耗…）→ 该项高亮，盒子底部说明栏换成这一项的解释（文字全在 explain.js）；再点一次取消。
 //   点盒子外面的暗处关掉面板（没有关闭按钮）；点盒子里的空白处不关。
 // 数据全部来自规则引擎（data.js + game 状态），打开时取一次快照（面板打开期间战场不会变）。
-const OWN = ['蓝军', '红军'];
+import {OWN} from '../i18n/index.js';
 const MTS = ['foot', 'mech', 'tread', 'wheel'];
 
 export function createDetail({THREE, renderer, host, stage, game, toEngine, onOpen, onClose}) {

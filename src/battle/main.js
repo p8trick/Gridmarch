@@ -10,7 +10,7 @@ import {createResult} from './result.js';
 import {createIntel} from './intel.js';
 import {sfx, weaponSound, hitSound, deathSound} from './sfx.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
-import {t, getLang, applyI18n} from '../i18n/index.js';
+import {t as tr, getLang, applyI18n, OWN} from '../i18n/index.js';   // 别名 tr：main.js 里好几处局部变量就叫 t（回合方），不能盖住翻译函数
 import {createGameFromPreset, specOfUnit, TEAM_OF} from '../game/engine-map.js';
 import {serializeGame, restoreGame} from '../rules/save.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -28,13 +28,13 @@ export function unmountBattle() { if (current) { current.destroy(); current = nu
 // host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit, loading（home.js 已经开始显示的进度条，没有就自己建）}
 export async function mountBattle(host, stage, opts = {}) {
   unmountBattle();
-  const ld = opts.loading || createLoading(t('loading.building'));   // 0.63：进度条；换图时没有现成的，自己建（模块已下载好，从 0 开始只剩生成这一段）
+  const ld = opts.loading || createLoading(tr('loading.building'));   // 0.63：进度条；换图时没有现成的，自己建（模块已下载好，从 0 开始只剩生成这一段）
   let alive = true, raf = 0, wheelTimer = 0, renderer = null, world = null;
   const handle = {destroy};
   current = handle;
   host.innerHTML = `<div id="ui">
   <div id="hudL" class="hud"><span id="hDay"></span><i class="sep"></i><span class="team"><i id="hDot" class="dot b"></i><span id="hTeam"></span></span><i class="sep"></i><span class="coin"></span><b id="hFunds"></b><span class="endchip" aria-hidden="true"></span></div>
-  <div id="hudR"><button class="gbtn" id="bNext" aria-label="找下一个还没行动的单位"><span>${NEXT_SVG}<b class="cnt" id="nCnt"></b></span></button><button class="gbtn" id="bRot" aria-label="旋转画面"><span>${ROT_SVG}</span></button><button class="gbtn" id="bMenu" aria-label="菜单"><span class="burger"><i></i><i></i><i></i></span></button></div>
+  <div id="hudR"><button class="gbtn" id="bNext" aria-label="找下一个还没行动的单位" data-i18n-aria="hud.aria.next"><span>${NEXT_SVG}<b class="cnt" id="nCnt"></b></span></button><button class="gbtn" id="bRot" aria-label="旋转画面" data-i18n-aria="hud.aria.rotate"><span>${ROT_SVG}</span></button><button class="gbtn" id="bMenu" aria-label="菜单" data-i18n-aria="hud.aria.menu"><span class="burger"><i></i><i></i><i></i></span></button></div>
   <div id="dp" class="dpanel r" hidden><div id="uCard" class="dcard" hidden></div><div id="tCard" class="dcard"></div></div>
   <div id="dbg"></div>
 </div>
@@ -65,17 +65,17 @@ export async function mountBattle(host, stage, opts = {}) {
     <li><button class="item" data-act="back"><span class="txt"><span class="main" data-i18n="menu.back">返回</span></span></button></li>
   </ul>
 </div></div>
-<div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
+<div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel" data-i18n="end.cancel">取消</button><button class="sbtn gold" data-act="ok" data-i18n="end.ok">结束回合</button></div></div></div>
 <div id="banner" class="banner" hidden><div class="bb"><div class="bs"><i class="bshine"></i><i class="bline"></i></div><span class="bday" id="bDay"></span><span class="bteam"><i class="dot b" id="bDot"></i><span id="bTeam"></span></span></div></div>
 <div id="err"></div>
-<div id="abar" class="abar" hidden><button class="abtn" data-act="join" hidden><span>合流</span></button><button class="abtn" data-act="capture" hidden><span>占领</span></button><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
+<div id="abar" class="abar" hidden><button class="abtn" data-act="join" hidden><span data-i18n="act.join">合流</span></button><button class="abtn" data-act="capture" hidden><span data-i18n="act.capture">占领</span></button><button class="abtn" data-act="attack" hidden><span data-i18n="act.attack">攻击</span></button><button class="abtn" data-act="wait"><span data-i18n="act.wait">待命</span></button><span class="ahint u" data-i18n="act.hintUndo">点空白处撤销</span><span class="ahint t" data-i18n="act.hintTarget">点红格攻击 · 点空白处返回</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
-ld.attach(host).label(t('loading.building'));
+ld.attach(host).label(tr('loading.building'));
   const $ = id => host.querySelector('#' + id);
   applyI18n(host); host.dataset.lang = getLang();   // 1.03：静态模板里的 data-i18n 在这里按当前语言替换；dataset.lang 给 CSS 做英文排版微调用
   const err = $('err');
-  const showErr = m => { err.style.display = 'block'; err.textContent = '出错：' + m; };
+  const showErr = m => { err.style.display = 'block'; err.textContent = tr('err.prefix') + m; };
   const onErr = e => showErr(e.message || e.error), onRej = e => showErr(e.reason && e.reason.message || e.reason);
   addEventListener('error', onErr); addEventListener('unhandledrejection', onRej);
 
@@ -223,7 +223,7 @@ function showForecast(list) {
   for (const t of list) {
     const f = forecast(game, acting.id, t.id); if (!f) continue;
     const el = document.createElement('div'); el.className = 'fc' + (f.kill ? ' kill' : '');
-    el.innerHTML = '<b>' + (f.kill ? '击破' : '-' + fmtHp(f.damage)) + '</b>' + (f.counter > 0 ? '<i' + (f.counterKill ? ' class="die"' : '') + '>反击 -' + fmtHp(f.counter) + (f.counterKill ? ' · 会被反杀' : '') + '</i>' : '');
+    el.innerHTML = '<b>' + (f.kill ? tr('fc.kill') : '-' + fmtHp(f.damage)) + '</b>' + (f.counter > 0 ? '<i' + (f.counterKill ? ' class="die"' : '') + '>' + tr('fc.counter', {n: fmtHp(f.counter)}) + (f.counterKill ? tr('fc.counterKill') : '') + '</i>' : '');
     host.appendChild(el); fcEls.push({el, id: t.id});
   }
   fcPlace();
@@ -239,7 +239,7 @@ function popup(id, text, cls = '') {   // 单位头顶飘一个伤害数字（�
 function showWinner() {   // 胜负已分：先放换回合横幅样式的「胜利」，败方压灰 + 镜头平移到被占的总部 + 缓缓绕场，1.5 秒后弹出结算面板（0.91）
   const w = game.winner; if (w === null || result.exists) return;
   dropSave();   // 0.99 这一局结束了：清掉自己的存档（主页「继续」不再指向它）
-  const b = $('banner'); $('bDay').textContent = w < 0 ? '同归于尽' : '胜利'; $('bTeam').textContent = w < 0 ? '双方全灭' : OWN[w] + '获胜';
+  const b = $('banner'); $('bDay').textContent = tr(w < 0 ? 'banner.mutual' : 'banner.win'); $('bTeam').textContent = w < 0 ? tr('banner.allDead') : tr('banner.winner', {team: OWN[w]});
   $('bDot').className = 'dot ' + (w === 1 ? 'r' : 'b'); b.className = 'banner ' + (w === 1 ? 'r' : 'b'); b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
   syncActed();
@@ -269,7 +269,7 @@ function doCapture() {
   hideBar();
   const team = TEAM[u.owner], from = prev === undefined ? 'neutral' : TEAM[prev];
   const fin = () => { acting = null; syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner(); };
-  popup(id, r.done ? '占领成功！' : '占领 ' + r.cap + '/' + r.need, 'cap ' + (u.owner === 0 ? 'b' : 'r'));
+  popup(id, r.done ? tr('pop.captured') : tr('pop.capture', {cur: r.cap, need: r.need}), 'cap ' + (u.owner === 0 ? 'b' : 'r'));
   if (combatOn) world.playCapture(cell, {team, from, f0: (r.cap - r.gain) / r.need, f1: r.done ? 1 : r.cap / r.need, need: r.need, done: r.done}, fin);
   else { if (r.done) world.setBuildingOwner(cell, team); fin(); }
 }
@@ -310,7 +310,7 @@ function handleTap(px, py) {
   if (world.busy() || econBusy) return;
   if (disbandMode) {   // 0.99 解散部队：点己方单位 → 确认；点别处 = 取消
     const c = selectAt(px, py), eu = c && unitAt(game, ...toEngine(c));
-    if (eu && eu.owner === game.turn) askConfirm(`解散${RULE_UNITS[eu.type].name}？`, '单位消失，不返还资金，不可撤销', '解散', () => { endDisband(); doDisband(eu.id); });
+    if (eu && eu.owner === game.turn) askConfirm(tr('confirm.disband.title', {name: RULE_UNITS[eu.type].name}), tr('confirm.disband.body'), tr('confirm.disband.ok'), () => { endDisband(); doDisband(eu.id); });
     else { sfx.play('back', 'game'); endDisband(); }
     return;
   }
@@ -325,7 +325,7 @@ function handleTap(px, py) {
     if (sel && reach.has(ex + ',' + ey)) { sfx.play('go', 'game'); startMove(ex, ey); infoUpdate(); hud(); mark(); return; }
     const wasSel = !!sel; clearSel();   // 0.95 棋盘点按的游戏音效：选单位 / 点格 / 取消选中 / 走 / 撤销 / 开兵工厂（和菜单的声音是两套，见 sfx.js）
     if (eu && eu.owner === game.turn && !eu.moved && !eu.acted && game.winner === null) { pickUnit(eu); sfx.play('select', 'game'); }
-    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) { toast('已达到单位上限（' + game.config.maxUnits + '）'); sfx.play('deny', 'game'); } else { sfx.play('gear', 'game'); ars.open(c, game.turn === 0 ? 'blue' : 'red'); } }   // 0.98 兵工厂打开 = 齿轮机械声
+    else if (game.terrain[ey][ex] === 'factory' && game.owners[ex + ',' + ey] === game.turn) { if (atUnitCap(game)) { toast(tr('toast.unitCap', {n: game.config.maxUnits})); sfx.play('deny', 'game'); } else { sfx.play('gear', 'game'); ars.open(c, game.turn === 0 ? 'blue' : 'red'); } }   // 0.98 兵工厂打开 = 齿轮机械声
     else sfx.play(wasSel ? 'back' : 'cell', 'game');   // 0.88：满员不开生产界面，直接提示
   } else { if (sel) sfx.play('back', 'game'); clearSel(); }
   infoUpdate(); hud(); mark();
@@ -339,7 +339,6 @@ function handleLong(px, py) {   // 长按（0.60）：同样选中这一格，�
 
 // ── 详细信息面板（0.57）：点格子后，面板出现在光圈所在位置的【另一侧】（光圈在左半屏 → 面板在右下，反之亦然；中间 46%–54% 不切换，免得抖）。
 //    单位卡（名字 / 血量 / 燃料 / 弹药）在上，地形卡（名字 / 防御星 / 归属）在下；数据全部来自引擎（rules/engine + data）。 ──
-const OWN = ['蓝军', '红军'];
 let infoSide = 'r';
 function infoUpdate() {
   const dp = $('dp');
@@ -349,11 +348,11 @@ function infoUpdate() {
   if (eu) {
     const d = RULE_UNITS[eu.type], hp = dispHp(eu.hp);
     $('uCard').innerHTML = `<h3><i class="dot ${eu.owner === 0 ? 'b' : 'r'}"></i>${d.name}</h3>` +
-      `<div class="drow"><span>血量</span><span class="hpbar"><i style="width:${eu.hp}%;background:${hp >= 7 ? '#6ee06e' : hp >= 4 ? '#ffd45a' : '#ff6b5e'}"></i></span><b>${eu.hp}/100</b></div>` +
-      `<div class="drow"><span>燃料</span><b>${d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel}</b></div>` +
-      `<div class="drow"><span>弹药</span><b>${d.ammo ? eu.ammo + '/' + d.ammo : '—'}</b></div>`;
+      `<div class="drow"><span>${tr('card.hp')}</span><span class="hpbar"><i style="width:${eu.hp}%;background:${hp >= 7 ? '#6ee06e' : hp >= 4 ? '#ffd45a' : '#ff6b5e'}"></i></span><b>${eu.hp}/100</b></div>` +
+      `<div class="drow"><span>${tr('card.fuel')}</span><b>${d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel}</b></div>` +
+      `<div class="drow"><span>${tr('card.ammo')}</span><b>${d.ammo ? eu.ammo + '/' + d.ammo : '—'}</b></div>`;
   }
-  $('tCard').innerHTML = `<h3>${T.name}</h3><div class="drow"><span>防御</span><b class="stars">${T.stars ? '★'.repeat(T.stars) : '—'}</b></div>` + (T.property ? `<div class="drow"><span>归属</span><b>${o === undefined ? '中立' : OWN[o]}</b></div>` + (eu && eu.cap > 0 ? `<div class="drow"><span>占领</span><b>${eu.cap}/${T.capture}</b></div>` : '') : '');
+  $('tCard').innerHTML = `<h3>${T.name}</h3><div class="drow"><span>${tr('card.def')}</span><b class="stars">${T.stars ? '★'.repeat(T.stars) : '—'}</b></div>` + (T.property ? `<div class="drow"><span>${tr('card.owner')}</span><b>${o === undefined ? tr('card.neutral') : OWN[o]}</b></div>` + (eu && eu.cap > 0 ? `<div class="drow"><span>${tr('card.capture')}</span><b>${eu.cap}/${T.capture}</b></div>` : '') : '');
   dp.hidden = false; infoPlace();
 }
 function infoPlace() {   // 相机移动 / 旋转后光圈在屏幕上的位置会变，面板跟着换边
@@ -384,7 +383,7 @@ function hideZoom() {
 }
 function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 起战场上不再有左下角说明面板；点格子的详细信息面板另行设计，describe() 先留着）
   const t = game.turn, shown = econShown !== null ? econShown : game.funds[t], idle = game.winner === null ? game.units.filter(u => u.owner === t && !u.acted).length : 0, sig = game.day + '|' + t + '|' + shown + '|' + idle;
-  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = `第 ${game.day} 天`; $('hTeam').textContent = t === 0 ? '蓝军' : '红军'; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; $('nCnt').textContent = idle > 99 ? '99' : (idle || ''); $('nCnt').classList.toggle('two', idle > 9); $('bNext').classList.toggle('off', !idle); }
+  if (sig !== hudSig) { hudSig = sig; $('hDay').textContent = tr('hud.day', {n: game.day}); $('hTeam').textContent = OWN[t]; $('hDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); $('hFunds').textContent = shown; $('nCnt').textContent = idle > 99 ? '99' : (idle || ''); $('nCnt').classList.toggle('two', idle > 9); $('bNext').classList.toggle('off', !idle); }
   // 0.69：两档提醒。① 本方单位全部行动完 = 状态条脉冲（可以结束回合了，但可能还想造兵）；② 脉冲的同时再也没有有效操作了（没有能造兵的兵工厂：都造过了 / 被单位占着 / 钱不够最便宜的单位）= 才自动弹出结束确认。
   const mine = game.units.filter(u => u.owner === game.turn), ready = game.winner === null && mine.every(u => u.acted), stuck = ready && !canProduce(game), pulse = ready && mine.length > 0;   // 0.86：开局没有单位时不脉冲（还没东西可「行动完」），但钱不够造兵 = 无事可做，照样弹确认
   if (pulse !== hudReady) { hudReady = pulse; $('hudL').classList.toggle('ready', pulse); }
@@ -401,13 +400,13 @@ function hud() {   // 左上角：第 N 天 · 当前回合方 · 金币（0.55 
 let cfmAct = null;   // 0.99 通用确认框（复用结束回合的那个）：askConfirm 设置它，点「确定」时执行；openEnd 清掉它
 function askConfirm(title, note, okText, fn) { $('eTitle').textContent = title; const n = $('eNote'); n.hidden = !note; n.textContent = note || ''; $('endm').querySelector('[data-act=ok]').textContent = okText; cfmAct = fn; $('endm').hidden = false; }
 function openEnd() {
-  cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = '结束回合';
+  cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = tr('end.ok');
   const t = game.turn, f = [...Object.keys(game.owners)].filter(k => game.owners[k] === t && !game.built.has(k)).filter(k => { const [x, y] = k.split(',').map(Number); return game.terrain[y][x] === 'factory' && !unitAt(game, x, y); }).length;
-  $('eTitle').textContent = `结束第 ${game.day} 天 · ${OWN[t]} 的回合？`;
-  const note = $('eNote'); note.hidden = !(f && game.funds[t] >= 1000); note.textContent = `还有 ${f} 座兵工厂没生产`;   // 单位没行动这一项，等移动 / 攻击接入后再加
+  $('eTitle').textContent = tr('end.title', {n: game.day, team: OWN[t]});
+  const note = $('eNote'); note.hidden = !(f && game.funds[t] >= 1000); note.textContent = tr('end.note', {n: f});   // 单位没行动这一项，等移动 / 攻击接入后再加
   $('endm').hidden = false;
 }
-const closeEnd = () => { $('endm').hidden = true; cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = '结束回合'; };
+const closeEnd = () => { $('endm').hidden = true; cfmAct = null; $('endm').querySelector('[data-act=ok]').textContent = tr('end.ok'); };
 // 0.88 每一方记住自己上次的镜头位置：结束回合时存下结束方的镜头（正在「找单位」轮流时存轮流之前的位置），换边后镜头平滑移到新一方上次的位置；
 // 还没存过的一方（红军第一回合）去自己的总部附近。这样换边后不用再手动把镜头拖回自己阵营才好操作。
 const camMem = resumed && resume.camMem ? [resume.camMem[0] || null, resume.camMem[1] || null] : [null, null];
@@ -429,18 +428,18 @@ function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function dropSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && s.gid === gid) localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function saveAndHome() {   // 暂停菜单「返回主页」：先存档再退出（选中 / 走到一半的单位先退回原位）；分出胜负的局不存、顺手清掉自己的旧存档
   pause.hidden = true;
-  if (world.busy() || econBusy) { toast('动画进行中，稍后再试'); return; }
+  if (world.busy() || econBusy) { toast(tr('toast.busy')); return; }
   if (game.winner !== null) dropSave();
-  else { clearSel(); if (acting) undoMove(); clearAct(); if (!saveGame()) { toast('存档失败（存储空间不足？）'); return; } }
+  else { clearSel(); if (acting) undoMove(); clearAct(); if (!saveGame()) { toast(tr('toast.saveFail')); return; } }
   unmountBattle(); if (opts.onExit) opts.onExit();
 }
 let disbandMode = false;   // 解散部队：从暂停菜单「军务」进来，点一个己方单位 → 确认 → 解散；点空白取消
 function setHint(text) { let el = $('gmHint'); if (!el) { el = document.createElement('div'); el.id = 'gmHint'; $('hudL').parentNode.appendChild(el); } el.textContent = text || ''; el.hidden = !text; }
-function startDisband() { if (game.winner !== null) return; clearSel(); if (acting) undoMove(); clearAct(); disbandMode = true; setHint('解散部队：点一个己方单位 · 点空白处取消'); mark(); }
+function startDisband() { if (game.winner !== null) return; clearSel(); if (acting) undoMove(); clearAct(); disbandMode = true; setHint(tr('hint.disband')); mark(); }
 function endDisband() { disbandMode = false; setHint(''); clearSel(); mark(); }
 function doDisband(id) {
   const r = engineDisband(game, id); if (!r.ok) return;
-  sfx.play('poof', 'game'); world.removeUnit(id, combatOn); toast('已解散 ' + RULE_UNITS[r.unit.type].name);
+  sfx.play('poof', 'game'); world.removeUnit(id, combatOn); toast(tr('toast.disbanded', {name: RULE_UNITS[r.unit.type].name}));
   syncActed(); hud(); infoUpdate(); mark(); if (game.winner !== null) showWinner();
 }
 function doEndTurn() {
@@ -503,7 +502,7 @@ function playEconomy(r) {
 }
 function playBanner() {   // 换回合的大横幅：深蓝斜切横幅从左滑入、金色大字「第 N 天」缩放落下、扫光一闪、停一下再向右滑出；期间挡住触摸
   const b = $('banner'), t = game.turn;
-  $('bDay').textContent = `第 ${game.day} 天`; $('bTeam').textContent = OWN[t] + '行动'; $('bDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); b.className = 'banner ' + (t === 0 ? 'b' : 'r');
+  $('bDay').textContent = tr('hud.day', {n: game.day}); $('bTeam').textContent = tr('banner.turn', {team: OWN[t]}); $('bDot').className = 'dot ' + (t === 0 ? 'b' : 'r'); b.className = 'banner ' + (t === 0 ? 'b' : 'r');
   b.hidden = false; void b.offsetWidth; b.classList.add('play');
   clearTimeout(bannerT); bannerT = setTimeout(() => { b.hidden = true; b.classList.remove('play'); }, 1700);
 }
@@ -514,7 +513,7 @@ $('endm').addEventListener('click', e => {
   const fn = cfmAct; closeEnd(); if (b.dataset.act === 'ok') { if (fn) fn(); else doEndTurn(); }
 });
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
-$('pInfo').textContent = t('menu.mapSeed', {name: preset.name, seed});
+$('pInfo').textContent = tr('menu.mapSeed', {name: preset.name, seed});
 const pause = $('pause');
 // 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
 let nextFocus = 0, cycleHome = null, lastJump = null;   // lastJump：最近一次「找单位」镜头跳到的位置   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
@@ -547,7 +546,7 @@ let fpsOn = false; try { fpsOn = localStorage.getItem(FPS_KEY) === '1'; } catch 
 const fpsEl = $('fpsb'), fpsNum = fpsEl.firstElementChild;
 let fpsSum = 0, fpsN = 0, fpsPrev = 0, fpsT = 0, fpsLast = null, fpsChain = false;   // 采样：只统计「连续出帧」的相邻帧间隔；光圈 30 帧/秒是设计值，不计入
 function fpsRender() {
-  fpsEl.hidden = !fpsOn; $('pFpsSt').textContent = t(fpsOn ? 'menu.on' : 'menu.off'); $('pFpsSt').classList.toggle('on', fpsOn);
+  fpsEl.hidden = !fpsOn; $('pFpsSt').textContent = tr(fpsOn ? 'menu.on' : 'menu.off'); $('pFpsSt').classList.toggle('on', fpsOn);
   if (!fpsOn) return;
   const v = fpsLast, lv = v === null ? 'n' : v >= 50 ? 'g' : v >= 40 ? 'y' : v >= 30 ? 'o' : 'r';
   fpsNum.textContent = v === null ? '--' : Math.min(999, Math.round(v)); fpsEl.className = 'fpsb lv-' + lv + (fpsStale ? ' idle' : '');
@@ -562,15 +561,15 @@ function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算�
 // 作战动画（0.70）：开 = 攻击时单位转向目标、播放模型自带的开火动画、被打掉的单位缩小消失；关 = 全部跳过，只飘伤害数字（存 localStorage gridmarch.combatAnim）
 const CANIM_KEY = 'gridmarch.combatAnim';
 let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
-function canimRender() { $('pCombatSt').textContent = t(combatOn ? 'menu.on' : 'menu.off'); $('pCombatSt').classList.toggle('on', combatOn); }
+function canimRender() { $('pCombatSt').textContent = tr(combatOn ? 'menu.on' : 'menu.off'); $('pCombatSt').classList.toggle('on', combatOn); }
 canimRender();
 // 血量角标左移（0.75；0.76 改成 0 / 25 / 40 / 50%，默认 40%——再大就贴到脚上了）：轮换，存 localStorage gridmarch.hpTuck；视距超过 9 格时角标按 视距/9 放大，屏幕上保持 9 格时的大小
 const TUCK_KEY = 'gridmarch.hpTuck', TUCKS = [0, 25, 40, 50];
 let tuckPct = 40; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.includes(v) && localStorage.getItem(TUCK_KEY) !== null) tuckPct = v; } catch (e) {}
 const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
 tuckRender();
-const sfxRender = () => { $('pSfxSt').textContent = t(sfx.enabled ? 'menu.on' : 'menu.off'); $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
-function setPage(name) { $('pMain').hidden = name !== 'main'; $('pQual').hidden = name !== 'quality'; $('pCmd').hidden = name !== 'cmd'; $('pTitle').textContent = t({main: 'menu.pause', quality: 'menu.quality', cmd: 'menu.command'}[name]); $('pInfo').hidden = name !== 'main'; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
+const sfxRender = () => { $('pSfxSt').textContent = tr(sfx.enabled ? 'menu.on' : 'menu.off'); $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
+function setPage(name) { $('pMain').hidden = name !== 'main'; $('pQual').hidden = name !== 'quality'; $('pCmd').hidden = name !== 'cmd'; $('pTitle').textContent = tr({main: 'menu.pause', quality: 'menu.quality', cmd: 'menu.command'}[name]); $('pInfo').hidden = name !== 'main'; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage('main'); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
@@ -583,13 +582,13 @@ pause.addEventListener('click', e => {
   else if (a === 'cmd') setPage('cmd');
   else if (a === 'back') setPage('main');
   else if (a === 'disband') { pause.hidden = true; startDisband(); }
-  else if (a === 'surrender') { pause.hidden = true; askConfirm('投降 / 撤退？', '不存档，这一局作废，直接回到主页', '投降撤退', () => { clearSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }); }
+  else if (a === 'surrender') { pause.hidden = true; askConfirm(tr('confirm.surrender.title'), tr('confirm.surrender.body'), tr('confirm.surrender.ok'), () => { clearSave(); unmountBattle(); if (opts.onExit) opts.onExit(); }); }
   else if (a === 'canim') { combatOn = !combatOn; try { localStorage.setItem(CANIM_KEY, combatOn ? '1' : '0'); } catch (e) {} canimRender(); }
   else if (a === 'hptuck') { tuckPct = TUCKS[(TUCKS.indexOf(tuckPct) + 1) % TUCKS.length]; try { localStorage.setItem(TUCK_KEY, String(tuckPct)); } catch (e) {} tuckRender(); }
   else if (a === 'fps') { fpsOn = !fpsOn; try { localStorage.setItem(FPS_KEY, fpsOn ? '1' : '0'); } catch (e) {} fpsChain = false; fpsRender(); }
   else if (a === 'sfx') { sfx.setEnabled(!sfx.enabled); sfxRender(); }   // 0.94 界面音效开关（同主页设置里的「音效」）
   else if (a === 'side') stage.toggleSide();
-  else if (a === 'reroll') { pause.hidden = true; askConfirm('换图重开？', '当前这一局不会保存', '换图', () => { dropSave(); mountBattle(host, stage, {...opts, army, resume: null, loading: null, seed: 1 + Math.floor(Math.random() * 999999)}); }); }   // 换图：原地重建（不刷新页面、不产生历史记录）
+  else if (a === 'reroll') { pause.hidden = true; askConfirm(tr('confirm.reroll.title'), tr('confirm.reroll.body'), tr('confirm.reroll.ok'), () => { dropSave(); mountBattle(host, stage, {...opts, army, resume: null, loading: null, seed: 1 + Math.floor(Math.random() * 999999)}); }); }   // 换图：原地重建（不刷新页面、不产生历史记录）
   else if (a === 'home') saveAndHome();
 });
 
@@ -662,7 +661,7 @@ if (resumed) {   // 0.99 继续存档：单位的行动 / 血量 / 占领标记�
   syncActed(); syncCaps();
   if (resume.cam) { cam.target.x = resume.cam.x; cam.target.z = resume.cam.z; if (typeof resume.cam.yaw === 'number') cam.yaw = resume.cam.yaw; }
 }
-if (resumeBad) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} setTimeout(() => toast('存档对应的地图已变化，无法继续，已开新局'), 600); }
+if (resumeBad) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} setTimeout(() => toast(tr('toast.resumeBad')), 600); }
 resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出

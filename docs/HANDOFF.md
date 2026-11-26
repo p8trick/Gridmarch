@@ -87,6 +87,7 @@ docs/  本文 ARCHITECTURE ART_PACKAGES HOME CHANGELOG manifests/ archive/      
 - 规则 / 存档层只存 id，名字由 getter 或 `t()` 在显示时取（见 `data.js` 的 `localize`）。新增单位 / 地形 / 风格时，记得同时加 `unit.*` / `terrain.*` / `style.*` 词条。
 - 主页（classic 脚本）和 `blur-tip.js` 有自己的小字典，暂未并入；迁移进度看 `check-i18n` 输出的「还剩约 N 处写死的中文」。
 - 单位名两套：`.name` 短名（列表 / 卡片，英文 ≤12 字符）、`.fullName` 全名（大标签 / 详细面板）；图标字用 `glyph.*`。静态 HTML 模板用 `data-i18n*` 属性 + `applyI18n(root)`。
-- 注意：`sfx.js` 里用中文关键词（不足 / 暂不可 / 未建模）判断提示音类型，迁移提示文字（toast）时要同步改成按词条键或错误类型判断，否则英文提示会没有音效。
+- 注意：`sfx.js` 第 129 行用中文关键词（不足 / 暂不可 / 未建模）判断兵工厂价格签的提示音，迁移兵工厂（1.05）时要改成按 class（`.poor` / `.lock`）判断，否则英文下「买不起」会发成功音。
+- `main.js` 里翻译函数叫 `tr`（别名），因为局部变量 `t` 很多；新文件里用 `t` 前先确认没有局部变量重名。
 - 中文界面不放英文小字；英文界面不放中文小字。
 

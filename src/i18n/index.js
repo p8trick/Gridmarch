@@ -26,3 +26,6 @@ export function applyI18n(root) {
   root.querySelectorAll('[data-i18n-html]').forEach(e => { e.innerHTML = t(e.dataset.i18nHtml); });
   root.querySelectorAll('[data-i18n-aria]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nAria)); });
 }
+
+// 队伍名：OWN[0] 蓝军 / OWN[1] 红军（随语言；原来 main / detail / intel / result 各写了一份）
+export const OWN = {}; Object.defineProperty(OWN, 0, {get: () => t('team.blue'), enumerable: true}); Object.defineProperty(OWN, 1, {get: () => t('team.red'), enumerable: true});
