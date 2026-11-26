@@ -350,3 +350,10 @@
 /* 解散部队提示条（0.99）：从暂停菜单「军务 → 解散部队」进来后一直挂着，点空白处取消 */
 #battle #gmHint{position:absolute;left:50%;top:72px;transform:translateX(-50%);z-index:9;pointer-events:none;padding:8px 18px;border-radius:12px;background:rgba(18,32,52,.92);border:2px solid #ffcf3f;color:#fff;font:800 15px/1.2 var(--font);letter-spacing:.04em;box-shadow:0 4px 0 rgba(0,0,0,.35)}
 #battle #gmHint[hidden]{display:none}
+
+/* 1.03 英文排版微调（#battle 上有 data-lang；进度页自己带 data-lang）：英文单位名比中文长，兵工厂左栏加宽 18px、名字小一号；图标字是两个字母，小一点 */
+#battle[data-lang=en] .ars-menu{width:262px}
+#battle[data-lang=en] .ars-card .nm{font-size:13px;letter-spacing:-.01em}
+#battle[data-lang=en] .ars-card .ico,#battle[data-lang=en] .dt-ico{font-size:14px;letter-spacing:-.02em}
+#loading[data-lang=en] .ld-title{letter-spacing:.14em;text-indent:.14em}
+

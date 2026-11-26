@@ -84,6 +84,7 @@ export const TERRAINS = {
 // 规则、存档里一直只用 id，不存名字；界面里原有的 .name 写法不用动。
 const localize = (table, group) => { for (const id of Object.keys(table)) Object.defineProperty(table[id], 'name', {get: () => t(group + '.' + id), enumerable: true, configurable: true}); };
 localize(STYLES, 'style'); localize(UNITS, 'unit'); localize(TERRAINS, 'terrain');
+for (const id of Object.keys(UNITS)) Object.defineProperty(UNITS[id], 'fullName', {get: () => t('unit.' + id + '.full'), enumerable: false, configurable: true});   // 全名：详细面板 / 兵工厂大标签用；列表和卡片用短名 .name
 
 export const TARGET_ORDER = ['inf', 'mech', 'recon', 'tank', 'mdtank', 'neotank', 'apc', 'arty', 'rocket', 'aa', 'missile'];
 const row = a => Object.fromEntries(TARGET_ORDER.map((t, i) => [t, a[i]]));

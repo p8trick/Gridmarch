@@ -10,6 +10,7 @@ import {createResult} from './result.js';
 import {createIntel} from './intel.js';
 import {sfx, weaponSound, hitSound, deathSound} from './sfx.js';
 import {createLoading, lastBuildMs, saveBuildMs} from './loading.js';
+import {t, getLang, applyI18n} from '../i18n/index.js';
 import {createGameFromPreset, specOfUnit, TEAM_OF} from '../game/engine-map.js';
 import {serializeGame, restoreGame} from '../rules/save.js';
 import {UNITS as RULE_UNITS, TERRAINS as RULE_TERRAINS} from '../rules/data.js';
@@ -27,7 +28,7 @@ export function unmountBattle() { if (current) { current.destroy(); current = nu
 // host：容纳战场的容器（#battle）；stage：共用的舞台；opts：{seed, debug, onExit, loading（home.js 已经开始显示的进度条，没有就自己建）}
 export async function mountBattle(host, stage, opts = {}) {
   unmountBattle();
-  const ld = opts.loading || createLoading('正在生成战场…');   // 0.63：进度条；换图时没有现成的，自己建（模块已下载好，从 0 开始只剩生成这一段）
+  const ld = opts.loading || createLoading(t('loading.building'));   // 0.63：进度条；换图时没有现成的，自己建（模块已下载好，从 0 开始只剩生成这一段）
   let alive = true, raf = 0, wheelTimer = 0, renderer = null, world = null;
   const handle = {destroy};
   current = handle;
@@ -38,30 +39,30 @@ export async function mountBattle(host, stage, opts = {}) {
   <div id="dbg"></div>
 </div>
 <div id="pause" class="pmask" hidden><div class="ppanel" role="dialog" aria-modal="true">
-  <header class="phead"><h2 id="pTitle">暂停</h2><em id="pInfo"></em></header>
+  <header class="phead"><h2 id="pTitle" data-i18n="menu.pause">暂停</h2><em id="pInfo"></em></header>
   <ul class="pmenu" id="pMain">
-    <li><button class="item" data-act="resume"><span class="txt"><span class="main">继续</span><span class="sub">RESUME</span></span></button></li>
-    <li><button class="item" data-act="quality"><span class="txt"><span class="main">画质</span><span class="sub">GRAPHICS</span></span></button></li>
-    <li><button class="item" data-act="sfx"><span class="txt"><span class="main">界面音效</span><span class="pst" id="pSfxSt">开</span></span></button></li>
-    <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边"><span class="txt"><span class="main">换边</span><span class="sub">SWAP SIDE</span></span></button></li>
-    <li><button class="item" data-act="cmd"><span class="txt"><span class="main">军务</span><span class="sub">COMMAND</span></span></button></li>
-    <li><button class="item" data-act="home"><span class="txt"><span class="main">返回主页</span><span class="sub">SAVE &amp; HOME</span></span></button></li>
+    <li><button class="item" data-act="resume"><span class="txt"><span class="main" data-i18n="menu.resume">继续</span></span></button></li>
+    <li><button class="item" data-act="quality"><span class="txt"><span class="main" data-i18n="menu.quality">画质</span></span></button></li>
+    <li><button class="item" data-act="sfx"><span class="txt"><span class="main" data-i18n="menu.sfx">界面音效</span><span class="pst" id="pSfxSt">开</span></span></button></li>
+    <li id="mSideLi" hidden><button class="item" id="bSide" data-act="side" aria-label="画面上下颠倒时点这里换边" data-i18n-aria="menu.sideAria"><span class="txt"><span class="main" data-i18n="menu.side">换边</span></span></button></li>
+    <li><button class="item" data-act="cmd"><span class="txt"><span class="main" data-i18n="menu.command">军务</span></span></button></li>
+    <li><button class="item" data-act="home"><span class="txt"><span class="main" data-i18n="menu.home">返回主页</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pCmd" hidden>
-    <li><button class="item" data-act="disband"><span class="txt"><span class="main">解散部队</span><span class="sub">DISBAND</span></span></button></li>
-    <li class="pnote">选一个己方单位解散：单位消失，不返还资金，不算战损。用来腾出单位上限</li>
-    <li><button class="item" data-act="surrender"><span class="txt"><span class="main">投降撤退</span><span class="sub">SURRENDER</span></span></button></li>
-    <li class="pnote">不存档，直接回主页（这一局作废）</li>
-    <li><button class="item" data-act="reroll"><span class="txt"><span class="main">换图重开</span><span class="sub">NEW MAP</span></span></button></li>
-    <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
+    <li><button class="item" data-act="disband"><span class="txt"><span class="main" data-i18n="menu.disband">解散部队</span></span></button></li>
+    <li class="pnote" data-i18n="menu.disbandNote">选一个己方单位解散：单位消失，不返还资金，不算战损。用来腾出单位上限</li>
+    <li><button class="item" data-act="surrender"><span class="txt"><span class="main" data-i18n="menu.surrender">投降撤退</span></span></button></li>
+    <li class="pnote" data-i18n="menu.surrenderNote">不存档，直接回主页（这一局作废）</li>
+    <li><button class="item" data-act="reroll"><span class="txt"><span class="main" data-i18n="menu.reroll">换图重开</span></span></button></li>
+    <li><button class="item" data-act="back"><span class="txt"><span class="main" data-i18n="menu.back">返回</span></span></button></li>
   </ul>
   <ul class="pmenu" id="pQual" hidden>
-    <li><button class="item" data-act="canim"><span class="txt"><span class="main">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
-    <li><button class="item" data-act="hptuck"><span class="txt"><span class="main">血量角标左移</span><span class="pst" id="pTuckSt">40%</span></span></button></li>
-    <li class="pnote">角标左边压进模型的量（占角标宽度）：0% = 角标整块在模型右下角外面，数值越大越贴向模型。点一下换下一档</li>
-    <li><button class="item" data-act="fps"><span class="txt"><span class="main">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
-    <li class="pnote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
-    <li><button class="item" data-act="back"><span class="txt"><span class="main">返回</span><span class="sub">BACK</span></span></button></li>
+    <li><button class="item" data-act="canim"><span class="txt"><span class="main" data-i18n="menu.combatAnim">作战动画</span><span class="pst" id="pCombatSt">开</span></span></button></li>
+    <li><button class="item" data-act="hptuck"><span class="txt"><span class="main" data-i18n="menu.hpTuck">血量角标左移</span><span class="pst" id="pTuckSt">40%</span></span></button></li>
+    <li class="pnote" data-i18n="menu.tuckNote">角标左边压进模型的量（占角标宽度）：0% = 角标整块在模型右下角外面，数值越大越贴向模型。点一下换下一档</li>
+    <li><button class="item" data-act="fps"><span class="txt"><span class="main" data-i18n="menu.fps">帧率显示</span><span class="pst" id="pFpsSt">关</span></span></button></li>
+    <li class="pnote" data-i18n-html="menu.fpsNote">右上角菜单按钮右侧的小标：<i class="g">绿 ≥50</i> <i class="y">黄 40–49</i> <i class="o">橙 30–39</i> <i class="r">红 &lt;30</i> <i class="n">灰 = 画面静止（按需渲染，不出帧）</i></li>
+    <li><button class="item" data-act="back"><span class="txt"><span class="main" data-i18n="menu.back">返回</span></span></button></li>
   </ul>
 </div></div>
 <div id="endm" class="emask" hidden><div class="endp" role="dialog"><div class="et" id="eTitle"></div><div class="ee" id="eNote" hidden></div><div class="eb"><button class="sbtn" data-act="cancel">取消</button><button class="sbtn gold" data-act="ok">结束回合</button></div></div></div>
@@ -70,8 +71,9 @@ export async function mountBattle(host, stage, opts = {}) {
 <div id="abar" class="abar" hidden><button class="abtn" data-act="join" hidden><span>合流</span></button><button class="abtn" data-act="capture" hidden><span>占领</span></button><button class="abtn" data-act="attack" hidden><span>攻击</span></button><button class="abtn" data-act="wait"><span>待命</span></button><span class="ahint u">点空白处撤销</span><span class="ahint t">点红格攻击 · 点空白处返回</span></div>
 <div id="fpsb" class="fpsb" hidden><b>--</b></div>
 `;
-ld.attach(host).label('正在生成战场…');
+ld.attach(host).label(t('loading.building'));
   const $ = id => host.querySelector('#' + id);
+  applyI18n(host); host.dataset.lang = getLang();   // 1.03：静态模板里的 data-i18n 在这里按当前语言替换；dataset.lang 给 CSS 做英文排版微调用
   const err = $('err');
   const showErr = m => { err.style.display = 'block'; err.textContent = '出错：' + m; };
   const onErr = e => showErr(e.message || e.error), onRej = e => showErr(e.reason && e.reason.message || e.reason);
@@ -512,7 +514,7 @@ $('endm').addEventListener('click', e => {
   const fn = cfmAct; closeEnd(); if (b.dataset.act === 'ok') { if (fn) fn(); else doEndTurn(); }
 });
 // 右上角两个图标按钮：旋转画面（顺时针 90°）+ 暂停菜单（继续 / 视距 / 换边 / 换图 / 返回主页，样式同主页菜单）
-$('pInfo').textContent = `${preset.name} · 种子 ${seed}`;
+$('pInfo').textContent = t('menu.mapSeed', {name: preset.name, seed});
 const pause = $('pause');
 // 0.86 找未行动单位：本回合自己「还没行动过」（没待命 / 没攻击 / 没占领）的单位，按编号轮流切换，镜头平滑平移到它身上；没有时按钮变灰
 let nextFocus = 0, cycleHome = null, lastJump = null;   // lastJump：最近一次「找单位」镜头跳到的位置   // cycleHome：开始轮流找单位那一刻的镜头位置；轮完一圈后再点一下，镜头回到这里（不用手动拖回自己阵营），再点才重新从第一个开始
@@ -545,7 +547,7 @@ let fpsOn = false; try { fpsOn = localStorage.getItem(FPS_KEY) === '1'; } catch 
 const fpsEl = $('fpsb'), fpsNum = fpsEl.firstElementChild;
 let fpsSum = 0, fpsN = 0, fpsPrev = 0, fpsT = 0, fpsLast = null, fpsChain = false;   // 采样：只统计「连续出帧」的相邻帧间隔；光圈 30 帧/秒是设计值，不计入
 function fpsRender() {
-  fpsEl.hidden = !fpsOn; $('pFpsSt').textContent = fpsOn ? '开' : '关'; $('pFpsSt').classList.toggle('on', fpsOn);
+  fpsEl.hidden = !fpsOn; $('pFpsSt').textContent = t(fpsOn ? 'menu.on' : 'menu.off'); $('pFpsSt').classList.toggle('on', fpsOn);
   if (!fpsOn) return;
   const v = fpsLast, lv = v === null ? 'n' : v >= 50 ? 'g' : v >= 40 ? 'y' : v >= 30 ? 'o' : 'r';
   fpsNum.textContent = v === null ? '--' : Math.min(999, Math.round(v)); fpsEl.className = 'fpsb lv-' + lv + (fpsStale ? ' idle' : '');
@@ -560,15 +562,15 @@ function fpsTick(now) {   // 每 0.5 秒结算一次：攒够 3 个样本就算�
 // 作战动画（0.70）：开 = 攻击时单位转向目标、播放模型自带的开火动画、被打掉的单位缩小消失；关 = 全部跳过，只飘伤害数字（存 localStorage gridmarch.combatAnim）
 const CANIM_KEY = 'gridmarch.combatAnim';
 let combatOn = true; try { combatOn = localStorage.getItem(CANIM_KEY) !== '0'; } catch (e) {}
-function canimRender() { $('pCombatSt').textContent = combatOn ? '开' : '关'; $('pCombatSt').classList.toggle('on', combatOn); }
+function canimRender() { $('pCombatSt').textContent = t(combatOn ? 'menu.on' : 'menu.off'); $('pCombatSt').classList.toggle('on', combatOn); }
 canimRender();
 // 血量角标左移（0.75；0.76 改成 0 / 25 / 40 / 50%，默认 40%——再大就贴到脚上了）：轮换，存 localStorage gridmarch.hpTuck；视距超过 9 格时角标按 视距/9 放大，屏幕上保持 9 格时的大小
 const TUCK_KEY = 'gridmarch.hpTuck', TUCKS = [0, 25, 40, 50];
 let tuckPct = 40; try { const v = +localStorage.getItem(TUCK_KEY); if (TUCKS.includes(v) && localStorage.getItem(TUCK_KEY) !== null) tuckPct = v; } catch (e) {}
 const tuckRender = () => { $('pTuckSt').textContent = tuckPct + '%'; world.setHpView({tuck: tuckPct / 100}); mark(); };
 tuckRender();
-const sfxRender = () => { $('pSfxSt').textContent = sfx.enabled ? '开' : '关'; $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
-function setPage(name) { $('pMain').hidden = name !== 'main'; $('pQual').hidden = name !== 'quality'; $('pCmd').hidden = name !== 'cmd'; $('pTitle').textContent = {main: '暂停', quality: '画质', cmd: '军务'}[name]; $('pInfo').hidden = name !== 'main'; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
+const sfxRender = () => { $('pSfxSt').textContent = t(sfx.enabled ? 'menu.on' : 'menu.off'); $('pSfxSt').classList.toggle('on', sfx.enabled); }; sfxRender();
+function setPage(name) { $('pMain').hidden = name !== 'main'; $('pQual').hidden = name !== 'quality'; $('pCmd').hidden = name !== 'cmd'; $('pTitle').textContent = t({main: 'menu.pause', quality: 'menu.quality', cmd: 'menu.command'}[name]); $('pInfo').hidden = name !== 'main'; pause.querySelectorAll('.item').forEach(b => b.classList.remove('is-sel')); }
 fpsRender();
 $('bMenu').onclick = () => { setPage('main'); pause.hidden = false; };
 pause.addEventListener('pointerdown', e => { const b = e.target.closest('.item'); if (b) pause.querySelectorAll('.item').forEach(x => x.classList.toggle('is-sel', x === b)); });   // 按下变金色，同主页
@@ -665,7 +667,7 @@ resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
 host.addEventListener('pointerdown', e => { if (orbitOn && result.minimized && !e.target.closest('.res-tag')) orbitOn = false; }, true);   // 0.91：看战场时一碰棋盘就停下绕场
-window.battle = {camMem, saveGame, gid, resumed, intel, result, world, cam, preset, THREE, game, describe, detail, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {camMem, saveGame, gid, resumed, intel, result, world, cam, preset, THREE, game, describe, detail, ars, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {

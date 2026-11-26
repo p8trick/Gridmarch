@@ -31,7 +31,7 @@ export function createDetail({THREE, renderer, host, stage, game, toEngine, onOp
     const d = UNITS[eu.type], hp = dispHp(eu.hp), col = hp >= 7 ? '#4fc34f' : hp >= 4 ? '#f2b81e' : '#ee5a4d';
     const rg = d.range[0] === d.range[1] ? d.range[0] : d.range.join('–');
     return `<div class="dt-box ${eu.owner === 0 ? 'army-b' : 'army-r'}" data-box="unit">
-      <div class="dt-head"><span class="dt-ico">${GLYPH[eu.type]}</span><b class="dt-name">${d.name}</b><span class="dt-chips"><em class="dt-chip ${eu.acted ? '' : 'go'}" data-k="status">${eu.acted ? '已行动' : '可行动'}</em><em class="dt-chip army">${OWN[eu.owner]}</em></span></div>
+      <div class="dt-head"><span class="dt-ico">${GLYPH[eu.type]}</span><b class="dt-name">${d.fullName || d.name}</b><span class="dt-chips"><em class="dt-chip ${eu.acted ? '' : 'go'}" data-k="status">${eu.acted ? '已行动' : '可行动'}</em><em class="dt-chip army">${OWN[eu.owner]}</em></span></div>
       <div class="dt-mid"><div class="dt-view" data-w="unit"></div><div class="dt-col">
         <div class="dt-hp" data-k="hp"><span>血量</span><span class="dt-bar">${Array.from({length: 10}, (_, i) => `<s><i style="width:${Math.max(0, Math.min(1, (eu.hp - i * 10) / 10)) * 100}%;background:${col}"></i></s>`).join('')}</span><b>${eu.hp}/100</b></div>
         <div class="dt-grid">${kv('机动', 'move', d.move)}${kv('视野', 'vision', d.vision)}${kv('射程', 'range', rg)}${kv('移动', 'mt', MT_NAME[d.mt])}${kv('燃料', 'fuel', d.fuel === Infinity ? '∞' : eu.fuel + '/' + d.fuel)}${kv('弹药', 'ammo', d.ammo ? eu.ammo + '/' + d.ammo : '—')}</div>

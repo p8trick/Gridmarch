@@ -86,4 +86,7 @@ docs/  本文 ARCHITECTURE ART_PACKAGES HOME CHANGELOG manifests/ archive/      
 - 所有玩家可见的文字走 `t('模块.键', {参数})`，词条放 `src/i18n/zh.js` + `en.js`（键必须两边都有，`npm test` 检查）。带数字的句子用 `{参数}` 占位，不拼接。
 - 规则 / 存档层只存 id，名字由 getter 或 `t()` 在显示时取（见 `data.js` 的 `localize`）。新增单位 / 地形 / 风格时，记得同时加 `unit.*` / `terrain.*` / `style.*` 词条。
 - 主页（classic 脚本）和 `blur-tip.js` 有自己的小字典，暂未并入；迁移进度看 `check-i18n` 输出的「还剩约 N 处写死的中文」。
+- 单位名两套：`.name` 短名（列表 / 卡片，英文 ≤12 字符）、`.fullName` 全名（大标签 / 详细面板）；图标字用 `glyph.*`。静态 HTML 模板用 `data-i18n*` 属性 + `applyI18n(root)`。
+- 注意：`sfx.js` 里用中文关键词（不足 / 暂不可 / 未建模）判断提示音类型，迁移提示文字（toast）时要同步改成按词条键或错误类型判断，否则英文提示会没有音效。
+- 中文界面不放英文小字；英文界面不放中文小字。
 

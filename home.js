@@ -11,11 +11,11 @@
   var SFX_KEY = 'gridmarch.sfx';              // 界面音效开关（src/battle/sfx.js 读同一个键；'0' = 关）
 
   var MENU = [
-    { id: 'continue', zh: '继续',     en: 'Continue',     sub: 'CONTINUE',      needsSave: true, go: { resume: true } },
-    { id: 'single',   zh: '单人对战', en: 'Single Player', sub: 'SINGLE PLAYER', go: { battle: true } },
-    { id: 'multi',    zh: '多人对战', en: 'Multiplayer',  sub: 'MULTIPLAYER',   go: { toast: 'soon' } },
-    { id: 'editor',   zh: '编辑器',   en: 'Editor',       sub: 'EDITOR',        go: { toast: 'soon' } },
-    { id: 'settings', zh: '设置',     en: 'Settings',     sub: 'SETTINGS',      go: { settings: true } }
+    { id: 'continue', zh: '继续',     en: 'Continue',      needsSave: true, go: { resume: true } },
+    { id: 'single',   zh: '单人对战', en: 'Single Player', go: { battle: true } },
+    { id: 'multi',    zh: '多人对战', en: 'Multiplayer',   go: { toast: 'soon' } },
+    { id: 'editor',   zh: '编辑器',   en: 'Editor',        go: { toast: 'soon' } },
+    { id: 'settings', zh: '设置',     en: 'Settings',      go: { settings: true } }
   ];
 
   var TITLE = {
@@ -50,7 +50,7 @@
       b.className = 'item';
       b.dataset.id = m.id;
       if (m.needsSave && !hasSave) b.setAttribute('aria-disabled', 'true');
-      b.innerHTML = '<span class="txt"><span class="main"></span><span class="sub"></span></span>';
+      b.innerHTML = '<span class="txt"><span class="main"></span></span>';
       li.appendChild(b);
       menuEl.appendChild(li);
       items.push(b);
@@ -109,7 +109,7 @@
   sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSettings(); });
   sheet.addEventListener('click', function (e) {
     var b = e.target.closest('[data-lang]');
-    if (b) { lang = b.dataset.lang === 'en' ? 'en' : 'zh'; store(LANG_KEY, lang); applyLang(); }
+    if (b) { lang = b.dataset.lang === 'en' ? 'en' : 'zh'; store(LANG_KEY, lang); applyLang(); try { window.dispatchEvent(new Event('gm-lang')); } catch (e) {} }
     var s = e.target.closest('[data-sfx]');
     if (s) { var v = s.dataset.sfx === '1'; store(SFX_KEY, v ? '1' : '0'); renderSfx(); sfxP.then(function (x) { x.setEnabled(v); }).catch(function () {}); }
   });
@@ -129,7 +129,6 @@
     items.forEach(function (b, i) {
       var m = MENU[i];
       b.querySelector('.main').textContent = lang === 'en' ? m.en : m.zh;
-      b.querySelector('.sub').textContent = lang === 'en' ? '' : m.sub;
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (el) {
       el.textContent = s[el.dataset.i18n];
@@ -188,7 +187,7 @@
     battleEl.innerHTML = '';
     // 0.63：进度条。先把战场用到的模块文件逐个预载（按已下载个数推进前 40%），再 import（命中缓存）；生成战场那段由 mountBattle 接着走
     var ldP = import('./src/battle/loading.js').then(function (L) {
-      var ld = L.createLoading('正在载入…').attach(battleEl); ld.to(4, 300);
+      var ld = L.createLoading().attach(battleEl); ld.to(4, 300);
       var urls = [];
       try { var im = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports; for (var k in im) if (/\.js(\?|$)/.test(im[k])) urls.push(im[k]); } catch (e) { /* 读不到清单就不预载，直接 import */ }
       return L.preload(urls, function (p) { ld.to(4 + p * 36, 150); }).then(function () { return ld; });

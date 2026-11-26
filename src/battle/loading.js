@@ -1,3 +1,4 @@
+import {t, getLang} from '../i18n/index.js';
 // 加载进度条（0.63）：进入战斗（含第一次下载模块）和「换图」时显示。
 // 为什么进度条能在主线程被生成战场卡住时继续动：填充条用 transform（translateX）做 CSS transition，走合成器线程，不受 JS 阻塞影响。
 // 所以「进度」由两部分组成：
@@ -7,10 +8,10 @@ const KEY = 'gm.buildMs';
 export const lastBuildMs = () => { try { return Math.min(12000, Math.max(800, +localStorage.getItem(KEY) || 2600)); } catch (e) { return 2600; } };
 export const saveBuildMs = ms => { try { localStorage.setItem(KEY, String(Math.round(lastBuildMs() * .4 + ms * .6))); } catch (e) { /* 存不了就算了 */ } };
 
-export function createLoading(label = '正在载入…') {
-  const el = document.createElement('div'); el.id = 'loading';
-  el.innerHTML = '<div class="ld-box"><div class="ld-title">方寸战线</div><div class="ld-bar"><i class="ld-fill"></i></div><div class="ld-label"></div></div>';
-  const fill = el.querySelector('.ld-fill'), lab = el.querySelector('.ld-label'); lab.textContent = label;
+export function createLoading(label = t('loading.loading')) {
+  const el = document.createElement('div'); el.id = 'loading'; el.dataset.lang = getLang();
+  el.innerHTML = '<div class="ld-box"><div class="ld-title"></div><div class="ld-bar"><i class="ld-fill"></i></div><div class="ld-label"></div></div>';
+  const fill = el.querySelector('.ld-fill'), lab = el.querySelector('.ld-label'); lab.textContent = label; el.querySelector('.ld-title').textContent = t('loading.title');
   let pct = 0; fill.style.transform = 'translateX(-100%)';
   const api = {
     el,

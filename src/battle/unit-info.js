@@ -1,8 +1,11 @@
+import {t} from '../i18n/index.js';
 import {UNITS, DMG_PRIMARY, DMG_SECONDARY, TARGET_ORDER, UNIT_CAT, CAT_ORDER, WEAPON_LIST_MIN} from '../rules/data.js';
 
 // 单位信息的共用小零件（0.60 从 arsenal.js 抽出来）：兵工厂右栏和战场「长按详细面板」用同一套，改一处两边一致。
 // 只出 HTML 字符串 + 文字表，不碰 DOM / three。样式是 battle.css 里的 .ars-wp 系列（需要外层提供 --line / --card / --sub / --text / --btn 变量）。
-export const GLYPH = {inf: '兵', mech: '反', recon: '侦', apc: '运', tank: '轻', mdtank: '中', neotank: '重', arty: '炮', rocket: '箭', aa: '空', missile: '导'};
+// 单位图标字：随语言（中文一个字，英文两个字母），词条 glyph.*；GLYPH[id] 每次读取都按当前语言取
+export const GLYPH = {};
+for (const id of ['inf', 'mech', 'recon', 'apc', 'tank', 'mdtank', 'neotank', 'arty', 'rocket', 'aa', 'missile']) Object.defineProperty(GLYPH, id, {get: () => t('glyph.' + id), enumerable: true});
 export const CAT = {foot: ['步兵', '#efd5b0'], veh: ['车辆', '#efd5b0'], heli: ['直升机', '#d9d3f5'], air: ['飞机', '#d9d3f5'], ship: ['船', '#bfeee6'], sub: ['潜艇', '#bfeee6']};   // 大类名 + 底色（沿用高战2：陆米色 / 空淡紫 / 海青绿）
 export const WPN = {mech: '火箭筒', tank: '轻型火炮', mdtank: '中型火炮', neotank: '重型火炮', arty: '榴弹炮', rocket: '火箭炮', aa: '机关炮', missile: '防空导弹'};   // 主炮名（我自己起的，随便改）；副炮统一叫机枪
 export const MT_NAME = {foot: '步兵', mech: '反坦克兵', tread: '履带', wheel: '轮式'};   // 移动类型的叫法（地形移动消耗表的列头）

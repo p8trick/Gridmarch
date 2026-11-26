@@ -157,7 +157,7 @@ export function createArsenal({THREE, renderer, host, stage, game, onProduce}) {
       c.querySelector('.sub').textContent = `移${u.move} · 射${u.range[0] === u.range[1] ? u.range[0] : u.range.join('–')}`;
     });
     const u = UNITS[sel], lock = locked(sel), poor = !lock && u.cost > f;
-    el.querySelector('#arsName').textContent = u.name;
+    el.querySelector('#arsName').textContent = u.fullName || u.name;
     // 右列（0.52，仿高战2）：机动 / 视野 / 燃料三行，然后主炮、副炮各一块：武器名 + 弹药，下面是「能打的大类」小块（只列能打的，不列灰的）
     const fuel = u.fuel === Infinity ? '∞' : u.fuel + '/' + u.fuel;
     el.querySelector('.ars-stats').innerHTML = `<div>机动<b>${u.move}</b></div><div>视野<b>${u.vision}</b></div><div>燃料<b>${fuel}</b></div>`;
