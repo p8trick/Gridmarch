@@ -21,11 +21,11 @@
 | 沙漠 / 沼泽 | `art/terrain/desert-swamp/` | V1.0 Final R3（性能版：3×3 格分区合批；游戏里沙漠用 varied（每格高度 / 朝向不同）×0.6，沼泽 standard + 按格道具；本仓库对 createSwampRegion 加了 propVariant 选项（按格选芦苇 / 枯木），其余源码未改） | 在用 |
 | 步兵 | `art/units/infantry/` | V6.12P（F1 侧脸 + B1 军靴 + W2 左手 + 四色阵营），批量版 | 在用 |
 | 反坦克步兵 | `art/units/infantry/anti-tank-*` | V1.6P，批量版 | 在用 |
-| 火炮 | `art/units/artillery-v2_0.js` | v2.0 | 在用（旧版） |
+| 自行火炮 | `art/units/artillery/`（`artillery-performance.js` 入口；`artillery-v2_1_1.js` 共同工厂、`artillery-original.js` 原版、`shared/` 履带运动 + 开火特效） | V2.1.1 动画双版本（静止外形同 V2.0；行进 + 开火动画，接口与坦克一致；战场用性能版） | 在用（1.07 起，替换 V2.0） |
 
 ## 已收到、尚未接入
 
-快速侦察车；道路最终版 R2（现用 R1，R2 统一了标线节奏）。
+快速侦察车 V1.3（`createScout`，带转向 / 开火）、多管火箭炮车 V1.5.1（`createMLRS`，带展开 / 连射动画）、六轮装甲运输补给车 V1.6.1（`createAPC`）；道路最终版 R2（现用 R1，R2 统一了标线节奏）。
 
 ## 换包流程
 

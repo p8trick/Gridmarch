@@ -1,5 +1,5 @@
 import {createTank} from '../game/units/tank-family.js';
-import {createArtillery} from '../art/units/artillery-v2_0.js';
+import {createArtillery} from '../art/units/artillery/artillery-performance.js';
 import {createInfantryBaseline} from '../art/units/infantry/infantry-performance.js';
 import {createAntiTankBaseline} from '../art/units/infantry/anti-tank-performance.js';
 
@@ -11,7 +11,7 @@ const MAKE = {
   tank: team => createTank('light', {faction: team}),
   mdtank: team => createTank('medium', {faction: team}),
   neotank: team => createTank('heavy', {faction: team}),
-  arty: team => createArtillery({faction: team, batch: true, paint: true}),
+  arty: team => createArtillery({faction: team, paint: true}),
 };
 export const hasUnitModel = type => !!MAKE[type];
 const cache = new Map();   // 'type|team' → {holder, h} | null（尚未建模）| 'error'

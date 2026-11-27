@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import {createTrackPath} from './track-path.js';
+import {attachVehicleAnimations} from './vehicle-animation.js';
 
-// Self-propelled howitzer V1.0; medium tank V2.2 chassis derivative. +Y up, +Z forward, ground at Y=0. Geometry only.
+// Self-propelled howitzer V1.0; medium tank V2.2 chassis derivative. +Y up, +Z forward, ground at Y=0. Articulated movement and firing; original V2.0 geometry.
 // Dimensions are stylized gameplay units, not measurements of a real vehicle.
 export function createArtillery({faction='sand', batch=true, paint=true}={}) {
-  const root=new THREE.Group(); root.name='SelfPropelledHowitzer_V2_0';
+  const root=new THREE.Group(); root.name='SelfPropelledHowitzer_V2_1_1';
   const palette={sand:['#b9a16c','#cbb583','#8b784f'],blue:['#527ca9','#7199c2','#3c5e86'],red:['#ae5149','#cc6a5e','#843b36'],green:['#7c8750','#a0aa68','#5b673b']};
   const mats={};
   const mat=(name,color,extra={})=>mats[name]=new THREE.MeshStandardMaterial({color,roughness:.85,flatShading:true,...extra});
@@ -17,8 +18,16 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
   mat('lamp','#e6d6a2',{emissive:'#e6d6a2',emissiveIntensity:.1});mat('amber','#b3733e');mat('tail','#9c4a3d');
   const hull=new THREE.Group();hull.name='hull';root.add(hull);
   const turret=new THREE.Group();turret.name='turret';turret.position.set(0,1.045,-.43);root.add(turret);
+  const tracks=[];
   const gun=new THREE.Group();gun.name='gun';gun.position.set(0,.49,.72);gun.scale.z=.82;turret.add(gun);
-  function add(geometry,material,parent,pos=[0,0,0],name='') {const m=new THREE.Mesh(geometry,material);m.position.set(...pos);m.name=name;m.castShadow=m.receiveShadow=true;parent.add(m);return m;}
+  function add(geometry,material,parent,pos=[0,0,0],name='') {
+    // Standard materials do not supply a default colour attribute in WebGL.
+    // White preserves material colour on unpainted armor, including instanced end hubs.
+    if(material.vertexColors&&!geometry.hasAttribute('color')){
+      geometry.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count*3).fill(1),3));
+    }
+    const m=new THREE.Mesh(geometry,material);m.position.set(...pos);m.name=name;m.castShadow=m.receiveShadow=true;parent.add(m);return m;
+  }
   function geom(pos,indices){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(indices);g.computeVertexNormals();return g;}
   // Rings run clockwise in XZ, so their top-facing normals are +Y.
   function outline(w,d,b=.07,z=0){return [[-w/2+b,d/2+z],[w/2-b,d/2+z],[w/2,d/2-b+z],[w/2,-d/2+b+z],[w/2-b,-d/2+z],[-w/2+b,-d/2+z],[-w/2,-d/2+b+z],[-w/2,d/2-b+z]];}
@@ -45,6 +54,39 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
     }g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));return g;
   }
   function wheelFace(parent,x,y,z,side,geometry,material){let m=add(geometry,material,parent,[x,y,z]);m.rotation.z=-side*Math.PI/2;return m;}
+  // Transform a wheel's original meshes into a pivot without altering its geometry.
+  function bindWheel(track,x,y,z,radius,parts){
+    const wheel=new THREE.Group();wheel.name='wheel_'+track.wheelBindings.length;wheel.position.set(x,y,z);track.add(wheel);
+    for(const part of parts){wheel.add(part);part.position.sub(wheel.position);}
+    track.wheelBindings.push({object:wheel,radius,kind:radius===roadRadius?'road':'end'});
+  }
+  // Repeated movable parts keep their exact matrices and geometry in instanced batches.
+  function instanceParts(parent,parts,name){
+    const mesh=new THREE.InstancedMesh(parts[0].geometry.clone(),parts[0].material,parts.length);mesh.name=name;
+    mesh.castShadow=mesh.receiveShadow=true;mesh.frustumCulled=false;
+    parts.forEach((part,i)=>{part.updateMatrix();mesh.setMatrixAt(i,part.matrix);});parent.add(mesh);
+    for(const part of parts){part.removeFromParent();part.geometry.dispose();}
+    return mesh;
+  }
+  function batchTrack(track){
+    track.belts=[
+      {object:instanceParts(track,track.padParts,'track_pads'),normalOffset:.058,phases:track.padPhases},
+      {object:instanceParts(track,track.linkParts,'track_links'),normalOffset:0}
+    ];
+    const wheels=[],matrix=new THREE.Matrix4();
+    for(const kind of ['road','end']){
+      const inputs=track.wheelBindings.filter(w=>w.kind===kind);
+      for(let part=0;part<3;part++){
+        const first=inputs[0].object.children[part],mesh=new THREE.InstancedMesh(first.geometry.clone(),first.material,inputs.length);
+        mesh.name=kind+'_wheel_part_'+part;mesh.castShadow=mesh.receiveShadow=true;mesh.frustumCulled=false;
+        const instances=[];
+        inputs.forEach((w,i)=>{w.object.updateMatrix();const child=w.object.children[part];child.updateMatrix();matrix.multiplyMatrices(w.object.matrix,child.matrix);mesh.setMatrixAt(i,matrix);instances.push({radius:w.radius,center:w.object.position.toArray(),axis:[1,0,0]});});
+        track.add(mesh);wheels.push({object:mesh,instances});
+      }
+    }
+    for(const w of track.wheelBindings){w.object.traverse(o=>{if(o.isMesh)o.geometry.dispose();});w.object.removeFromParent();}
+    track.wheelBindings=wheels;delete track.padParts;delete track.linkParts;delete track.padPhases;
+  }
   function surfaceBox(parent,pos,size,normal,material,b=.025,name=''){
     let m=box(parent,pos,size,material,b,name);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(...normal).normalize());return m;
   }
@@ -124,6 +166,7 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
   const trackGroundOffset=-(roadY-roadRadius-.055-.058-.095/2);
   for(const side of [-1,1]){
     const track=new THREE.Group(),x=side*.975;track.name=side<0?'right_track':'left_track';track.position.y=trackGroundOffset;hull.add(track);
+    track.padParts=[];track.linkParts=[];track.padPhases=[];track.belts=[];track.wheelBindings=[];tracks.push(track);
     const N=belt.contour.length,p=[],ids=[],outer=[],inner=[];
     for(let i=0;i<N;i++){let q=belt.contour[i];outer.push([q.z-q.dy*.055,q.y+q.dz*.055]);inner.push([q.z+q.dy*.055,q.y-q.dz*.055]);}
     for(const xx of [x-.255,x+.255])for(const contour of [outer,inner])contour.forEach(q=>p.push(xx,q[1],q[0]));
@@ -135,23 +178,25 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
     for(let i=0;i<40;i++){
       let q=trackPoint(trackLength*(i+.5)/40);
       const padAngle=-Math.atan2(q.dy,q.dz);
-      for(const dx of [-.142,.142]){const pad=add(bevel(.271,.095,.19,.016),mats.tread,track,[x+dx,q.y+q.dz*.058,q.z-q.dy*.058]);pad.rotation.x=padAngle;}
+      for(const dx of [-.142,.142]){const pad=add(bevel(.271,.095,.19,.016),mats.tread,track,[x+dx,q.y+q.dz*.058,q.z-q.dy*.058]);pad.rotation.x=padAngle;track.padParts.push(pad);track.padPhases.push(trackLength*(i+.5)/40);track.belts.push({object:pad,normalOffset:.058,phases:[trackLength*(i+.5)/40]});}
       // Thin connector plates stay inside the outer pad width.
-      const link=box(track,[x+side*.245,q.y,q.z],[.075,.075,.225],mats.edge,.01);link.rotation.x=padAngle;
+      const link=box(track,[x+side*.245,q.y,q.z],[.075,.075,.225],mats.edge,.01);link.rotation.x=padAngle;track.linkParts.push(link);track.belts.push({object:link,phases:[trackLength*(i+.5)/40]});
     }
     const dishProfile=[[0,-.07],[.275,-.07],[.288,-.04],[.288,.018],[.271,.037],[.245,.031],[.226,-.023],[.145,-.048],[.079,-.027],[.067,.018],[0,.018]];
     const tireProfile=[[.260,-.205],[.278,-.205],[.317,-.175],[.326,-.13],[.326,.14],[.312,.188],[.278,.205],[.260,.205],[.260,-.205]];
     for(let i=0;i<4;i++){
-      const z=-roadZ+i*(2*roadZ/3),y=roadY;
+      const z=-roadZ+i*(2*roadZ/3),y=roadY,firstPart=track.children.length;
       wheelFace(track,x,y,z,side,turned(tireProfile.map(([r,a])=>[r*.84,a]),16),mats.rubber);
       wheelFace(track,x+side*.195,y,z,side,recessedDish(turned(dishProfile.map(([r,a])=>[r*.84,a]),16)),mats.wheel);
       cyl(track,[x+side*.226,y,z],.048,.048,.026,mats.shade,'x',10);
+      bindWheel(track,x,y,z,roadRadius,track.children.slice(firstPart));
     }
     for(const z of [-endZ,endZ]){
-      const y=endY;
+      const y=endY,firstPart=track.children.length;
       wheelFace(track,x,y,z,side,turned([[.235,-.20],[.27,-.20],[.31,-.16],[.31,.16],[.27,.20],[.235,.20],[.235,-.20]].map(([r,a])=>[r*.82,a]),14),mats.rubber);
       wheelFace(track,x+side*.19,y,z,side,turned([[0,-.04],[.25,-.04],[.27,-.01],[.27,.025],[.23,.035],[.19,-.016],[.10,-.025],[.075,.02],[0,.02]].map(([r,a])=>[r*.82,a]),14),mats.shade);
       cyl(track,[x+side*.221,y,z],.092,.092,.035,mats.armor,'x',10);
+      bindWheel(track,x,y,z,endRadius,track.children.slice(firstPart));
     }
   }
 
@@ -289,20 +334,23 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
   box(gun,[0,-.09,.23],[.33,.26,.60],mats.edge,.04,'recoil_cradle');
   box(gun,[0,-.19,.37],[.25,.12,.73],mats.shade,.018);
   cyl(gun,[0,0,.28],.205,.205,.55,mats.armor,'z',8);
-  cyl(gun,[0,0,.59],.18,.20,.12,mats.edge,'z',8);
-  cyl(gun,[0,0,.94],.157,.18,.60,mats.light,'z',8);
-  cyl(gun,[0,0,1.26],.165,.165,.09,mats.edge,'z',8);
-  cyl(gun,[0,0,1.82],.127,.153,1.04,mats.armor,'z',8);
-  cyl(gun,[0,0,2.36],.14,.14,.08,mats.edge,'z',8);
-  cyl(gun,[0,0,2.70],.113,.126,.60,mats.light,'z',8);
+  const recoil=new THREE.Group();recoil.name='barrel_recoil';gun.add(recoil);
+  cyl(recoil,[0,0,.59],.18,.20,.12,mats.edge,'z',8);
+  cyl(recoil,[0,0,.94],.157,.18,.60,mats.light,'z',8);
+  cyl(recoil,[0,0,1.26],.165,.165,.09,mats.edge,'z',8);
+  cyl(recoil,[0,0,1.82],.127,.153,1.04,mats.armor,'z',8);
+  cyl(recoil,[0,0,2.36],.14,.14,.08,mats.edge,'z',8);
+  cyl(recoil,[0,0,2.70],.113,.126,.60,mats.light,'z',8);
   // Open three-baffle muzzle brake: actual annular openings and lateral gaps, no solid plug.
   function muzzleRing(z,depth,r){
     const g=turned([[.087,-depth/2],[r,-depth/2],[r,depth/2],[.087,depth/2],[.087,-depth/2]],8);
-    add(g,mats.edge,gun,[0,0,z],'muzzle_baffle').rotation.x=Math.PI/2;
+    add(g,mats.edge,recoil,[0,0,z],'muzzle_baffle').rotation.x=Math.PI/2;
   }
   muzzleRing(3.035,.13,.16);muzzleRing(3.19,.075,.18);muzzleRing(3.36,.085,.18);
-  for(const y of [-.137,.137])box(gun,[0,y,3.20],[.16,.055,.32],mats.edge,.008,'brake_bridge');
-  add(new THREE.CircleGeometry(.087,8),mats.black,gun,[0,0,2.985],'recessed_bore');
+  for(const y of [-.137,.137])box(recoil,[0,y,3.20],[.16,.055,.32],mats.edge,.008,'brake_bridge');
+  add(new THREE.CircleGeometry(.087,8),mats.black,recoil,[0,0,2.985],'recessed_bore');
+
+  const muzzle=new THREE.Object3D();muzzle.name='muzzle';muzzle.position.z=3.4025;recoil.add(muzzle);
 
   // Lower the fighting compartment without distorting the articulated barrel.
   for(const child of turret.children){if(child===gun)continue;child.position.y*=.84;if(child.isMesh)child.geometry.scale(1,.84,1);}
@@ -341,20 +389,36 @@ export function createArtillery({faction='sand', batch=true, paint=true}={}) {
   root.updateMatrixWorld(true);
   if(paint)root.traverse(o=>{if(o.isMesh && ['hull_core','faceted_glacis','turret_shell','cheek_wedge'].includes(o.name))paintArmor(o);});
   let sourceMeshes=0;root.traverse(o=>{if(o.isMesh)sourceMeshes++;});
-  if(batch){mergeRigid(hull);mergeRigid(gun);mergeRigid(turret,new Set([gun]));}
+  if(batch){
+    for(const track of tracks){batchTrack(track);mergeRigid(track,new Set([...track.belts.map(b=>b.object),...track.wheelBindings.map(w=>w.object)]));}
+    mergeRigid(hull,new Set(tracks));mergeRigid(recoil);mergeRigid(gun,new Set([recoil]));mergeRigid(turret,new Set([gun]));
+  }
   function mergeRigid(parent,skip=new Set()){
     parent.updateWorldMatrix(true,true);const inverse=parent.matrixWorld.clone().invert(),groups=new Map(),remove=[];
     function collect(o){if(skip.has(o))return;if(o.isMesh){const material=o.material;let bucket=groups.get(material);if(!bucket){bucket={positions:[],normals:[],colors:[]};groups.set(material,bucket);}const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse,o.matrixWorld));const p=g.attributes.position,n=g.attributes.normal,c=g.attributes.color;for(let i=0;i<p.count;i++){bucket.positions.push(p.getX(i),p.getY(i),p.getZ(i));bucket.normals.push(n.getX(i),n.getY(i),n.getZ(i));bucket.colors.push(c?c.getX(i):1,c?c.getY(i):1,c?c.getZ(i):1);}g.dispose();remove.push(o);}o.children.forEach(collect);}parent.children.forEach(collect);remove.forEach(o=>{o.removeFromParent();o.geometry.dispose();});
     for(const [material,b]of groups){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(b.positions,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(b.normals,3));g.setAttribute('color',new THREE.Float32BufferAttribute(b.colors,3));add(g,material,parent,[0,0,0],parent.name+'_'+Object.keys(mats).find(k=>mats[k]===material));}
   }
   root.updateMatrixWorld(true);
-  const finalGround=new THREE.Box3().setFromObject(hull,true).min.y;
+  // Instanced bounding boxes can overestimate rotated pad corners; seat actual vertices.
+  let finalGround=Infinity;
+  const seatPoint=new THREE.Vector3(),seatInstance=new THREE.Matrix4(),seatMatrix=new THREE.Matrix4();
+  hull.traverse(o=>{if(!o.isMesh)return;const p=o.geometry.attributes.position;
+    for(let i=0;i<(o.isInstancedMesh?o.count:1);i++){
+      if(o.isInstancedMesh){o.getMatrixAt(i,seatInstance);seatMatrix.multiplyMatrices(o.matrixWorld,seatInstance);}else seatMatrix.copy(o.matrixWorld);
+      for(let j=0;j<p.count;j++)finalGround=Math.min(finalGround,seatPoint.fromBufferAttribute(p,j).applyMatrix4(seatMatrix).y);
+    }
+  });
   hull.position.y-=finalGround;turret.position.y-=finalGround;
-  let triangles=0,meshes=0;root.traverse(o=>{if(o.isMesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;}});
-  root.userData={version:'2.0',type:'artillery',chassisSource:'medium V2.2',roadWheelsPerSide:4,triangles,meshes,sourceMeshes,coordinateSystem:'+Y up / +Z forward',faction:palette[faction]?faction:'sand'};
+  let triangles=0,meshes=0;root.traverse(o=>{if(o.isMesh){meshes++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3*(o.isInstancedMesh?o.count:1);}});
+  root.userData={version:'2.1.1',type:'artillery',chassisSource:'medium V2.2',roadWheelsPerSide:4,triangles,meshes,sourceMeshes,coordinateSystem:'+Y up / +Z forward',faction:palette[faction]?faction:'sand'};
   root.setFaction=(value)=>{if(!palette[value])return;['armor','light','shade'].forEach((key,i)=>mats[key].color.set(palette[value][i]));mats.wheel.color.set(palette[value][0]);root.userData.faction=value;};
   root.setAim=(yaw=0,elevation=0)=>{turret.rotation.y=THREE.MathUtils.degToRad(yaw);gun.rotation.x=-THREE.MathUtils.degToRad(THREE.MathUtils.clamp(elevation,-3,65));};
   root.setAim(0,30);
+  const binding=t=>({path:belt,belts:t.belts,wheels:t.wheelBindings});
+  attachVehicleAnimations({root,gauge:1.95,left:binding(tracks.find(t=>t.name==='left_track')),right:binding(tracks.find(t=>t.name==='right_track')),recoil,muzzle,fire:{recoilDistance:.28,recoilPeak:.075,recoveryEnd:.56,flashDuration:.11,duration:1.20,effectScale:1.12}});
+  root.userData.animation={version:'tracked-v1.0',batched:batch,gunRecoil:.28,recoveryEnd:.56,fireDuration:1.2,gauge:1.95};
+  // Public references for game integration and diagnostics; no extra player-visible geometry.
+  root.animationParts={tracks:tracks.map(t=>({name:t.name,path:belt,belts:t.belts,wheels:t.wheelBindings})),recoil,muzzle};
   return root;
 }
 

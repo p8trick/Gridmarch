@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {createTank, TRACK_GAUGE} from './units/tank-family.js';
-import {createArtillery} from '../art/units/artillery-v2_0.js';
+import {createArtillery} from '../art/units/artillery/artillery-performance.js';   // 自行火炮 V2.1.1 性能版（1.07）：静止外形同 V2.0，另带行进 / 开火动画，接口和坦克一致
 import {patchGrayTree, setMatGray} from '../art/gray.js';
 import {createInfantryActor, releaseInfantryActor, resetInfantryBatches, syncInfantryBatches, infantryTriCount} from './units/infantry-actors.js';
 import {createTreePine, createTreeBroad} from '../art/terrain/forest/forest-original.js';   // 树林包 V1.0：与原树型逐面一致
@@ -21,6 +21,7 @@ export const MTN_STAND = 0.61;        // 山格驻扎面高度（山定稿 A/B�
 export const STAND_R = 0.8;           // 平地站位圈半径
 export const ART_K = 0.88;            // 自行火炮相对统一缩放的系数：车体长/宽与轻坦对齐（轻坦车体 3.63×2.45，火炮 4.07×2.81）
 export const CULL_R = 2.8;            // 单位级视锥剔除半径（备忘：阴影开时放宽到 2.8）
+export const ART_GAUGE = 1.95;          // 自行火炮左右履带中心距（模型自身单位，差速转向用；坦克的在 tank-family 的 TRACK_GAUGE）
 export const ART_ELEV = 50;           // 火炮默认仰角（原模型默认 30°，上限 65°）
 
 // 道路网：由相邻关系自动选件（直 / 弯 / T / 十字 / 终点）并旋转
@@ -166,7 +167,7 @@ function makeBoard(sandbox, sampleH, floorTint, water) {
 // 步兵 V6.7：一个骨架原型 + 每队着色 + 共享几何的实例（units/soldier-instance.js）
 function createUnitModel(spec, idx) {
   if (spec.k === 'tank') return createTank(spec.type, {faction: spec.team});
-  if (spec.k === 'art') return createArtillery({faction: spec.team, batch: true, paint: true});
+  if (spec.k === 'art') return createArtillery({faction: spec.team, paint: true});
   return null;   // 步兵走 createInfantryActor（需要动画句柄）
 }
 
@@ -742,7 +743,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       u.baseY = u.path ? u.curY : groundY(u.cell[0], u.cell[1], u);
       u.holder.scale.setScalar(u.baseScale);
       u.holder.rotation.set(0, u.yaw, 0);
-      if (u.spec.k === 'art') u.model.setAim(0, state.artElev); else if (u.spec.k === 'tank' && !u.aimLock) u.model.setAim(0, 0);   // 瞄准锁定期间（开火后到下次移动前）保持炮塔朝向，否则每次重绘会把炮塔拉回正前
+      if (u.spec.k === 'art') { if (!u.aimLock) u.model.setAim(0, state.artElev); } else if (u.spec.k === 'tank' && !u.aimLock) u.model.setAim(0, 0);   // 瞄准锁定期间（开火后到下次移动前）保持炮塔朝向，否则每次重绘会把炮塔拉回正前
       u.holder.position.set(u.x, u.baseY, u.z); u.holder.updateMatrixWorld(true);
       u.topOff = new THREE.Box3().setFromObject(u.holder).max.y - u.baseY;
       syncUnit(u);
@@ -851,7 +852,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (!a || !t) { onDone(); return; }
     const ang = Math.atan2(t.x - a.x, t.z - a.z);
     if (a.actors) { a.yaw = ang; syncUnit(a); a.actors.forEach((ac, i) => { ac.setMode(state.infPose === 'kneel' ? 'kneel' : 'aim'); ac.shoot(2, i * .07); }); if (onFire && snd) onFire(snd, .12); }
-    else if (a.spec.k === 'tank') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; a.fireSnd = snd || null; }
+    else if (a.spec.k === 'tank' || a.spec.k === 'art') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, a.spec.k === 'art' ? state.artElev : 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; a.fireSnd = snd || null; }
     else if (onFire && snd) onFire(snd, .05);
     a.atk = {t: 0, onDone};
   }
@@ -919,8 +920,8 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       { const bg = bridgeByCell.get(Math.round(u.x / 2) + ',' + Math.round(u.z / 2)), by = bg ? getBridgeSurfaceY(bg, u.x, u.z) : null; if (by !== null) u.curY = by; }   // 行进中走在桥上：逐帧取脚下的真实桥面高度（含桥头斜坡）
       let dy = Math.atan2(b[0] - a[0], b[1] - a[1]) - u.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       u.yaw += Math.max(-10 * dt, Math.min(10 * dt, dy));
-      if (u.spec.k === 'tank') {   // 履带：走过的距离换成模型单位；转向时左右差速（yaw 增大 = 向左转 → 右履带多走）
-        const ds = Math.hypot(u.x - px, u.z - pz) / u.baseScale, arc = (u.yaw - pyaw) * TRACK_GAUGE[u.spec.type] / 2;
+      if (u.spec.k === 'tank' || u.spec.k === 'art') {   // 履带：走过的距离换成模型单位；转向时左右差速（yaw 增大 = 向左转 → 右履带多走）。自行火炮 1.07 起和坦克同一套
+        const ds = Math.hypot(u.x - px, u.z - pz) / u.baseScale, arc = (u.yaw - pyaw) * (u.spec.k === 'art' ? ART_GAUGE : TRACK_GAUGE[u.spec.type]) / 2;
         u.model.advanceMotion(ds - arc, ds + arc); u.aimLock = false;
       }
       if (u.dist >= total) {
@@ -933,7 +934,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     }
     for (const u of arrivals) { const cb = u.onArrive; u.onArrive = null; cb(u); }
     for (const u of units) if (u.actors) { let b = false; for (const a of u.actors) if (a.update(dt)) b = true; u.fireBusy = b; if (b) moving = true; }   // 步兵开火动画
-    for (const u of units) if (u.spec.k === 'tank') {                                                      // 坦克：排队的炮击逐发开，特效播放期间保持渲染
+    for (const u of units) if (u.spec.k === 'tank' || u.spec.k === 'art') {                                       // 坦克 / 自行火炮：排队的炮击逐发开，特效播放期间保持渲染
       const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) { u.fireBusy = false; continue; }
       if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) { u.fireQ--; if (u.fireSnd && onFire) { onFire(u.fireSnd, 0); u.fireSnd = null; } }
       m.updateFire(dt); u.fireBusy = m.fireState().active || u.fireQ > 0; if (u.fireBusy) moving = true;
@@ -999,7 +1000,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
         if (!u.aimLock) u.model.setAim(9 * Math.sin(t * .45 + ph), 0);   // 只缓扫炮塔；整车不再抖动（动画包的既定决定）
       } else {
         h.position.y = u.baseY + .006 * (1 + Math.sin(t * 11 + ph)) + .003 * (1 + Math.sin(t * 17 + ph * 2));  // 火炮：只向上抖，不陷进地面
-        if (false) {} else u.model.setAim(6 * Math.sin(t * .4 + ph), state.artElev + 1.5 * Math.sin(t * .8 + ph));
+        if (!u.aimLock) u.model.setAim(6 * Math.sin(t * .4 + ph), state.artElev + 1.5 * Math.sin(t * .8 + ph));   // 开火后到下次移动前炮塔保持朝向（aimLock）
       }
     }
   }

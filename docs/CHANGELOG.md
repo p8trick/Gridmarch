@@ -53,3 +53,11 @@
 - 自检新增：引擎提示中英文（`produce` 的资金不足 / 不是你的兵工厂）、`res.*` / `err.*` / `map.*` 词条齐全且英文无中文。词条共 303 条。
 - 没迁移（有意）：开发 / 测试用页面（`tests/` 下的 units-terrain、ui-style、orientation，`src/app/`）、`map-builder.js` 里的测试地图和对象名、`world.js` 里的调试标签；主页和提示页用自带的双语字典。剩下约 344 处写死中文基本都在这些里面。
 
+## 1.07
+- 自行火炮换成 V2.1.1 动画性能版（`src/art/units/artillery/`：`artillery-performance.js` 入口、`artillery-v2_1_1.js` 共同工厂、`artillery-original.js`、`track-path.js`、`vehicle-animation.js`、`shared/tank-fire.js`、`shared/tracked-motion.js`）。静止外形与原 V2.0 逐项一致；新增行进（履带 / 轮组随距离转动、转向差速）和开火（炮管后坐复进、炮口闪光、烟尘）动画，接口和坦克完全一样（`advanceMotion` / `fire` / `updateFire` / `fireState`）。旧的 `artillery-v2_0.js` 和 `units/track-path.js` 已删除。
+- `world.js`：自行火炮（`spec.k === 'art'`）接入坦克那套：移动时驱动履带（左右履带中心距 `ART_GAUGE = 1.95`）、攻击时炮塔先转向目标并保持到攻击结束（`aimLock`）、排队逐发 `fire()`，开火声改为炮管真的开火那一刻才响（和坦克一致，原来是点攻击就响）；待机缓扫炮塔时尊重 `aimLock`。
+- `unit-models.js`（兵工厂转台 / 详细面板小窗）同步换成新模型。
+- 新增冒烟 `tools/smoke-arty.py`：造一台自行火炮 → 攻击期间炮塔锁定 / 炮管真的开过火 / 特效放完回调返回 → 行驶时履带距离变化 / 页面无报错。
+- 美术包版本表更新；「已收到、尚未接入」列出快速侦察车 V1.3、多管火箭炮车 V1.5.1、六轮装甲运输补给车 V1.6.1（后续两个小版本接入）。
+- 未测：iPhone 真机帧率（性能版车体 47 个网格；开火时额外 3 个特效网格，预先分配、复用）。
+
