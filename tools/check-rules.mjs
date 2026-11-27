@@ -117,6 +117,11 @@ t('间接火力：不能打相邻、不能移动后开火、不被反击', () =>
   const r = attack(g, a.id, g.units[2].id); assert(r.ok && r.counter === null); assert.equal(a.hp, 100);
   const g2 = createGame({terrain: map(8, 1), units: [{type: 'arty', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 3, y: 0}]});
   move(g2, 1, 1, 0); assert.equal(targetsOf(g2, g2.units[0]).length, 0);
+  // 1.08：原地不动（move 到自己脚下）不算「移动后开火」：照样能开火；走了又撤销、再原地不动也一样
+  const g3 = createGame({terrain: map(8, 1), units: [{type: 'arty', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 3, y: 0}]});
+  assert(move(g3, 1, 0, 0).ok); assert.equal(targetsOf(g3, g3.units[0]).length, 1); assert(attack(g3, 1, 2).ok);
+  const g4 = createGame({terrain: map(8, 1), units: [{type: 'arty', owner: 0, x: 0, y: 0}, {type: 'tank', owner: 1, x: 3, y: 0}]});
+  move(g4, 1, 1, 0); assert.equal(targetsOf(g4, g4.units[0]).length, 0); undoMove(g4, 1); move(g4, 1, 0, 0); assert.equal(targetsOf(g4, g4.units[0]).length, 1);
 });
 
 t('弹药：主武器每次出手消耗 1，机枪不耗', () => {

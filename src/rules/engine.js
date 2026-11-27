@@ -170,10 +170,12 @@ export function undoMove(g, id) {
   u.x = u.origin.x; u.y = u.origin.y; u.fuel = u.origin.fuel; u.cap = u.origin.cap; u.moved = false; delete u.origin; return {ok: true};
 }
 
-// 能打到的敌人（间接火力：移动过就不能开火；最近射程之内打不到）
+// 能打到的敌人（间接火力：换了格子就不能开火；最近射程之内打不到）
+// 1.08：「原地不动」（点自己脚下）也会把 moved 记上，但没换格子 = 没有「移动后开火」，间接火力单位照样能开火；真的走了一步（origin 与现在不同格）才不行
+export const relocated = u => !!u.moved && !(u.origin && u.origin.x === u.x && u.origin.y === u.y);
 export function targetsOf(g, u) {
   const t = UNITS[u.type];
-  if (u.acted || (t.indirect && u.moved)) return [];
+  if (u.acted || (t.indirect && relocated(u))) return [];
   return g.units.filter(e => e.owner !== u.owner && dist(u, e) >= t.range[0] && dist(u, e) <= t.range[1] && strike(g, u, e));
 }
 

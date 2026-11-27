@@ -832,16 +832,42 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       }
     }
   }
-  function showRange(cells, u) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）
+  // 1.08 远程单位的攻击范围：射程内 = 橙色斜纹，近处打不到的盲区 = 深灰交叉纹；斜纹叠在蓝格 / 红格上面（renderOrder 7），底下的蓝格还看得见。
+  // 自行火炮的移动范围（5）比射程（2–3）大，射程整片都落在蓝格里，所以必须用「纹」而不是实色填充才分得出两层。atk = {cells, dead}（世界格坐标），没有 = 不画
+  const STRIPE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform vec3 uColor; uniform float uCross;
+    void main(){ float a = step(.55, fract((vW.x + vW.z) * 1.3)), b = step(.55, fract((vW.x - vW.z) * 1.3)), s = uCross > .5 ? max(a, b) : a;
+      vec2 e = min(vUv, 1. - vUv); float edge = 1. - smoothstep(0., .05, min(e.x, e.y)); gl_FragColor = vec4(uColor, clamp(s * .66 + edge * .25, 0., .92)); }`;
+  const mkStripeMat = (hex, cross) => new THREE.ShaderMaterial({uniforms: {uColor: {value: rgb(hex)}, uCross: {value: cross ? 1 : 0}}, vertexShader: TILE_VS, fragmentShader: STRIPE_FS, transparent: true, depthWrite: false});
+  const hlAtk = mkStripeMat(0xff8a00, false), edgeAtk = mkEdgeMat(0xffb347), hlDead = mkStripeMat(0x20242d, true), edgeDead = mkEdgeMat(0xd2d8e2);
+  function buildRangeTiles(cells, mat, edgeMat) {
+    const set = new Set(cells.map(c => c[0] + ',' + c[1]));
+    for (const [x, z] of cells) {
+      const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07), h = mtn ? .55 : .92;
+      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, mat); m.name = 'atkFill'; m.position.set(x * 2, y + .015, z * 2); m.renderOrder = 7; hl.add(m);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (set.has((x + dx) + ',' + (z + dz))) continue;
+        const e = new THREE.Mesh(edgeGeo, edgeMat); e.name = 'atkEdge'; e.position.set(x * 2 + dx * h, y + .025, z * 2 + dz * h);
+        e.scale.set(dx ? .14 : 2 * h + .14, 1, dz ? .14 : 2 * h + .14); e.renderOrder = 8; hl.add(e);
+      }
+    }
+  }
+  function addAtkRange(atk) {
+    if (!atk) return;
+    if (atk.dead && atk.dead.length) buildRangeTiles(atk.dead, hlDead, edgeDead);
+    if (atk.cells && atk.cells.length) buildRangeTiles(atk.cells, hlAtk, edgeAtk);
+  }
+  function showRange(cells, u, atk) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）；atk：远程单位的攻击范围（可选）
     clearHighlights(); u.rangeCells = cells; tileU.uOrigin.value.set(u.x, u.z);
     buildTiles(cells, hlMat, edgeBlue, u.cell);
+    addAtkRange(atk);
     state.selected = u; selRing.visible = true; syncUnit(u);
   }
   // ── 0.70 攻击表现 ─────────────────────────────────────────────
   // 目标格：射程内的敌人格子画红色半透明格（和蓝格一起呼吸）；点哪个由 main.js 判断
-  function showTargets(cells, u) {   // 目标格：红格 + 每格自己的红色轮廓；涟漪从攻击方向外扩
+  function showTargets(cells, u, atk) {   // 目标格：红格 + 每格自己的红色轮廓；涟漪从攻击方向外扩；远程单位同时画攻击范围（1.08）
     clearHighlights(); if (u) tileU.uOrigin.value.set(u.x, u.z);
     buildTiles(cells, hlRed, edgeRed, null);
+    addAtkRange(atk);
   }
   const clearRange = () => clearHighlights();
   // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
@@ -1086,7 +1112,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    setOnFire: fn => { onFire = fn; }, setOnMove: fn => { onMove = fn; }, unitById, busy, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    setOnFire: fn => { onFire = fn; }, setOnMove: fn => { onMove = fn; }, unitById, busy, hlCount: name => name ? hl.children.filter(o => o.name === name).length : hl.children.length, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

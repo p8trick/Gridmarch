@@ -179,9 +179,21 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
 //    攻击下一版接（浮条里再加「攻击」）。走完之后点浮条以外的地方（浮条周围 36px 不算）= 撤销这次移动（0.68），镜头还能拖。
 let sel = null, reach = null, acting = null, lastPul = 0, wasBusy = false;
 const clearSel = () => { sel = null; reach = null; world.deselect(); };
+// 1.08 远程单位（射程最大 > 1：自行火炮 / 火箭炮 / 防空导弹）选中时，除了蓝格再画攻击范围：从单位现在站的格子算，曼哈顿距离在 [最近, 最远] 内 = 橙色，
+// 比最近射程还近的格子 = 灰色盲区（打不到）。间接火力移动后不能开火，所以范围只按「原地」算；点「攻击」选目标时也一并画着
+function atkRangeOf(eu) {
+  const sp = RULE_UNITS[eu.type]; if (!sp || sp.range[1] <= 1) return null;
+  const [mn, mx] = sp.range, cells = [], dead = [];
+  for (let dy = -mx; dy <= mx; dy++) for (let dx = -mx; dx <= mx; dx++) {
+    const d = Math.abs(dx) + Math.abs(dy), x = eu.x + dx, y = eu.y + dy;
+    if (d < 1 || d > mx || !game.terrain[y] || game.terrain[y][x] === undefined) continue;
+    (d < mn ? dead : cells).push(toWorld([x, y]));
+  }
+  return {cells, dead};
+}
 function pickUnit(eu) {
   sel = eu; reach = engineReach(game, eu);
-  world.showRange([...reach.keys()].map(k => toWorld(k.split(',').map(Number))), world.unitById(eu.id));
+  world.showRange([...reach.keys()].map(k => toWorld(k.split(',').map(Number))), world.unitById(eu.id), atkRangeOf(eu));
 }
 function startMove(ex, ey) {
   const u = sel, path = pathOf(game, u, ex, ey), w = world.unitById(u.id);
@@ -207,7 +219,7 @@ let targeting = null;   // 选目标阶段：Map('x,y' → 敌方引擎单位)
 function enterTargeting() {
   const list = targetsOf(game, acting); if (!list.length) return;
   targeting = new Map(list.map(e => [e.x + ',' + e.y, e]));
-  world.showTargets(list.map(e => toWorld([e.x, e.y])), world.unitById(acting.id)); bar.classList.add('pick'); barPlace(); showForecast(list);
+  world.showTargets(list.map(e => toWorld([e.x, e.y])), world.unitById(acting.id), atkRangeOf(acting)); bar.classList.add('pick'); barPlace(); showForecast(list);
 }
 function exitTargeting() { if (!targeting) return; clearForecast(); targeting = null; world.clearRange(); bar.classList.remove('pick'); barPlace(); }
 function unitScreen(w, up = 1.1) {
@@ -666,7 +678,7 @@ resize(); applyView(); hud(); raf = requestAnimationFrame(loop);
 saveBuildMs(performance.now() - buildT0);   // 记下这次生成花了多久，下次进度条按它缓动
 requestAnimationFrame(() => requestAnimationFrame(() => ld.done()));   // 第一帧画出来之后补满进度条并淡出
 host.addEventListener('pointerdown', e => { if (orbitOn && result.minimized && !e.target.closest('.res-tag')) orbitOn = false; }, true);   // 0.91：看战场时一碰棋盘就停下绕场
-window.battle = {camMem, saveGame, gid, resumed, intel, result, world, cam, preset, THREE, game, describe, detail, ars, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
+window.battle = {pick: id => { const u = game.units.find(o => o.id === id); if (u) pickUnit(u); }, camMem, saveGame, gid, resumed, intel, result, world, cam, preset, THREE, game, describe, detail, ars, produce: (type, x, y) => produceHere(type, toWorld([x, y])), hud, mark, toWorld, toEngine, toast, state: () => ({sel: sel && sel.id, acting: acting && acting.id, targeting: !!targeting, picked})};   // describe：旧的单行说明文字，0.55 起不再显示，留作调试   // 调试：控制台可直接读取
 
 // ── 拆除：退出 / 换图时调用。停循环、摘监听、释放显存（世界、渲染器、WebGL 上下文），主页和下一局才不会越用越卡 ──
 function destroy() {
