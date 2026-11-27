@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createTank, TRACK_GAUGE} from './units/tank-family.js';
+import {createShellFx} from './shell-fx.js';
 import {createArtillery} from '../art/units/artillery/artillery-performance.js';   // 自行火炮 V2.1.1 性能版（1.07）：静止外形同 V2.0，另带行进 / 开火动画，接口和坦克一致
 import {patchGrayTree, setMatGray} from '../art/gray.js';
 import {createInfantryActor, releaseInfantryActor, resetInfantryBatches, syncInfantryBatches, infantryTriCount} from './units/infantry-actors.js';
@@ -832,29 +833,20 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       }
     }
   }
-  // 1.08 远程单位的攻击范围：射程内 = 橙色斜纹，近处打不到的盲区 = 深灰交叉纹；斜纹叠在蓝格 / 红格上面（renderOrder 7），底下的蓝格还看得见。
-  // 自行火炮的移动范围（5）比射程（2–3）大，射程整片都落在蓝格里，所以必须用「纹」而不是实色填充才分得出两层。atk = {cells, dead}（世界格坐标），没有 = 不画
-  const STRIPE_FS = `precision highp float; varying vec3 vW; varying vec2 vUv; uniform vec3 uColor; uniform float uCross;
-    void main(){ float a = step(.55, fract((vW.x + vW.z) * 1.3)), b = step(.55, fract((vW.x - vW.z) * 1.3)), s = uCross > .5 ? max(a, b) : a;
-      vec2 e = min(vUv, 1. - vUv); float edge = 1. - smoothstep(0., .05, min(e.x, e.y)); gl_FragColor = vec4(uColor, clamp(s * .66 + edge * .25, 0., .92)); }`;
-  const mkStripeMat = (hex, cross) => new THREE.ShaderMaterial({uniforms: {uColor: {value: rgb(hex)}, uCross: {value: cross ? 1 : 0}}, vertexShader: TILE_VS, fragmentShader: STRIPE_FS, transparent: true, depthWrite: false});
-  const hlAtk = mkStripeMat(0xff8a00, false), edgeAtk = mkEdgeMat(0xffb347), hlDead = mkStripeMat(0x20242d, true), edgeDead = mkEdgeMat(0xd2d8e2);
-  function buildRangeTiles(cells, mat, edgeMat) {
-    const set = new Set(cells.map(c => c[0] + ',' + c[1]));
-    for (const [x, z] of cells) {
+  // 1.08 远程单位的攻击范围：只画一圈橙黄色外轮廓（不填充、不分盲区——盲区就在轮廓里面，近处打不到的那几格不另外标）。atk = {cells}（世界格坐标，射程内 + 盲区合在一起），没有 = 不画。
+  // 什么时候画由 main.js 决定：范围 / 移动格里有敌人时才画，否则和平时一样只有蓝格
+  const edgeAtk = mkEdgeMat(0xffc04d);
+  function addAtkRange(atk) {
+    if (!atk || !atk.cells || !atk.cells.length) return;
+    const set = new Set(atk.cells.map(c => c[0] + ',' + c[1]));
+    for (const [x, z] of atk.cells) {
       const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07), h = mtn ? .55 : .92;
-      const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, mat); m.name = 'atkFill'; m.position.set(x * 2, y + .015, z * 2); m.renderOrder = 7; hl.add(m);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         if (set.has((x + dx) + ',' + (z + dz))) continue;
-        const e = new THREE.Mesh(edgeGeo, edgeMat); e.name = 'atkEdge'; e.position.set(x * 2 + dx * h, y + .025, z * 2 + dz * h);
-        e.scale.set(dx ? .14 : 2 * h + .14, 1, dz ? .14 : 2 * h + .14); e.renderOrder = 8; hl.add(e);
+        const e = new THREE.Mesh(edgeGeo, edgeAtk); e.name = 'atkEdge'; e.position.set(x * 2 + dx * h, y + .025, z * 2 + dz * h);
+        e.scale.set(dx ? .2 : 2 * h + .2, 1, dz ? .2 : 2 * h + .2); e.renderOrder = 8; hl.add(e);
       }
     }
-  }
-  function addAtkRange(atk) {
-    if (!atk) return;
-    if (atk.dead && atk.dead.length) buildRangeTiles(atk.dead, hlDead, edgeDead);
-    if (atk.cells && atk.cells.length) buildRangeTiles(atk.cells, hlAtk, edgeAtk);
   }
   function showRange(cells, u, atk) {   // cells：世界格坐标 [[cx, cz], ...]（引擎算出的能停的格子）；atk：远程单位的攻击范围（可选）
     clearHighlights(); u.rangeCells = cells; tileU.uOrigin.value.set(u.x, u.z);
@@ -872,6 +864,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   const clearRange = () => clearHighlights();
   // 开火：用模型自带的动画（步兵 actor.shoot、坦克 model.fire）；先朝向目标（步兵整个转身，坦克只转炮塔）；放完（或 5 秒兜底）回调。没有开火模型的单位（自行火炮等）停 .45 秒就算放完
   // 0.97：snd = 开火声的名字（main.js 按兵种 + 武器选好传进来）；步兵 / 炮类开火那一刻就响，坦克等炮管真的开火（update 里 m.fire() 成功）时才响，经 onFire(名字, 延迟秒) 交给战场去出声
+  const shellFx = createShellFx(scene);   // 1.08 炮弹飞行 + 落点爆炸（自行火炮）
   let onFire = null, onMove = null;   // 0.98 onMove('start' | 'step' | 'end', 单位)：战场据此出脚步 / 履带 / 发动机声（'step' 按走过的距离触发，步兵每秒约 3~4 步、坦克约 6 下）
   function playAttack(aId, tId, onDone, snd) {
     const a = unitById(aId), t = unitById(tId);
@@ -880,7 +873,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     if (a.actors) { a.yaw = ang; syncUnit(a); a.actors.forEach((ac, i) => { ac.setMode(state.infPose === 'kneel' ? 'kneel' : 'aim'); ac.shoot(2, i * .07); }); if (onFire && snd) onFire(snd, .12); }
     else if (a.spec.k === 'tank' || a.spec.k === 'art') { let yaw = ang - a.yaw; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); a.model.setAim(yaw * 180 / Math.PI, a.spec.k === 'art' ? state.artElev : 2); a.aimLock = true; a.fireQ = (a.fireQ | 0) + 1; a.fireSnd = snd || null; }
     else if (onFire && snd) onFire(snd, .05);
-    a.atk = {t: 0, onDone};
+    a.atk = {t: 0, onDone, tgt: t};
   }
   // 单位被打掉：animate 为真时缩小消失（.5 秒），否则直接移除
   function disposeUnit(u) {
@@ -962,13 +955,20 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     for (const u of units) if (u.actors) { let b = false; for (const a of u.actors) if (a.update(dt)) b = true; u.fireBusy = b; if (b) moving = true; }   // 步兵开火动画
     for (const u of units) if (u.spec.k === 'tank' || u.spec.k === 'art') {                                       // 坦克 / 自行火炮：排队的炮击逐发开，特效播放期间保持渲染
       const m = u.model; if ((u.fireQ | 0) <= 0 && !m.fireState().active) { u.fireBusy = false; continue; }
-      if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) { u.fireQ--; if (u.fireSnd && onFire) { onFire(u.fireSnd, 0); u.fireSnd = null; } }
+      if ((u.fireQ | 0) > 0 && !m.fireState().active && m.fire()) {
+        u.fireQ--; if (u.fireSnd && onFire) { onFire(u.fireSnd, 0); u.fireSnd = null; }
+        if (u.spec.k === 'art' && u.atk && u.atk.tgt && !u.atk.shell) {   // 1.08 间接火力：炮口开火那一刻放炮弹，沿抛物线飞向目标格，落地爆炸；攻击要等爆炸闪过才算放完（见下面的放完检测）
+          const T = u.atk.tgt, o = m.fireState().origin, atk = u.atk; atk.shell = true;
+          shellFx.launch(new THREE.Vector3(o[0], o[1], o[2]), new THREE.Vector3(T.x, (T.baseY || 0) + .5, T.z), {onLand: () => { atk.landAt = atk.t; }});
+        }
+      }
       m.updateFire(dt); u.fireBusy = m.fireState().active || u.fireQ > 0; if (u.fireBusy) moving = true;
     }
+    if (shellFx.update(dt)) moving = true;   // 炮弹 / 爆炸特效播放期间保持出帧
     // 0.70：攻击放完检测 + 死亡缩小
     { const done = [], gone = [];
       for (const u of units) {
-        if (u.atk) { u.atk.t += dt; moving = true; if ((u.atk.t > .45 && !u.fireBusy) || u.atk.t > 5) done.push(u); }
+        if (u.atk) { u.atk.t += dt; moving = true; if ((u.atk.t > .45 && !u.fireBusy && (!u.atk.shell || (u.atk.landAt !== undefined && u.atk.t - u.atk.landAt > .22))) || u.atk.t > 5) done.push(u); }
         if (u.dying) { u.dying.t += dt; moving = true; const k = Math.min(1, u.dying.t / .5); u.holder.scale.setScalar(Math.max(.001, u.baseScale * (1 - k * k))); if (k >= 1) gone.push(u); }
       }
       for (const u of done) { if (u.actors) for (const a of u.actors) a.setMode(state.infPose); u.aimLock = false; const cb = u.atk.onDone; u.atk = null; cb(); }
@@ -1112,7 +1112,7 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
     scene, units, trees, state, mountain, water, sunFollow, setShadowRadius, preset: mapPreset, get ground() { return ground; }, rings, groundY, baseY, surfaceY, mireDepth, MIRE,
     // 测试用：假定所有站在沼泽格上的单位已经停留了 n 个回合（引擎接入后由引擎按单位维护 mireTurns）
     setMireTurns(n) { for (const u of units) u.mireTurns = SWAMP_SET.has(u.cell.join(',')) ? n : 0; return this.apply(state.camA); },
-    setOnFire: fn => { onFire = fn; }, setOnMove: fn => { onMove = fn; }, unitById, busy, hlCount: name => name ? hl.children.filter(o => o.name === name).length : hl.children.length, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
+    setOnFire: fn => { onFire = fn; }, setOnMove: fn => { onMove = fn; }, unitById, busy, fxStats: () => ({...shellFx.stats}), hlCount: name => name ? hl.children.filter(o => o.name === name).length : hl.children.length, showRange, moveAlong, placeAt, pulseRange, setHp, setHpView, setCapStyle, setBuildingOwner, setCaptureMarks, playCapture, showTargets, clearRange, playAttack, removeUnit,   // 0.67：引擎驱动的选中 / 范围 / 走位
     setActed,   // 0.65：按引擎单位 id 显示 / 取消「已行动」标记
     addUnit(spec) { const u = makeUnit(spec, units.length); units.push(u); this.apply(state.camA); return u; },   // 0.55：生产出的新单位（spec 同开局单位）；重排一次让它落到兵工厂上、建筑附楼让位
     TREE_LABELS, SIZE_LABELS, cycleOwner, setInfPose, fireInfantry, buildings, bldMap, animate, cull, update, select, deselect, canMoveTo, moveTo, cellFromRay, reachable, tkey, MOVE,

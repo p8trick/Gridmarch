@@ -1,6 +1,6 @@
 # 远程单位攻击范围冒烟（1.08；需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
-# 选中坦克（射程 1）：不画攻击范围；选中自行火炮：画出橙色射程格（atkFill）和灰色盲区格（盲区 = 射程最近值以内，自行火炮是相邻一圈）。
-# 同时检查规则：原地不动（点自己脚下）后自行火炮仍然有「攻击」目标。出错直接 assert。
+# 只有「移动范围 / 射程范围里有敌人」时，选中自行火炮才画一圈橙黄外轮廓（atkEdge）；范围里没有敌人 = 和平时一样没有任何轮廓；射程 1 的单位（坦克）永远不画。
+# 同时检查规则：原地不动后自行火炮仍然有「攻击」目标。出错直接 assert。
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
@@ -9,10 +9,15 @@ with sync_playwright() as p:
     pg.wait_for_function('window.battle && window.battle.world && !document.querySelector("#loading")', timeout=90000); pg.wait_for_timeout(800)
     r = pg.evaluate('''()=>{const B=window.battle,g=B.game;g.funds[0]=99999;let f=null;for(let y=0;y<g.terrain.length&&!f;y++)for(let x=0;x<g.terrain[y].length;x++)if(g.terrain[y][x]==="factory"&&g.owners[x+","+y]===0&&!g.units.some(u=>u.x===x&&u.y===y)){f=[x,y];break}
         B.produce("arty",f[0],f[1]);const a=g.units.find(u=>u.type==="arty");a.acted=false;a.moved=false;
-        const tank=g.units.find(u=>u.type==="tank"&&u.owner===0);B.pick(tank.id);const t=B.world.hlCount("atkFill");
-        B.pick(a.id);return {tankAtk:t,artyAtk:B.world.hlCount("atkFill"),edges:B.world.hlCount("atkEdge")}}''')
-    assert r['tankAtk'] == 0, ('射程 1 的单位不画攻击范围', r)
-    assert r['artyAtk'] >= 10 and r['edges'] > 0, ('自行火炮应画出射程格和轮廓', r)
+        const tank=g.units.find(u=>u.type==="tank"&&u.owner===0);const foe=g.units.find(u=>u.owner===1);
+        foe.x=0;foe.y=0;                                   // 先把敌人放到很远的角落，保证移动范围 / 射程里没有敌人
+        B.pick(a.id);const far=B.world.hlCount("atkEdge");
+        foe.x=a.x+2;foe.y=a.y;B.pick(a.id);const near=B.world.hlCount("atkEdge");
+        foe.x=a.x+2;foe.y=a.y;B.pick(tank.id);const tankE=B.world.hlCount("atkEdge");
+        return {far,near,tankE}}''')
+    assert r['far'] == 0, ('范围里没有敌人时不应画轮廓', r)
+    assert r['near'] > 0, ('范围里有敌人时应画外轮廓', r)
+    assert r['tankE'] == 0, ('射程 1 的单位不画', r)
     assert not errs, errs
     print('PASS smoke-range', r)
     b.close()

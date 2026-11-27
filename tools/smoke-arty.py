@@ -1,6 +1,6 @@
 # 自行火炮冒烟（1.07；需要 Playwright + 无头 Chromium，先 python3 -m http.server 8099 放后台）：
 # 兵工厂造一台自行火炮 → 对红军单位放一次攻击：炮塔转向目标（aimLock）、炮管真的开火（fireState().active 出现过）、特效放完后攻击回调返回、
-# 再让它沿路径走一小段：履带 / 轮子在转（advanceMotion 被调用，motionState 里的行驶距离变化）。页面不许有错误。出错直接 assert。
+# 炮口开火那一刻炮弹飞出、落地爆炸（fxStats 的 launched / landed 各 ≥ 1，攻击回调要等爆炸闪过才返回），再让它沿路径走一小段：履带 / 轮子在转（advanceMotion 被调用，motionState 里的行驶距离变化）。页面不许有错误。出错直接 assert。
 import sys
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
@@ -24,6 +24,7 @@ with sync_playwright() as p:
     pg.wait_for_function('()=>window.__done===true', timeout=20000)
     st = pg.evaluate('''([id])=>{const u=window.battle.world.unitById(id);return {fired:window.__fired,lock:window.__lock,active:u.model.fireState().active}}''', [r['id']])
     assert st['fired'], ('炮管应真的开过火', st); assert st['lock'], ('攻击期间炮塔应锁定朝向（aimLock）', st); assert not st['active'], ('特效应已放完', st)
+    fx = pg.evaluate('()=>window.battle.world.fxStats()'); assert fx['launched'] >= 1 and fx['landed'] >= 1, ('炮弹应飞出并落地爆炸', fx)
     # 行进：直接驱动模型两次，轮 / 履带相位要变
     ph = pg.evaluate('''([id])=>{const u=window.battle.world.unitById(id),m=u.model,a=JSON.stringify(m.motionState);m.advanceMotion(1,1);return [a,JSON.stringify(m.motionState)]}''', [r['id']])
     assert ph[0] != ph[1], ('advanceMotion 后相位应变化', ph)

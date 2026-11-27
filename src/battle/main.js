@@ -179,21 +179,23 @@ function selectAt(px, py) {   // 屏幕坐标 → 选中格子 + 光圈；棋盘
 //    攻击下一版接（浮条里再加「攻击」）。走完之后点浮条以外的地方（浮条周围 36px 不算）= 撤销这次移动（0.68），镜头还能拖。
 let sel = null, reach = null, acting = null, lastPul = 0, wasBusy = false;
 const clearSel = () => { sel = null; reach = null; world.deselect(); };
-// 1.08 远程单位（射程最大 > 1：自行火炮 / 火箭炮 / 防空导弹）选中时，除了蓝格再画攻击范围：从单位现在站的格子算，曼哈顿距离在 [最近, 最远] 内 = 橙色，
-// 比最近射程还近的格子 = 灰色盲区（打不到）。间接火力移动后不能开火，所以范围只按「原地」算；点「攻击」选目标时也一并画着
-function atkRangeOf(eu) {
+// 1.08 远程单位（射程最大 > 1：自行火炮 / 火箭炮 / 防空导弹）：选中时，如果「移动范围 / 射程范围」里有敌人，除了蓝格再画一圈橙黄色外轮廓 = 它的攻击范围
+// （从单位现在站的格子按曼哈顿距离算，[最近, 最远]；比最近射程还近的盲区在轮廓里面，不另外标）；范围里没有敌人 = 完全和平时一样只有蓝格。
+// 间接火力移动后不能开火，所以范围只按「原地」算。点「攻击」选目标时（targeting）里面一定有敌人，照画。
+function atkRangeOf(eu, moveKeys) {
   const sp = RULE_UNITS[eu.type]; if (!sp || sp.range[1] <= 1) return null;
-  const [mn, mx] = sp.range, cells = [], dead = [];
+  const mx = sp.range[1], cells = [], keys = new Set();
   for (let dy = -mx; dy <= mx; dy++) for (let dx = -mx; dx <= mx; dx++) {
     const d = Math.abs(dx) + Math.abs(dy), x = eu.x + dx, y = eu.y + dy;
     if (d < 1 || d > mx || !game.terrain[y] || game.terrain[y][x] === undefined) continue;
-    (d < mn ? dead : cells).push(toWorld([x, y]));
+    cells.push(toWorld([x, y])); keys.add(x + ',' + y);
   }
-  return {cells, dead};
+  if (moveKeys && !game.units.some(e => e.owner !== eu.owner && (keys.has(e.x + ',' + e.y) || moveKeys.has(e.x + ',' + e.y)))) return null;
+  return {cells};
 }
 function pickUnit(eu) {
   sel = eu; reach = engineReach(game, eu);
-  world.showRange([...reach.keys()].map(k => toWorld(k.split(',').map(Number))), world.unitById(eu.id), atkRangeOf(eu));
+  world.showRange([...reach.keys()].map(k => toWorld(k.split(',').map(Number))), world.unitById(eu.id), atkRangeOf(eu, new Set(reach.keys())));
 }
 function startMove(ex, ey) {
   const u = sel, path = pathOf(game, u, ex, ey), w = world.unitById(u.id);
