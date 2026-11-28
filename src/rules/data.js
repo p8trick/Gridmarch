@@ -1,6 +1,6 @@
 // 规则数据（0.33）：单位、地形、伤害表、军队风格。只有数据，不含任何画面 / 像素信息。
 // 参考 GBA《高级战争2》：伤害表、移动消耗、防御星取自公开资料；标【草案】的是我们自己的设计，随时改这里的数字即可。
-// 造价：大体沿用高战2 的比例，改了三处：装甲运输车 5000→4000、重坦 22000→20000、自行火炮 6000→7000。
+// 造价：大体沿用高战2 的比例，改了两处：装甲运输车 5000→4000、重坦 22000→20000；自行火炮曾试过 7000，1.10 改回高战原价 6000（射程不够、生存能力不够，贵不起）。
 // buildable:false = 暂不可生产（防空导弹：没有空军 / 海军时它对陆军一个目标也打不了）。
 
 // ── 配置开关（和 HANDOFF 里"后勤做成可开关"一致）──
@@ -40,7 +40,7 @@ export const UNITS = {
   tank:    {name: '轻坦',     move: 6, vision: 3, mt: 'tread', range: [1, 1], fuel: 70, ammo: 9, primary: true,  secondary: true,  indirect: false, capture: false, cost: 7000},
   mdtank:  {name: '中坦',     move: 5, vision: 1, mt: 'tread', range: [1, 1], fuel: 50, ammo: 8, primary: true,  secondary: true,  indirect: false, capture: false, cost: 16000},
   neotank: {name: '重坦',     move: 6, vision: 1, mt: 'tread', range: [1, 1], fuel: 99, ammo: 9, primary: true,  secondary: true,  indirect: false, capture: false, cost: 20000},
-  arty:    {name: '自行火炮', move: 5, vision: 1, mt: 'tread', range: [2, 3], fuel: 50, ammo: 9, primary: true,  secondary: false, indirect: true,  capture: false, cost: 7000},
+  arty:    {name: '自行火炮', move: 5, vision: 1, mt: 'tread', range: [2, 3], fuel: 50, ammo: 9, primary: true,  secondary: false, indirect: true,  capture: false, cost: 6000},
   rocket:  {name: '火箭炮',   move: 5, vision: 1, mt: 'wheel', range: [3, 5], fuel: 50, ammo: 6, primary: true,  secondary: false, indirect: true,  capture: false, cost: 15000},
   aa:      {name: '防空炮',   move: 6, vision: 2, mt: 'tread', range: [1, 1], fuel: 60, ammo: 9, primary: true,  secondary: false, indirect: false, capture: false, cost: 8000},
   missile: {name: '防空导弹', move: 4, vision: 5, mt: 'wheel', range: [3, 5], fuel: 50, ammo: 6, primary: true,  secondary: false, indirect: true,  capture: false, cost: 12000, buildable: false},   // 资料里移动力有 4 / 5 两种写法，取 4

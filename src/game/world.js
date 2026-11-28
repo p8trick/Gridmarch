@@ -824,27 +824,36 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
   function buildTiles(cells, mat, edgeMat, skip) {
     const set = new Set(cells.map(c => c[0] + ',' + c[1]));
     for (const [x, z] of cells) {
-      const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07), h = mtn ? .55 : .92;
+      const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07);
       if (!(skip && x === skip[0] && z === skip[1])) { const m = new THREE.Mesh(mtn ? hlGeoSmall : hlGeo, mat); m.name = 'tileFill'; m.position.set(x * 2, y, z * 2); m.renderOrder = 5; hl.add(m); }
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         if (set.has((x + dx) + ',' + (z + dz))) continue;
-        const e = new THREE.Mesh(edgeGeo, edgeMat); e.name = 'tileEdge'; e.position.set(x * 2 + dx * h, y + .01, z * 2 + dz * h);
-        e.scale.set(dx ? .18 : 2 * h + .18, 1, dz ? .18 : 2 * h + .18); e.renderOrder = 6; hl.add(e);
+        hl.add(edgeStrip(edgeMat, 'tileEdge', x, z, dx, dz, .18, 6));
       }
     }
   }
   // 1.08 远程单位的攻击范围：只画一圈橙黄色外轮廓（不填充、不分盲区——盲区就在轮廓里面，近处打不到的那几格不另外标）。atk = {cells}（世界格坐标，射程内 + 盲区合在一起），没有 = 不画。
   // 什么时候画由 main.js 决定：范围 / 移动格里有敌人时才画，否则和平时一样只有蓝格
   const edgeAtk = mkEdgeMat(0xffc04d);
+  // 1.10 轮廓边条统一一个函数：边永远画在格子真正的边界上（离格心 .92），平地贴地面，山格贴山脚（山格的 groundY 是山顶站位高度，拿来画边会飘在半空、看起来变形）；
+  // 山格的边关掉深度测试，免得被山体或前面一格的山峰盖住一截。
+  const edgeMats = new Map();
+  function edgeStrip(mat, name, x, z, dx, dz, w, order) {
+    const mtn = terrainAt(x, z) === 'mountain', h = .92, y = mtn ? .12 : groundY(x, z) + .08;
+    let m = mat;
+    if (mtn) { m = edgeMats.get(mat); if (!m) { m = mat.clone(); m.uniforms.uTime = tileU.uTime; m.depthTest = false; edgeMats.set(mat, m); } }   // clone 会复制 uniform，要把时间 uniform 重新指回共享的那个，否则山格的边不呼吸
+    const e = new THREE.Mesh(edgeGeo, m); e.name = name; e.position.set(x * 2 + dx * h, y, z * 2 + dz * h);
+    e.scale.set(dx ? w : 2 * h + w, 1, dz ? w : 2 * h + w); e.renderOrder = order + (mtn ? 4 : 0); return e;
+  }
+  // 1.10 远程单位的攻击范围 = 射程环 [最近, 最远]：外圈是最远射程轮廓，里面一圈是最近射程（盲区）轮廓。atk = {cells}（世界格坐标，只含真正打得到的格子，盲区不在里面），没有 = 不画。
+  // 什么时候画由 main.js 决定
   function addAtkRange(atk) {
     if (!atk || !atk.cells || !atk.cells.length) return;
     const set = new Set(atk.cells.map(c => c[0] + ',' + c[1]));
     for (const [x, z] of atk.cells) {
-      const mtn = terrainAt(x, z) === 'mountain', y = groundY(x, z) + (mtn ? .06 : .07), h = mtn ? .55 : .92;
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         if (set.has((x + dx) + ',' + (z + dz))) continue;
-        const e = new THREE.Mesh(edgeGeo, edgeAtk); e.name = 'atkEdge'; e.position.set(x * 2 + dx * h, y + .025, z * 2 + dz * h);
-        e.scale.set(dx ? .2 : 2 * h + .2, 1, dz ? .2 : 2 * h + .2); e.renderOrder = 8; hl.add(e);
+        hl.add(edgeStrip(edgeAtk, 'atkEdge', x, z, dx, dz, .2, 8));
       }
     }
   }
@@ -1007,7 +1016,18 @@ export function buildWorld({map = 'bay', preset = null} = {}) {
       const bx = Math.round(_hit.x / 2), bz = Math.round(_hit.z / 2);
       if (bridgeInfo.has(bx + ',' + bz)) { cx = bx; cz = bz; break; }
     }
+    // 1.10 山体点击：以「屏幕上看到的山」为准。山格的站位面比地面高，纯平面求交会把山脚外缘（尤其是靠南的一圈）算进下一格的山；
+    // 所以先拿射线打山体网格，打中哪座山就是哪一格。只在它和平面法算出的格子相邻（或同格）时才采用，避免射线穿过前面的建筑 / 树打到后面的山。
+    const mh = mtnPick(ray);
+    if (mh && Math.abs(mh[0] - cx) <= 1 && Math.abs(mh[1] - cz) <= 1) { cx = mh[0]; cz = mh[1]; }
     return [cx, cz];
+  }
+  const _mrc = new THREE.Raycaster();
+  function mtnPick(ray) {
+    _mrc.ray.copy(ray); _mrc.far = Infinity;
+    const hit = _mrc.intersectObject(mountain, true)[0]; if (!hit) return null;
+    let o = hit.object; while (o && o.parent !== mountain) o = o.parent;
+    return o ? [Math.round(o.position.x / 2), Math.round(o.position.z / 2)] : null;
   }
 
   // 待机动画（整单位微动，不改几何）：步兵呼吸/重心/转头，坦克怠速抖动+炮塔缓扫，火炮炮管微摆
